@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 
 const PAYLOAD_STATUSES = new Set(["fixed", "partial", "blocked"]);
 
@@ -25,6 +25,7 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
   });
   const payload = result.payload ?? blockedPayload(result);
 
+  await mkdir(dirname(resultPath), { recursive: true });
   await writeFile(resultPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
   stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 

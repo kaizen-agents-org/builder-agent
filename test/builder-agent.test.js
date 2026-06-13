@@ -246,7 +246,7 @@ console.log(JSON.stringify({
     await writeFile(
       fakeCodexPath,
       `#!/usr/bin/env node
-import { writeFileSync } from "node:fs";
+const { writeFileSync } = require("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 const outputIndex = args.indexOf("--output-last-message");
@@ -279,6 +279,38 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     assert.equal(result.summary, "implemented with codex");
     assert.deepEqual(args.slice(0, 5), ["exec", "--json", "--sandbox", "workspace-write", "-C"]);
     assert.equal(args.includes("--ask-for-approval"), false);
+  });
+
+  it("creates the kaizen-loop result directory when it is missing", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, ".kaizen", "builder", "build-result.json");
+    await mkdir(binDir);
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "claude"
+      }
+    });
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+    assert.equal(result.status, "fixed");
   });
 });
 
