@@ -1,6 +1,6 @@
 # Builder Agent
 
-Builder Agent is the implementation-focused component of Kaizen Agents. It turns an approved task into code changes, reviews its own work, generates improvement instructions, and repeats until the result is ready for independent verification.
+Builder Agent is the implementation-focused component of Kaizen Agents. It turns an accepted issue or scoped task into code changes, reviews its own work, generates improvement instructions, and repeats until the result is ready for independent verification.
 
 Builder Agent is deliberately not the final quality gate. Its self-review loop improves the implementation before external checks run, but approval remains the responsibility of mechanical verification, the independent verifier, repository policy, and human review where required.
 
@@ -44,6 +44,8 @@ It produces:
 - Code changes in the current workspace
 - A structured self-review report
 - A final structured build result
+
+The final handoff must be reviewable by `kaizen-loop`, the independent verifier, and human reviewers. It should make clear what changed, why the change was made, which verification ran or was skipped, residual risk, and reviewer notes when relevant. This is implementation evidence only; it is not approval.
 
 For standalone loop development, the CLI loads an adapter module that performs the task-specific implementation steps. For `kaizen-loop` integration, the same executable can also run as a thin command adapter around Claude Code or Codex and write the result contract expected by the orchestrator.
 
@@ -109,7 +111,7 @@ node src/cli.js validate-request --request examples/build-request.example.json
 
 - [build-request.schema.json](schemas/build-request.schema.json): input accepted by Builder Agent.
 - [self-review.schema.json](schemas/self-review.schema.json): adapter self-review output before controller recomputes `passed`.
-- [build-result.schema.json](schemas/build-result.schema.json): final artifact written for external verification handoff.
+- [build-result.schema.json](schemas/build-result.schema.json): final artifact written for external verification handoff, including changed files, review findings, and residual notes.
 
 Run the builder loop with an adapter:
 
@@ -163,7 +165,7 @@ The integration payload is intentionally smaller than the standalone build artif
 }
 ```
 
-`status` is one of `fixed`, `partial`, or `blocked`. `builder-agent` does not create pull requests or push branches; that remains `kaizen-loop` responsibility.
+`status` is one of `fixed`, `partial`, or `blocked`. The `summary` should state what changed and why. The `notes` field should capture verification run or skipped, residual risk, and reviewer notes when relevant. `builder-agent` does not create pull requests or push branches; that remains `kaizen-loop` responsibility.
 
 ## Adapter Contract
 

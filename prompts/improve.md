@@ -25,6 +25,8 @@ Address all `mustFix` items before `shouldFix` items.
 
 After improving, run practical targeted checks and perform a new self-review.
 
+Update the final handoff evidence so it remains accurate about what changed, why, verification run or skipped, residual risk, and reviewer notes.
+
 ## Stopping Rule
 
 If `maxIterations` is reached and the latest review still has `mustFix` items or fails the passing conditions, return `status = "blocked"` with residual notes and the latest self-review.

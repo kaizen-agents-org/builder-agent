@@ -24,6 +24,8 @@ Classify findings as:
 
 Convert the blocking and important findings into `improvementInstructions`. Each instruction must be concrete enough to implement.
 
+Flag any residual risk, skipped verification, assumptions, or reviewer notes that should appear in the final handoff.
+
 ## Output
 
 Return JSON compatible with `schemas/self-review.schema.json`.
