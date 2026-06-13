@@ -73,8 +73,6 @@ function codexArgs({ prompt, workspaceDir, model, outputPath }) {
     "--json",
     "--sandbox",
     "workspace-write",
-    "--ask-for-approval",
-    "never",
     "-C",
     workspaceDir,
     "--output-last-message",

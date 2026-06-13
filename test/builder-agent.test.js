@@ -234,6 +234,52 @@ console.log(JSON.stringify({
     assert.equal(result.status, "fixed");
     assert.equal(result.summary, "implemented");
   });
+
+  it("supports the kaizen-loop contract with the codex backend", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    const argsPath = join(dir, "codex-args.json");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+import { writeFileSync } from "node:fs";
+const args = process.argv.slice(2);
+writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+const outputIndex = args.indexOf("--output-last-message");
+writeFileSync(args[outputIndex + 1], JSON.stringify({
+  status: "fixed",
+  summary: "implemented with codex",
+  notes: "checked"
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+
+    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "codex"
+      }
+    });
+
+    const output = JSON.parse(stdout);
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+    const args = JSON.parse(await readFile(argsPath, "utf8"));
+
+    assert.equal(output.status, "fixed");
+    assert.equal(result.status, "fixed");
+    assert.equal(result.summary, "implemented with codex");
+    assert.deepEqual(args.slice(0, 5), ["exec", "--json", "--sandbox", "workspace-write", "-C"]);
+    assert.equal(args.includes("--ask-for-approval"), false);
+  });
 });
 
 function createAdapter({ reviews }) {
