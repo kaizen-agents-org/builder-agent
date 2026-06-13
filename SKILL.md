@@ -69,7 +69,13 @@ When the caller asks for structured artifacts or the work is run by an orchestra
 - `.kaizen/builder/self-review.json`
 - `.kaizen/builder/build-result.json`
 
-Preserve enough information for the next system to understand what changed, why the builder considers it ready or blocked, and what residual concerns remain.
+Preserve enough information for the next system to review the implementation without treating the builder result as approval. Include:
+
+- What changed.
+- Why the change was made.
+- Verification run, or why verification was skipped.
+- Residual risk or assumptions.
+- Reviewer notes when relevant.
 
 ## Review Posture
 

@@ -142,6 +142,26 @@ describe("validation", () => {
       /unknown field/
     );
   });
+
+  it("documents builder handoff as reviewable evidence, not approval", async () => {
+    const [readme, skill, implementPrompt, selfReviewPrompt, improvePrompt] = await Promise.all([
+      readFile("README.md", "utf8"),
+      readFile("SKILL.md", "utf8"),
+      readFile("prompts/implement.md", "utf8"),
+      readFile("prompts/self-review.md", "utf8"),
+      readFile("prompts/improve.md", "utf8")
+    ]);
+    const handoffGuidance = `${readme}\n${skill}\n${implementPrompt}\n${selfReviewPrompt}\n${improvePrompt}`;
+
+    assert.doesNotMatch(readme, /approved task/i);
+    assert.match(readme, /accepted issue or scoped task/i);
+    assert.match(handoffGuidance, /what changed/i);
+    assert.match(handoffGuidance, /why/i);
+    assert.match(handoffGuidance, /verification run or skipped/i);
+    assert.match(handoffGuidance, /residual risk/i);
+    assert.match(handoffGuidance, /reviewer notes/i);
+    assert.match(handoffGuidance, /not approval/i);
+  });
 });
 
 describe("CLI", () => {
