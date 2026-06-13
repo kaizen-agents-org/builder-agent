@@ -195,6 +195,13 @@ describe("validation", () => {
       }
     ]);
   });
+
+  it("keeps discovered issues optional in the published build result schema", async () => {
+    const schema = JSON.parse(await readFile("schemas/build-result.schema.json", "utf8"));
+
+    assert.equal(schema.properties.discoveredIssues.type, "array");
+    assert.equal(schema.required.includes("discoveredIssues"), false);
+  });
 });
 
 describe("CLI", () => {
