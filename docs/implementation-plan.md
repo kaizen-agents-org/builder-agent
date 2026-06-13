@@ -57,6 +57,8 @@ Repeat until passed or maxIterations is reached
 
 ## Phase 2: Structured Artifacts
 
+Status: implemented in this repository.
+
 Standardize the data contract used by the skill.
 
 Initial request shape:
@@ -145,22 +147,25 @@ Builder Agent should not create branches, commits, pull requests, or issue comme
 
 ## Phase 5: CLI Prototype
 
+Status: implemented as the MVP loop controller and adapter-based CLI.
+
 Only after the skill loop stabilizes, introduce a CLI wrapper.
 
-The CLI should not change the responsibility model. It should mainly provide:
+The CLI does not change the responsibility model. It provides:
 
 - Request parsing
 - Artifact writing
 - Iteration bookkeeping
 - Exit codes for orchestration
+- Adapter loading for implementation backends
 
-Possible command shape:
+Current command shape:
 
 ```sh
-builder-agent build --request build-request.json --out .kaizen/build
+builder-agent build --request build-request.json --adapter ./adapter.js --out .kaizen/builder
 ```
 
-Possible exit code model:
+Exit code model:
 
 - `0`: ready
 - `2`: blocked
@@ -172,6 +177,7 @@ Possible exit code model:
 - Should `shouldFix` items ever block readiness?
 - Should Builder Agent preserve every intermediate self-review report under `.kaizen/builder/iterations/`, or only keep the latest report?
 - How much test execution should the builder perform before handing off to mechanical verification?
+- What adapter should `kaizen-loop` use for Codex execution in the first integration?
 
 ## Initial Recommendation
 
