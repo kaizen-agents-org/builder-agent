@@ -1,0 +1,51 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaizen-agents.org/schemas/builder-agent/build-result.schema.json",
+  "title": "BuildResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "iterations",
+    "planSummary",
+    "changedFiles",
+    "review",
+    "residualNotes"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["ready", "blocked", "failed"],
+      "description": "Builder Agent result status."
+    },
+    "iterations": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Number of implementation/self-review iterations completed."
+    },
+    "planSummary": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Short summary of the implementation plan that was followed."
+    },
+    "changedFiles": {
+      "type": "array",
+      "description": "Files changed by the builder.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "review": {
+      "$ref": "./self-review.schema.json"
+    },
+    "residualNotes": {
+      "type": "array",
+      "description": "Remaining caveats, unrun checks, assumptions, or handoff notes.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

@@ -1,0 +1,11 @@
+{
+  "task": "Add validation for empty project names in the create-project command.",
+  "goal": "The command should reject empty or whitespace-only names with a clear error before writing files.",
+  "constraints": [
+    "Keep the change scoped to input validation.",
+    "Do not add GitHub or PR workflow behavior.",
+    "Add or update tests for the validation path."
+  ],
+  "threshold": 85,
+  "maxIterations": 3
+}

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaizen-agents.org/schemas/builder-agent/build-request.schema.json",
+  "title": "BuildRequest",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["task"],
+  "properties": {
+    "task": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Implementation task or issue text."
+    },
+    "goal": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Optional desired outcome or acceptance target."
+    },
+    "constraints": {
+      "type": "array",
+      "description": "Optional implementation constraints.",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      },
+      "default": []
+    },
+    "threshold": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "default": 85,
+      "description": "Minimum self-review score required for readiness."
+    },
+    "maxIterations": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 20,
+      "default": 3,
+      "description": "Maximum number of implementation/self-review iterations."
+    }
+  }
+}

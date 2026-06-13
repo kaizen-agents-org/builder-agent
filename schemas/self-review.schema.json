@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaizen-agents.org/schemas/builder-agent/self-review.schema.json",
+  "title": "SelfReviewResult",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "score",
+    "confidence",
+    "dimensions",
+    "mustFix",
+    "shouldFix",
+    "niceToHave",
+    "improvementInstructions",
+    "passed"
+  ],
+  "properties": {
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100,
+      "description": "Overall review score from 0 to 100."
+    },
+    "confidence": {
+      "type": "number",
+      "minimum": 0,
+      "maximum": 1,
+      "description": "Confidence in the review result from 0 to 1."
+    },
+    "dimensions": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "requirementFit",
+        "architectureQuality",
+        "implementationQuality",
+        "testQuality",
+        "maintainability"
+      ],
+      "properties": {
+        "requirementFit": {
+          "$ref": "#/$defs/score"
+        },
+        "architectureQuality": {
+          "$ref": "#/$defs/score"
+        },
+        "implementationQuality": {
+          "$ref": "#/$defs/score"
+        },
+        "testQuality": {
+          "$ref": "#/$defs/score"
+        },
+        "maintainability": {
+          "$ref": "#/$defs/score"
+        }
+      }
+    },
+    "mustFix": {
+      "$ref": "#/$defs/findings"
+    },
+    "shouldFix": {
+      "$ref": "#/$defs/findings"
+    },
+    "niceToHave": {
+      "$ref": "#/$defs/findings"
+    },
+    "improvementInstructions": {
+      "$ref": "#/$defs/findings"
+    },
+    "passed": {
+      "type": "boolean",
+      "description": "True only when score, confidence, and mustFix passing conditions are met."
+    }
+  },
+  "$defs": {
+    "score": {
+      "type": "integer",
+      "minimum": 0,
+      "maximum": 100
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}

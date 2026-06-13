@@ -1,0 +1,20 @@
+{
+  "score": 88,
+  "confidence": 0.78,
+  "dimensions": {
+    "requirementFit": 90,
+    "architectureQuality": 86,
+    "implementationQuality": 88,
+    "testQuality": 85,
+    "maintainability": 90
+  },
+  "mustFix": [],
+  "shouldFix": [
+    "Consider adding a shared validation helper if another command needs the same project-name rule."
+  ],
+  "niceToHave": [
+    "Document the validation behavior in command help if the CLI has generated reference docs."
+  ],
+  "improvementInstructions": [],
+  "passed": true
+}

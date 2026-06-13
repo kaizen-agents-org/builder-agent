@@ -39,6 +39,8 @@ Deliverables:
 - JSON schemas for build requests, self-review, and build results
 - Example request and review artifacts
 
+Status: implemented in this repository.
+
 The skill should define the complete loop:
 
 ```text
@@ -168,8 +170,7 @@ Possible exit code model:
 
 - Should `threshold` default to `80` or `85`?
 - Should `shouldFix` items ever block readiness?
-- Where should iteration artifacts live by default?
-- Should Builder Agent preserve every intermediate self-review report or only the latest one?
+- Should Builder Agent preserve every intermediate self-review report under `.kaizen/builder/iterations/`, or only keep the latest report?
 - How much test execution should the builder perform before handing off to mechanical verification?
 
 ## Initial Recommendation

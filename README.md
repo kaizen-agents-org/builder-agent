@@ -87,7 +87,7 @@ Default passing conditions:
 
 `ready` means the result is ready to send to mechanical verification and the independent verifier. It does not mean the change is approved for merge.
 
-## Planned Repository Shape
+## Repository Shape
 
 ```text
 builder-agent/
@@ -103,6 +103,7 @@ builder-agent/
 │  └─ self-review.schema.json
 ├─ examples/
 │  ├─ build-request.example.json
+│  ├─ build-result.example.json
 │  └─ self-review.example.json
 └─ docs/
    └─ implementation-plan.md
