@@ -5,6 +5,17 @@ const DIMENSION_KEYS = [
   "testQuality",
   "maintainability"
 ];
+const REVIEW_KEYS = new Set([
+  "score",
+  "confidence",
+  "dimensions",
+  "mustFix",
+  "shouldFix",
+  "niceToHave",
+  "improvementInstructions",
+  "passed"
+]);
+const DIMENSION_KEY_SET = new Set(DIMENSION_KEYS);
 
 export { DIMENSION_KEYS };
 
@@ -15,6 +26,11 @@ export function isReviewPassed(review, threshold) {
 export function normalizeSelfReview(input, threshold) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Self-review must be an object.");
+  }
+  assertAllowedKeys(input, REVIEW_KEYS, "Self-review");
+
+  if (typeof input.passed !== "boolean") {
+    throw new Error("Self-review passed must be a boolean.");
   }
 
   const review = {
@@ -51,6 +67,7 @@ function normalizeDimensions(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Self-review dimensions must be an object.");
   }
+  assertAllowedKeys(input, DIMENSION_KEY_SET, "Self-review dimensions");
 
   return Object.fromEntries(
     DIMENSION_KEYS.map((key) => [key, normalizeScore(input[key], `dimensions.${key}`)])
@@ -79,4 +96,12 @@ function normalizeStringArray(value, label) {
   }
 
   return value.map((item) => item.trim());
+}
+
+function assertAllowedKeys(input, allowedKeys, label) {
+  const unknownKeys = Object.keys(input).filter((key) => !allowedKeys.has(key));
+
+  if (unknownKeys.length > 0) {
+    throw new Error(`${label} contains unknown field(s): ${unknownKeys.join(", ")}.`);
+  }
 }

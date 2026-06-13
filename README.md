@@ -99,6 +99,12 @@ npm run validate:json
 node src/cli.js validate-request --request examples/build-request.example.json
 ```
 
+`npm run validate:json` parses the published schemas and validates the checked-in examples against the same runtime contract used by the CLI. The schemas in `schemas/` are the MVP contract for orchestration boundaries:
+
+- [build-request.schema.json](schemas/build-request.schema.json): input accepted by Builder Agent.
+- [self-review.schema.json](schemas/self-review.schema.json): adapter self-review output before controller recomputes `passed`.
+- [build-result.schema.json](schemas/build-result.schema.json): final artifact written for external verification handoff.
+
 Run the builder loop with an adapter:
 
 ```sh
