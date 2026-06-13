@@ -45,7 +45,7 @@ It produces:
 - A structured self-review report
 - A final structured build result
 
-The CLI does not call an LLM by itself. Instead, it loads an adapter module that performs the task-specific implementation steps. This keeps Builder Agent responsible for loop control and structured artifacts while allowing `kaizen-loop` to decide how Codex, Claude Code, or another implementation backend is invoked.
+For standalone loop development, the CLI loads an adapter module that performs the task-specific implementation steps. For `kaizen-loop` integration, the same executable can also run as a thin command adapter around Claude Code or Codex and write the result contract expected by the orchestrator.
 
 ## Responsibility Boundaries
 
@@ -92,6 +92,12 @@ Default passing conditions:
 
 ## CLI Usage
 
+Check installation:
+
+```sh
+node src/cli.js --version
+```
+
 Validate a request:
 
 ```sh
@@ -124,6 +130,40 @@ Exit codes:
 - `0`: ready
 - `2`: blocked
 - `3`: failed
+
+## Kaizen Loop Integration
+
+When `kaizen-loop` invokes `builder-agent`, it calls the command with no arguments, passes the implementation prompt on stdin, and expects a JSON result file.
+
+```sh
+KAIZEN_BUILD_RESULT_PATH=.kaizen/builder/build-result.json \
+KAIZEN_WORKSPACE_DIR="$PWD" \
+KAIZEN_PREFERRED_AGENT=claude \
+builder-agent < prompt.txt
+```
+
+Required environment:
+
+- `KAIZEN_BUILD_RESULT_PATH`: file path where Builder Agent writes the orchestration result.
+
+Optional environment:
+
+- `KAIZEN_WORKSPACE_DIR`: repository workspace. Defaults to the current directory.
+- `KAIZEN_PREFERRED_AGENT`: `claude` or `codex`. Defaults to `claude`.
+- `KAIZEN_AGENT_MODEL`: model name passed through to the selected backend.
+
+The integration payload is intentionally smaller than the standalone build artifact:
+
+```json
+{
+  "status": "fixed",
+  "summary": "Short implementation summary.",
+  "notes": "",
+  "blockedReason": ""
+}
+```
+
+`status` is one of `fixed`, `partial`, or `blocked`. `builder-agent` does not create pull requests or push branches; that remains `kaizen-loop` responsibility.
 
 ## Adapter Contract
 

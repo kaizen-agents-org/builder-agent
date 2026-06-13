@@ -4,6 +4,7 @@ import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runBuild } from "./builder/BuilderAgent.js";
 import { writeBuildArtifacts } from "./artifacts.js";
+import { runKaizenLoopBuilder } from "./kaizen-loop.js";
 import { normalizeBuildRequest } from "./types/BuildRequest.js";
 
 const DEFAULT_OUT_DIR = ".kaizen/builder";
@@ -15,6 +16,22 @@ main(process.argv.slice(2)).catch((error) => {
 
 async function main(args) {
   const command = args[0];
+
+  if (command === "--version" || command === "-v") {
+    console.log("builder-agent 0.1.0");
+    return;
+  }
+
+  if (!command && process.env.KAIZEN_BUILD_RESULT_PATH) {
+    const payload = await runKaizenLoopBuilder({
+      stdin: process.stdin,
+      stdout: process.stdout,
+      stderr: process.stderr,
+      env: process.env
+    });
+    process.exitCode = exitCodeForKaizenLoopPayload(payload.status);
+    return;
+  }
 
   if (!command || command === "--help" || command === "-h") {
     printUsage();
@@ -104,10 +121,21 @@ function exitCodeFor(status) {
   return 3;
 }
 
+function exitCodeForKaizenLoopPayload(status) {
+  if (status === "fixed" || status === "partial") {
+    return 0;
+  }
+
+  return 2;
+}
+
 function printUsage() {
   console.log(`Usage:
   builder-agent validate-request --request build-request.json
   builder-agent build --request build-request.json --adapter ./adapter.js [--out .kaizen/builder]
+
+Kaizen Loop integration:
+  KAIZEN_BUILD_RESULT_PATH=.kaizen/builder/build-result.json builder-agent < prompt.txt
 
 Adapter modules must export analyzeTask, createPlan, implement, selfReview, and improve methods,
 or export createAdapter() returning an object with those methods.`);

@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { spawn } from "node:child_process";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -197,6 +198,42 @@ export default {
     assert.equal(result.status, "ready");
     assert.equal(review.passed, true);
   });
+
+  it("supports the kaizen-loop stdin/result-file contract", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "claude"
+      }
+    });
+
+    const output = JSON.parse(stdout);
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(output.status, "fixed");
+    assert.equal(result.status, "fixed");
+    assert.equal(result.summary, "implemented");
+  });
 });
 
 function createAdapter({ reviews }) {
@@ -234,4 +271,33 @@ function createAdapter({ reviews }) {
       };
     }
   };
+}
+
+function spawnWithInput(command, args, input, options) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, {
+      ...options,
+      stdio: ["pipe", "pipe", "pipe"]
+    });
+    let stdout = "";
+    let stderr = "";
+
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
+    child.stdout.on("data", (chunk) => {
+      stdout += chunk;
+    });
+    child.stderr.on("data", (chunk) => {
+      stderr += chunk;
+    });
+    child.on("error", reject);
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        reject(new Error(`Command exited with ${code}: ${stderr}${stdout}`));
+      }
+    });
+    child.stdin.end(input);
+  });
 }
