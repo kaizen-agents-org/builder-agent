@@ -26,9 +26,10 @@ flowchart LR
 
 ## MVP Scope
 
-The first version should be a Codex-compatible skill, not a CLI.
+The current MVP includes both:
 
-The goal is to validate the self-improvement loop before hardening it into a command-line tool or service. A skill is faster to iterate on, easier to inspect, and keeps the core behavior in prompts and schemas where the loop can be refined.
+- A Codex-compatible skill that describes the implementation workflow.
+- A small Node.js loop controller and CLI that can be called by Kaizen orchestration.
 
 The MVP accepts:
 
@@ -43,6 +44,8 @@ It produces:
 - Code changes in the current workspace
 - A structured self-review report
 - A final structured build result
+
+The CLI does not call an LLM by itself. Instead, it loads an adapter module that performs the task-specific implementation steps. This keeps Builder Agent responsible for loop control and structured artifacts while allowing `kaizen-loop` to decide how Codex, Claude Code, or another implementation backend is invoked.
 
 ## Responsibility Boundaries
 
@@ -87,11 +90,63 @@ Default passing conditions:
 
 `ready` means the result is ready to send to mechanical verification and the independent verifier. It does not mean the change is approved for merge.
 
+## CLI Usage
+
+Validate a request:
+
+```sh
+npm run validate:json
+node src/cli.js validate-request --request examples/build-request.example.json
+```
+
+Run the builder loop with an adapter:
+
+```sh
+node src/cli.js build \
+  --request examples/build-request.example.json \
+  --adapter examples/adapter.example.js \
+  --out .kaizen/builder
+```
+
+The command writes:
+
+- `.kaizen/builder/self-review.json`
+- `.kaizen/builder/build-result.json`
+
+Exit codes:
+
+- `0`: ready
+- `2`: blocked
+- `3`: failed
+
+## Adapter Contract
+
+An adapter module must export either `createAdapter()` or an object with these async methods:
+
+```js
+export function createAdapter() {
+  return {
+    async analyzeTask({ request }) {},
+    async createPlan({ request, analysis }) {},
+    async implement({ request, analysis, plan, iteration }) {},
+    async selfReview({ request, analysis, plan, implementation, iteration, threshold }) {},
+    async improve({ request, analysis, plan, implementation, review, instructions, iteration }) {}
+  };
+}
+```
+
+`selfReview()` must return an object compatible with [self-review.schema.json](schemas/self-review.schema.json). The controller recomputes `passed` from the default passing conditions, so adapters cannot blindly approve themselves by setting `passed: true`.
+
 ## Repository Shape
 
 ```text
 builder-agent/
+├─ package.json
 ├─ SKILL.md
+├─ src/
+│  ├─ builder/
+│  ├─ review/
+│  └─ types/
 ├─ prompts/
 │  ├─ analyze.md
 │  ├─ implement.md
@@ -102,9 +157,12 @@ builder-agent/
 │  ├─ build-result.schema.json
 │  └─ self-review.schema.json
 ├─ examples/
+│  ├─ adapter.example.js
 │  ├─ build-request.example.json
 │  ├─ build-result.example.json
 │  └─ self-review.example.json
+├─ test/
+│  └─ builder-agent.test.js
 └─ docs/
    └─ implementation-plan.md
 ```

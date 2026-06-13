@@ -1,0 +1,28 @@
+{
+  "name": "@kaizen-agents/builder-agent",
+  "version": "0.1.0",
+  "description": "Self-improving implementation agent component for Kaizen Agents.",
+  "type": "module",
+  "bin": {
+    "builder-agent": "./src/cli.js"
+  },
+  "scripts": {
+    "test": "node --test",
+    "validate:json": "node scripts/validate-json.js"
+  },
+  "files": [
+    "src",
+    "schemas",
+    "prompts",
+    "examples",
+    "scripts",
+    "test",
+    "docs",
+    "SKILL.md",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT"
+}
