@@ -19,6 +19,7 @@ Builder Agent does:
 - Produce structured self-review.
 - Convert review findings into actionable improvement instructions.
 - Iterate until passing conditions are met or progress is blocked.
+- Report separate bugs discovered during the work as structured `discoveredIssues`.
 
 Builder Agent does not:
 
@@ -28,6 +29,8 @@ Builder Agent does not:
 - Make final approval decisions.
 - Replace mechanical verification or the independent verifier.
 - Classify release risk.
+
+When a separate bug is discovered, do not broaden the current implementation or run GitHub commands. Add a concise entry to `discoveredIssues`; the orchestrator owns routing and issue creation.
 
 ## Inputs
 
@@ -76,6 +79,21 @@ Preserve enough information for the next system to review the implementation wit
 - Verification run, or why verification was skipped.
 - Residual risk or assumptions.
 - Reviewer notes when relevant.
+
+Use `discoveredIssues` for unrelated bugs found while building:
+
+```json
+[
+  {
+    "title": "Verifier false-positive on legacy status words",
+    "repo": "verifier",
+    "body": "What failed.",
+    "expected": "What should happen instead.",
+    "evidence": "Command, log excerpt, file path, or observed behavior.",
+    "severity": "P2"
+  }
+]
+```
 
 ## Review Posture
 

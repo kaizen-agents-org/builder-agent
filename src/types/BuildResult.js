@@ -8,7 +8,8 @@ const BUILD_RESULT_KEYS = new Set([
   "planSummary",
   "changedFiles",
   "review",
-  "residualNotes"
+  "residualNotes",
+  "discoveredIssues"
 ]);
 
 export function createBuildResult(input) {
@@ -19,6 +20,7 @@ export function createBuildResult(input) {
     changedFiles,
     review,
     residualNotes,
+    discoveredIssues,
     threshold
   } = input;
 
@@ -40,7 +42,8 @@ export function createBuildResult(input) {
     planSummary: planSummary.trim(),
     changedFiles: uniqueStrings(changedFiles, "changedFiles"),
     review: normalizeSelfReview(review, threshold),
-    residualNotes: uniqueStrings(residualNotes, "residualNotes")
+    residualNotes: uniqueStrings(residualNotes, "residualNotes"),
+    discoveredIssues: normalizeDiscoveredIssues(discoveredIssues)
   };
 }
 
@@ -60,7 +63,8 @@ export function createFailedBuildResult(message) {
     planSummary: "Builder Agent could not complete the build loop.",
     changedFiles: [],
     review: createFailedReview(message),
-    residualNotes: [message]
+    residualNotes: [message],
+    discoveredIssues: []
   };
 }
 
@@ -78,4 +82,39 @@ function assertAllowedKeys(input, allowedKeys, label) {
   if (unknownKeys.length > 0) {
     throw new Error(`${label} contains unknown field(s): ${unknownKeys.join(", ")}.`);
   }
+}
+
+export function normalizeDiscoveredIssues(value) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) {
+    throw new Error("Build result discoveredIssues must be an array.");
+  }
+
+  return value.map((item, index) => normalizeDiscoveredIssue(item, index));
+}
+
+function normalizeDiscoveredIssue(item, index) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) {
+    throw new Error(`Build result discoveredIssues[${index}] must be an object.`);
+  }
+
+  assertAllowedKeys(
+    item,
+    new Set(["title", "body", "expected", "evidence", "repo", "severity", "labels"]),
+    `Build result discoveredIssues[${index}]`
+  );
+
+  if (typeof item.title !== "string" || item.title.trim().length === 0) {
+    throw new Error(`Build result discoveredIssues[${index}].title must be a non-empty string.`);
+  }
+
+  return {
+    title: item.title.trim(),
+    ...(typeof item.body === "string" && item.body.trim() ? { body: item.body.trim() } : {}),
+    ...(typeof item.expected === "string" && item.expected.trim() ? { expected: item.expected.trim() } : {}),
+    ...(typeof item.evidence === "string" && item.evidence.trim() ? { evidence: item.evidence.trim() } : {}),
+    ...(typeof item.repo === "string" && item.repo.trim() ? { repo: item.repo.trim() } : {}),
+    ...(typeof item.severity === "string" && item.severity.trim() ? { severity: item.severity.trim() } : {}),
+    ...(Array.isArray(item.labels) ? { labels: uniqueStrings(item.labels, `discoveredIssues[${index}].labels`) } : {})
+  };
 }

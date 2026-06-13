@@ -46,6 +46,49 @@
         "type": "string",
         "minLength": 1
       }
+    },
+    "discoveredIssues": {
+      "type": "array",
+      "description": "Bugs or follow-up issues found while implementing this task. The orchestrator, not Builder Agent, may file these as GitHub issues.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "repo": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional target repository or Kaizen component alias such as kaizen-loop, builder-agent, verifier, or .github."
+          },
+          "severity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
     }
   }
 }

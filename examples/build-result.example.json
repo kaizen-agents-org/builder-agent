@@ -28,5 +28,6 @@
   },
   "residualNotes": [
     "Ready means ready for mechanical verification and independent verifier review, not final approval."
-  ]
+  ],
+  "discoveredIssues": []
 }
