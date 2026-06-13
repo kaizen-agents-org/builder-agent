@@ -1,4 +1,5 @@
-.kaizen/
+.kaizen/*
+!.kaizen/config.yml
 .serena/
 coverage/
 node_modules/
