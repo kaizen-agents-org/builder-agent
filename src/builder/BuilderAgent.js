@@ -157,7 +157,7 @@ function dedupeDiscoveredIssues(issues) {
   const result = [];
 
   for (const issue of issues) {
-    const key = `${issue.repo || ""}\n${issue.title}`;
+    const key = JSON.stringify([issue.repo || "", issue.title]);
     if (seen.has(key)) continue;
     seen.add(key);
     result.push(issue);

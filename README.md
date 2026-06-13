@@ -164,7 +164,6 @@ The integration payload is intentionally smaller than the standalone build artif
   "status": "fixed",
   "summary": "Short implementation summary.",
   "notes": "",
-  "blockedReason": "",
   "discoveredIssues": [
     {
       "title": "Verifier treats the word rejected in summaries as a hard failure",
