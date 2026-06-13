@@ -123,6 +123,7 @@ function parseBuilderPayload(raw) {
     status: payload.status,
     summary: typeof payload.summary === "string" ? payload.summary : "",
     notes: typeof payload.notes === "string" ? payload.notes : "",
+    discoveredIssues: normalizeDiscoveredIssues(payload.discoveredIssues),
     ...(typeof payload.blockedReason === "string" ? { blockedReason: payload.blockedReason } : {})
   };
 }
@@ -137,8 +138,37 @@ function blockedPayload(result) {
     status: "blocked",
     summary: reason,
     notes: tail(result.raw, 2000),
-    blockedReason: reason
+    blockedReason: reason,
+    discoveredIssues: []
   };
+}
+
+function normalizeDiscoveredIssues(value) {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return [];
+
+  return value
+    .map((item) => normalizeDiscoveredIssue(item))
+    .filter(Boolean);
+}
+
+function normalizeDiscoveredIssue(item) {
+  if (!item || typeof item !== "object" || Array.isArray(item)) return undefined;
+  if (typeof item.title !== "string" || item.title.trim().length === 0) return undefined;
+
+  return {
+    title: item.title.trim(),
+    ...(typeof item.body === "string" && item.body.trim() ? { body: item.body.trim() } : {}),
+    ...(typeof item.expected === "string" && item.expected.trim() ? { expected: item.expected.trim() } : {}),
+    ...(typeof item.evidence === "string" && item.evidence.trim() ? { evidence: item.evidence.trim() } : {}),
+    ...(typeof item.repo === "string" && item.repo.trim() ? { repo: item.repo.trim() } : {}),
+    ...(typeof item.severity === "string" && item.severity.trim() ? { severity: item.severity.trim() } : {}),
+    ...(Array.isArray(item.labels) ? { labels: uniqueStrings(item.labels) } : {})
+  };
+}
+
+function uniqueStrings(value) {
+  return [...new Set(value.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim()))];
 }
 
 function runCommand(command, args, options) {

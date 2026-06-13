@@ -1,6 +1,6 @@
 import { normalizeSelfReview } from "../review/SelfReview.js";
 import { normalizeBuildRequest } from "../types/BuildRequest.js";
-import { createBuildResult, createFailedBuildResult, uniqueStrings } from "../types/BuildResult.js";
+import { createBuildResult, createFailedBuildResult, normalizeDiscoveredIssues, uniqueStrings } from "../types/BuildResult.js";
 
 const REQUIRED_ADAPTER_METHODS = ["analyzeTask", "createPlan", "implement", "selfReview", "improve"];
 
@@ -26,6 +26,7 @@ export class BuilderAgent {
         iteration: 1
       });
       let changedFiles = extractChangedFiles(implementation);
+      let discoveredIssues = extractDiscoveredIssues(implementation);
       let latestReview;
 
       for (let iteration = 1; iteration <= request.maxIterations; iteration += 1) {
@@ -49,6 +50,7 @@ export class BuilderAgent {
             changedFiles,
             review: latestReview,
             residualNotes: extractResidualNotes(implementation),
+            discoveredIssues,
             threshold: request.threshold
           });
         }
@@ -64,6 +66,7 @@ export class BuilderAgent {
               `Self-review did not pass within ${request.maxIterations} iteration(s).`,
               ...extractResidualNotes(implementation)
             ],
+            discoveredIssues,
             threshold: request.threshold
           });
         }
@@ -78,6 +81,7 @@ export class BuilderAgent {
           iteration: iteration + 1
         });
         changedFiles = uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles");
+        discoveredIssues = dedupeDiscoveredIssues([...discoveredIssues, ...extractDiscoveredIssues(implementation)]);
       }
 
       return createBuildResult({
@@ -87,6 +91,7 @@ export class BuilderAgent {
         changedFiles,
         review: latestReview,
         residualNotes: ["Builder loop ended without a passing self-review."],
+        discoveredIssues,
         threshold: request.threshold
       });
     } catch (error) {
@@ -137,6 +142,28 @@ function extractResidualNotes(implementation) {
   }
 
   return uniqueStrings(implementation.residualNotes, "residualNotes");
+}
+
+function extractDiscoveredIssues(implementation) {
+  if (!implementation || implementation.discoveredIssues === undefined) {
+    return [];
+  }
+
+  return normalizeDiscoveredIssues(implementation.discoveredIssues);
+}
+
+function dedupeDiscoveredIssues(issues) {
+  const seen = new Set();
+  const result = [];
+
+  for (const issue of issues) {
+    const key = `${issue.repo || ""}\n${issue.title}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    result.push(issue);
+  }
+
+  return result;
 }
 
 function improvementInstructionsFor(review) {

@@ -44,6 +44,7 @@ It produces:
 - Code changes in the current workspace
 - A structured self-review report
 - A final structured build result
+- Structured discovered issues for separate bugs found during implementation
 
 The final handoff must be reviewable by `kaizen-loop`, the independent verifier, and human reviewers. It should make clear what changed, why the change was made, which verification ran or was skipped, residual risk, and reviewer notes when relevant. This is implementation evidence only; it is not approval.
 
@@ -70,6 +71,8 @@ Builder Agent is not responsible for:
 - Performing independent verification
 - Classifying release risk
 - Replacing repository policy or human review
+
+If Builder Agent discovers a separate bug while working, it reports that finding as structured data. The orchestrator decides whether and where to file a GitHub issue.
 
 ## Internal Loop
 
@@ -161,11 +164,20 @@ The integration payload is intentionally smaller than the standalone build artif
   "status": "fixed",
   "summary": "Short implementation summary.",
   "notes": "",
-  "blockedReason": ""
+  "blockedReason": "",
+  "discoveredIssues": [
+    {
+      "title": "Verifier treats the word rejected in summaries as a hard failure",
+      "repo": "verifier",
+      "body": "The verifier rejected an otherwise passing run because the builder summary mentioned a legacy status name.",
+      "expected": "Only actual verification failures should block PR creation.",
+      "evidence": "verifier.log showed a must_fix from builder summary text."
+    }
+  ]
 }
 ```
 
-`status` is one of `fixed`, `partial`, or `blocked`. The `summary` should state what changed and why. The `notes` field should capture verification run or skipped, residual risk, and reviewer notes when relevant. `builder-agent` does not create pull requests or push branches; that remains `kaizen-loop` responsibility.
+`status` is one of `fixed`, `partial`, or `blocked`. The `summary` should state what changed and why. The `notes` field should capture verification run or skipped, residual risk, and reviewer notes when relevant. `discoveredIssues` is optional and defaults to an empty array. `builder-agent` does not create pull requests, push branches, or file GitHub issues; those remain `kaizen-loop` responsibility.
 
 ## Adapter Contract
 

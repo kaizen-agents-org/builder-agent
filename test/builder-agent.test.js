@@ -137,6 +137,7 @@ describe("validation", () => {
     });
 
     assert.equal(result.review.passed, true);
+    assert.deepEqual(result.discoveredIssues, []);
     assert.throws(
       () => normalizeBuildResult({ ...result, extra: true }),
       /unknown field/
@@ -161,6 +162,38 @@ describe("validation", () => {
     assert.match(handoffGuidance, /residual risk/i);
     assert.match(handoffGuidance, /reviewer notes/i);
     assert.match(handoffGuidance, /not approval/i);
+  });
+
+  it("normalizes discovered issues in build results", () => {
+    const result = normalizeBuildResult({
+      status: "ready",
+      iterations: 1,
+      planSummary: "Implement the requested change.",
+      changedFiles: ["src/feature.js"],
+      review: passingReview,
+      residualNotes: [],
+      discoveredIssues: [
+        {
+          title: "  Verifier false-positive on legacy status text  ",
+          repo: "verifier",
+          body: "Observed during the run.",
+          expected: "The verifier should ignore plain status words in summaries.",
+          evidence: "verifier.log",
+          labels: ["kaizen", "kaizen"]
+        }
+      ]
+    });
+
+    assert.deepEqual(result.discoveredIssues, [
+      {
+        title: "Verifier false-positive on legacy status text",
+        repo: "verifier",
+        body: "Observed during the run.",
+        expected: "The verifier should ignore plain status words in summaries.",
+        evidence: "verifier.log",
+        labels: ["kaizen"]
+      }
+    ]);
   });
 });
 
@@ -230,7 +263,7 @@ export default {
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"evidence\":\"log excerpt\"}]}\n```")}
 }));
 `,
       "utf8"
@@ -253,6 +286,13 @@ console.log(JSON.stringify({
     assert.equal(output.status, "fixed");
     assert.equal(result.status, "fixed");
     assert.equal(result.summary, "implemented");
+    assert.deepEqual(result.discoveredIssues, [
+      {
+        title: "Verifier false positive",
+        repo: "verifier",
+        evidence: "log excerpt"
+      }
+    ]);
   });
 
   it("supports the kaizen-loop contract with the codex backend", async () => {
