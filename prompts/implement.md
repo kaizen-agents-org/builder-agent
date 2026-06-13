@@ -30,7 +30,7 @@ Run targeted checks when practical. If checks cannot run, record why in the fina
 
 ## Discovered Issues
 
-If you discover a separate bug or Kaizen Agents workflow problem while implementing the task, do not fix it unless it is required for the current task. Record it in `discoveredIssues` with a title, evidence, expected behavior, and target repo or component when known. The orchestrator owns GitHub issue creation.
+If you discover a separate bug or Kaizen Agents workflow problem while implementing the task, do not fix it unless it is required for the current task. Record it in `discoveredIssues` with a title, evidence, expected behavior, and target repo or component when known. Optionally include a detailed body, severity, and labels. The orchestrator owns GitHub issue creation.
 
 Do not perform GitHub operations, commits, pushes, PR creation, or final approval work as part of Builder Agent.
 

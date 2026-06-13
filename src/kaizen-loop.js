@@ -168,7 +168,13 @@ function normalizeDiscoveredIssue(item) {
 }
 
 function uniqueStrings(value) {
-  return [...new Set(value.filter((item) => typeof item === "string" && item.trim()).map((item) => item.trim()))];
+  return [
+    ...new Set(value.flatMap((item) => {
+      if (typeof item !== "string") return [];
+      const trimmed = item.trim();
+      return trimmed ? [trimmed] : [];
+    }))
+  ];
 }
 
 function runCommand(command, args, options) {
