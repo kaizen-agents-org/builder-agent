@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
-import { BuilderAgent, normalizeBuildRequest, normalizeSelfReview } from "../src/index.js";
+import { BuilderAgent, normalizeBuildRequest, normalizeBuildResult, normalizeSelfReview } from "../src/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -102,6 +102,44 @@ describe("validation", () => {
     const review = normalizeSelfReview({ ...passingReview, passed: false }, 85);
 
     assert.equal(review.passed, true);
+  });
+
+  it("rejects unknown build request fields", () => {
+    assert.throws(
+      () => normalizeBuildRequest({ task: "Do work.", extra: true }),
+      /unknown field/
+    );
+  });
+
+  it("requires self-review input to match the published schema shape", () => {
+    assert.throws(
+      () => normalizeSelfReview({ ...passingReview, passed: undefined }, 85),
+      /passed must be a boolean/
+    );
+    assert.throws(
+      () => normalizeSelfReview({
+        ...passingReview,
+        dimensions: { ...passingReview.dimensions, security: 90 }
+      }, 85),
+      /unknown field/
+    );
+  });
+
+  it("normalizes build result artifacts with the published schema shape", () => {
+    const result = normalizeBuildResult({
+      status: "ready",
+      iterations: 1,
+      planSummary: "Implement the requested change.",
+      changedFiles: ["src/feature.js"],
+      review: passingReview,
+      residualNotes: []
+    });
+
+    assert.equal(result.review.passed, true);
+    assert.throws(
+      () => normalizeBuildResult({ ...result, extra: true }),
+      /unknown field/
+    );
   });
 });
 

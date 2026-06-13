@@ -1,5 +1,6 @@
 const DEFAULT_THRESHOLD = 85;
 const DEFAULT_MAX_ITERATIONS = 3;
+const BUILD_REQUEST_KEYS = new Set(["task", "goal", "constraints", "threshold", "maxIterations"]);
 
 export { DEFAULT_MAX_ITERATIONS, DEFAULT_THRESHOLD };
 
@@ -7,6 +8,7 @@ export function normalizeBuildRequest(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Build request must be an object.");
   }
+  assertAllowedKeys(input, BUILD_REQUEST_KEYS, "Build request");
 
   if (typeof input.task !== "string" || input.task.trim().length === 0) {
     throw new Error("Build request requires a non-empty task.");
@@ -38,4 +40,12 @@ export function normalizeBuildRequest(input) {
     threshold,
     maxIterations
   };
+}
+
+function assertAllowedKeys(input, allowedKeys, label) {
+  const unknownKeys = Object.keys(input).filter((key) => !allowedKeys.has(key));
+
+  if (unknownKeys.length > 0) {
+    throw new Error(`${label} contains unknown field(s): ${unknownKeys.join(", ")}.`);
+  }
 }

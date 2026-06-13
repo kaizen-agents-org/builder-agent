@@ -1,16 +1,27 @@
 import { createFailedReview, normalizeSelfReview } from "../review/SelfReview.js";
+import { DEFAULT_THRESHOLD } from "./BuildRequest.js";
 
 const STATUS_VALUES = new Set(["ready", "blocked", "failed"]);
+const BUILD_RESULT_KEYS = new Set([
+  "status",
+  "iterations",
+  "planSummary",
+  "changedFiles",
+  "review",
+  "residualNotes"
+]);
 
-export function createBuildResult({
-  status,
-  iterations,
-  planSummary,
-  changedFiles,
-  review,
-  residualNotes,
-  threshold
-}) {
+export function createBuildResult(input) {
+  const {
+    status,
+    iterations,
+    planSummary,
+    changedFiles,
+    review,
+    residualNotes,
+    threshold
+  } = input;
+
   if (!STATUS_VALUES.has(status)) {
     throw new Error(`Invalid build result status: ${status}`);
   }
@@ -33,6 +44,15 @@ export function createBuildResult({
   };
 }
 
+export function normalizeBuildResult(input, threshold = DEFAULT_THRESHOLD) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    throw new Error("Build result must be an object.");
+  }
+  assertAllowedKeys(input, BUILD_RESULT_KEYS, "Build result");
+
+  return createBuildResult({ ...input, threshold });
+}
+
 export function createFailedBuildResult(message) {
   return {
     status: "failed",
@@ -50,4 +70,12 @@ export function uniqueStrings(value, label) {
   }
 
   return [...new Set(value.map((item) => item.trim()))];
+}
+
+function assertAllowedKeys(input, allowedKeys, label) {
+  const unknownKeys = Object.keys(input).filter((key) => !allowedKeys.has(key));
+
+  if (unknownKeys.length > 0) {
+    throw new Error(`${label} contains unknown field(s): ${unknownKeys.join(", ")}.`);
+  }
 }
