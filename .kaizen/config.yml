@@ -20,6 +20,7 @@ commands:
   verify:
     - "npm test"
     - "npm run validate:json"
+    - "test -f skills/gh-link-issue-pr/SKILL.md && test -f skills/kaizen-bug-router/SKILL.md && test -f skills/pr-guardian/SKILL.md"
   verifyTimeoutMinutes: 15
 
 builder:
