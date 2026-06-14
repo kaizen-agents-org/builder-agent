@@ -491,6 +491,53 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     assert.equal(args.includes("--ask-for-approval"), false);
   });
 
+  it("preserves structured blocked payloads when the codex backend exits non-zero", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+const outputIndex = args.indexOf("--output-last-message");
+writeFileSync(args[outputIndex + 1], JSON.stringify({
+  status: "blocked",
+  summary: "provider reported a structured block",
+  notes: "captured provider detail",
+  blockedReason: "provider limit reached",
+  discoveredIssues: [{ title: "Provider limit", severity: "medium" }]
+}));
+process.exit(2);
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: dir,
+          KAIZEN_PREFERRED_AGENT: "codex"
+        }
+      }),
+      /Command exited with 2/
+    );
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.summary, "provider reported a structured block");
+    assert.equal(result.blockedReason, "provider limit reached");
+    assert.deepEqual(result.discoveredIssues, [{ title: "Provider limit", severity: "medium" }]);
+  });
+
   it("creates the kaizen-loop result directory when it is missing", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");

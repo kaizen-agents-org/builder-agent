@@ -35,7 +35,7 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
     const result = await runCommand(provider.command, args, { cwd: workspaceDir, env });
     const lastMessage = provider.readsLastMessageFile ? await readFile(outputPath, "utf8").catch(() => "") : "";
     const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
-    const payload = result.exitCode === 0 ? parseBuilderPayload(lastMessage || raw) : undefined;
+    const payload = parseBuilderPayload(lastMessage || raw);
 
     return {
       exitCode: result.exitCode,
