@@ -3,6 +3,7 @@ import { normalizeBuildRequest } from "../types/BuildRequest.js";
 import { createBuildResult, createFailedBuildResult, normalizeDiscoveredIssues, uniqueStrings } from "../types/BuildResult.js";
 
 const REQUIRED_ADAPTER_METHODS = ["analyzeTask", "createPlan", "implement", "selfReview", "improve"];
+const ITERATION_ARTIFACTS_PROPERTY = "iterationArtifacts";
 
 export class BuilderAgent {
   constructor(adapter) {
@@ -10,6 +11,7 @@ export class BuilderAgent {
   }
 
   async build(input) {
+    const iterationArtifacts = [];
     let request;
 
     try {
@@ -41,9 +43,11 @@ export class BuilderAgent {
           }),
           request.threshold
         );
+        const improvementInstructions = improvementInstructionsFor(latestReview);
+        iterationArtifacts.push(createIterationArtifact({ iteration, implementation, review: latestReview, improvementInstructions }));
 
         if (latestReview.passed) {
-          return createBuildResult({
+          return attachIterationArtifacts(createBuildResult({
             status: "ready",
             iterations: iteration,
             planSummary,
@@ -52,11 +56,11 @@ export class BuilderAgent {
             residualNotes: extractResidualNotes(implementation),
             discoveredIssues,
             threshold: request.threshold
-          });
+          }), iterationArtifacts);
         }
 
         if (iteration === request.maxIterations) {
-          return createBuildResult({
+          return attachIterationArtifacts(createBuildResult({
             status: "blocked",
             iterations: iteration,
             planSummary,
@@ -68,7 +72,7 @@ export class BuilderAgent {
             ],
             discoveredIssues,
             threshold: request.threshold
-          });
+          }), iterationArtifacts);
         }
 
         implementation = await this.adapter.improve({
@@ -77,14 +81,14 @@ export class BuilderAgent {
           plan,
           implementation,
           review: latestReview,
-          instructions: improvementInstructionsFor(latestReview),
+          instructions: improvementInstructions,
           iteration: iteration + 1
         });
         changedFiles = uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles");
         discoveredIssues = dedupeDiscoveredIssues([...discoveredIssues, ...extractDiscoveredIssues(implementation)]);
       }
 
-      return createBuildResult({
+      return attachIterationArtifacts(createBuildResult({
         status: "blocked",
         iterations: request.maxIterations,
         planSummary,
@@ -93,10 +97,10 @@ export class BuilderAgent {
         residualNotes: ["Builder loop ended without a passing self-review."],
         discoveredIssues,
         threshold: request.threshold
-      });
+      }), iterationArtifacts);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return createFailedBuildResult(message);
+      return attachIterationArtifacts(createFailedBuildResult(message), iterationArtifacts);
     }
   }
 }
@@ -144,6 +148,23 @@ function extractResidualNotes(implementation) {
   return uniqueStrings(implementation.residualNotes, "residualNotes");
 }
 
+function summarizeImplementation(implementation) {
+  if (typeof implementation === "string" && implementation.trim().length > 0) {
+    return implementation.trim();
+  }
+
+  if (implementation && typeof implementation.summary === "string" && implementation.summary.trim().length > 0) {
+    return implementation.summary.trim();
+  }
+
+  const changedFiles = extractChangedFiles(implementation);
+  if (changedFiles.length > 0) {
+    return `Changed files: ${changedFiles.join(", ")}`;
+  }
+
+  return "Adapter did not provide an implementation summary.";
+}
+
 function extractDiscoveredIssues(implementation) {
   if (!implementation || implementation.discoveredIssues === undefined) {
     return [];
@@ -172,4 +193,27 @@ function improvementInstructionsFor(review) {
   }
 
   return [...review.mustFix, ...review.shouldFix];
+}
+
+function createIterationArtifact({ iteration, implementation, review, improvementInstructions }) {
+  return {
+    iteration,
+    implementationSummary: summarizeImplementation(implementation),
+    review: cloneJsonValue(review),
+    improvementInstructions: cloneJsonValue(improvementInstructions),
+    residualNotes: extractResidualNotes(implementation)
+  };
+}
+
+function attachIterationArtifacts(result, iterationArtifacts) {
+  Object.defineProperty(result, ITERATION_ARTIFACTS_PROPERTY, {
+    value: iterationArtifacts,
+    enumerable: false
+  });
+
+  return result;
+}
+
+function cloneJsonValue(value) {
+  return JSON.parse(JSON.stringify(value));
 }
