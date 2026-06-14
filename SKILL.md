@@ -71,6 +71,12 @@ When the caller asks for structured artifacts or the work is run by an orchestra
 
 - `.kaizen/builder/self-review.json`
 - `.kaizen/builder/build-result.json`
+- `.kaizen/builder/iterations/<n>/implementation-summary.json`
+- `.kaizen/builder/iterations/<n>/self-review.json`
+- `.kaizen/builder/iterations/<n>/improvement-instructions.json`
+- `.kaizen/builder/iterations/<n>/residual-notes.json`
+
+Keep the top-level files as the latest/final artifacts for compatibility. Preserve every completed iteration under `iterations/<n>/` so the improvement history remains reviewable.
 
 Preserve enough information for the next system to review the implementation without treating the builder result as approval. Include:
 

@@ -129,6 +129,12 @@ The command writes:
 
 - `.kaizen/builder/self-review.json`
 - `.kaizen/builder/build-result.json`
+- `.kaizen/builder/iterations/<n>/implementation-summary.json`
+- `.kaizen/builder/iterations/<n>/self-review.json`
+- `.kaizen/builder/iterations/<n>/improvement-instructions.json`
+- `.kaizen/builder/iterations/<n>/residual-notes.json`
+
+The top-level files always contain the latest/final handoff for compatibility. Each completed implementation/self-review iteration is also retained under `iterations/<n>/` so reviewers can inspect how the loop changed, converged, or became blocked.
 
 Exit codes:
 

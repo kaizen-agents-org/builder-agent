@@ -175,7 +175,6 @@ Exit code model:
 
 - Should `threshold` default to `80` or `85`?
 - Should `shouldFix` items ever block readiness?
-- Should Builder Agent preserve every intermediate self-review report under `.kaizen/builder/iterations/`, or only keep the latest report?
 - How much test execution should the builder perform before handing off to mechanical verification?
 - What adapter should `kaizen-loop` use for Codex execution in the first integration?
 
