@@ -171,6 +171,28 @@ Exit code model:
 - `2`: blocked
 - `3`: failed
 
+## Phase 6: Incremental TypeScript Migration
+
+Status: started.
+
+The migration should preserve existing CLI behavior while making Builder Agent reusable outside Kaizen Agents. Each step should keep generated JavaScript and declaration output available from `dist/`.
+
+Boundary targets:
+
+- CLI: parse command arguments, environment, request JSON, adapter paths, and output paths only.
+- Contract layer: own typed build request, build result, self-review, discovered issue, Kaizen Loop payload, and adapter schemas.
+- Agent runner: hide Codex/Claude command invocation behind a small provider interface.
+- Builder service: orchestrate analyze, implement, self-review, and improve iterations without GitHub, issue selection, worktree, PR, mergeability, or repo policy knowledge.
+- Artifact writer: persist final and per-iteration artifacts only.
+
+Current migration step:
+
+- Added `tsconfig.json` with `allowJs` declaration/build output.
+- Added `src/types/contracts.ts` as the typed public contract layer.
+- Split Codex/Claude backend invocation into `src/agents/AgentRunner.js`.
+- Exported contract aliases and runner functions from `dist/index.d.ts`.
+- Added regression coverage that verifies the generated declarations expose the reusable boundaries.
+
 ## Open Questions
 
 - Should `threshold` default to `80` or `85`?

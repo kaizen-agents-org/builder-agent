@@ -244,6 +244,24 @@ describe("validation", () => {
   });
 });
 
+describe("TypeScript build boundaries", () => {
+  it("emits declarations for reusable builder contracts and runners", async () => {
+    const [entrypoint, contracts, builderAgent, agentRunner] = await Promise.all([
+      readFile("dist/index.d.ts", "utf8"),
+      readFile("dist/types/contracts.d.ts", "utf8"),
+      readFile("dist/builder/BuilderAgent.d.ts", "utf8"),
+      readFile("dist/agents/AgentRunner.d.ts", "utf8")
+    ]);
+
+    assert.match(entrypoint, /export type BuildRequest = import\("\.\/types\/contracts\.js"\)\.BuildRequest/);
+    assert.match(entrypoint, /export type BuilderAdapter = import\("\.\/types\/contracts\.js"\)\.BuilderAdapter/);
+    assert.match(contracts, /export interface BuilderAdapter/);
+    assert.match(contracts, /export interface KaizenLoopPayload/);
+    assert.match(builderAgent, /build\(input: BuildRequestInput\): Promise<BuildResult>/);
+    assert.match(agentRunner, /runImplementationAgent\([^)]*AgentRunInput[^)]*\): Promise<AgentRunResult>/);
+  });
+});
+
 describe("CLI", () => {
   it("runs the build command and writes structured artifacts", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));

@@ -9,7 +9,6 @@
 /** @typedef {import("./types/contracts.js").DiscoveredIssue} DiscoveredIssue */
 /** @typedef {import("./types/contracts.js").KaizenLoopPayload} KaizenLoopPayload */
 /** @typedef {import("./types/contracts.js").SelfReviewResult} SelfReviewResult */
-
 export { BuilderAgent, runBuild } from "./builder/BuilderAgent.js";
 export { normalizeAgent, runImplementationAgent } from "./agents/AgentRunner.js";
 export { normalizeBuildRequest, DEFAULT_MAX_ITERATIONS, DEFAULT_THRESHOLD } from "./types/BuildRequest.js";

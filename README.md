@@ -50,6 +50,20 @@ The final handoff must be reviewable by `kaizen-loop`, the independent verifier,
 
 For standalone loop development, the CLI loads an adapter module that performs the task-specific implementation steps. For `kaizen-loop` integration, the same executable can also run as a thin command adapter around Claude Code or Codex and write the result contract expected by the orchestrator.
 
+## Reusable TypeScript Boundaries
+
+The package is migrating incrementally from JavaScript to TypeScript. Runtime entrypoints remain compatible with the current CLI, while `npm run build` emits JavaScript and declarations into `dist/` for typed reuse.
+
+Current boundaries:
+
+- CLI (`src/cli.js`): parses commands, environment, adapter paths, request JSON, and output paths.
+- Contract layer (`src/types/`): owns normalized build request, build result, self-review, discovered issue, and adapter types.
+- Agent runner (`src/agents/AgentRunner.js`): invokes Codex or Claude behind a small provider interface.
+- Builder service (`src/builder/BuilderAgent.js`): orchestrates analyze, implement, review, and improve iterations without GitHub policy knowledge.
+- Artifact writer (`src/artifacts.js`): persists final and per-iteration handoff artifacts.
+
+Generated declarations are published from `dist/index.d.ts`. The source CLI remains `src/cli.js` so existing orchestration calls do not need to change during the migration.
+
 ## Responsibility Boundaries
 
 Builder Agent is responsible for:
@@ -101,6 +115,12 @@ Check installation:
 
 ```sh
 node src/cli.js --version
+```
+
+Build typed output:
+
+```sh
+npm run build
 ```
 
 Validate a request:

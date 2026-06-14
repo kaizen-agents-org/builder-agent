@@ -2,15 +2,26 @@ import { normalizeSelfReview } from "../review/SelfReview.js";
 import { normalizeBuildRequest } from "../types/BuildRequest.js";
 import { createBuildResult, createFailedBuildResult, normalizeDiscoveredIssues, uniqueStrings } from "../types/BuildResult.js";
 
+/** @import { BuildRequestInput, BuildResult, BuilderAdapter, DiscoveredIssue, ImplementationOutput, IterationArtifact, PlanOutput, SelfReviewResult } from "../types/contracts.js" */
+
 const REQUIRED_ADAPTER_METHODS = ["analyzeTask", "createPlan", "implement", "selfReview", "improve"];
 const ITERATION_ARTIFACTS_PROPERTY = "iterationArtifacts";
 
 export class BuilderAgent {
+  /**
+   * @param {BuilderAdapter} adapter
+   */
   constructor(adapter) {
+    /** @type {BuilderAdapter} */
     this.adapter = adapter;
   }
 
+  /**
+   * @param {BuildRequestInput} input
+   * @returns {Promise<BuildResult>}
+   */
   async build(input) {
+    /** @type {IterationArtifact[]} */
     const iterationArtifacts = [];
     let request;
 
@@ -105,10 +116,18 @@ export class BuilderAgent {
   }
 }
 
+/**
+ * @param {BuildRequestInput} request
+ * @param {BuilderAdapter} adapter
+ * @returns {Promise<BuildResult>}
+ */
 export async function runBuild(request, adapter) {
   return new BuilderAgent(adapter).build(request);
 }
 
+/**
+ * @param {unknown} adapter
+ */
 function assertAdapter(adapter) {
   if (!adapter || typeof adapter !== "object") {
     throw new Error("Builder Agent requires an adapter object.");
@@ -120,6 +139,9 @@ function assertAdapter(adapter) {
   }
 }
 
+/**
+ * @param {PlanOutput} plan
+ */
 function summarizePlan(plan) {
   if (typeof plan === "string" && plan.trim().length > 0) {
     return plan;
@@ -132,6 +154,9 @@ function summarizePlan(plan) {
   return "Builder Agent executed the adapter-provided implementation plan.";
 }
 
+/**
+ * @param {ImplementationOutput} implementation
+ */
 function extractChangedFiles(implementation) {
   if (!implementation || implementation.changedFiles === undefined) {
     return [];
@@ -140,6 +165,9 @@ function extractChangedFiles(implementation) {
   return uniqueStrings(implementation.changedFiles, "changedFiles");
 }
 
+/**
+ * @param {ImplementationOutput} implementation
+ */
 function extractResidualNotes(implementation) {
   if (!implementation || implementation.residualNotes === undefined) {
     return [];
@@ -148,6 +176,9 @@ function extractResidualNotes(implementation) {
   return uniqueStrings(implementation.residualNotes, "residualNotes");
 }
 
+/**
+ * @param {ImplementationOutput} implementation
+ */
 function summarizeImplementation(implementation) {
   if (typeof implementation === "string" && implementation.trim().length > 0) {
     return implementation.trim();
@@ -165,6 +196,9 @@ function summarizeImplementation(implementation) {
   return "Adapter did not provide an implementation summary.";
 }
 
+/**
+ * @param {ImplementationOutput} implementation
+ */
 function extractDiscoveredIssues(implementation) {
   if (!implementation || implementation.discoveredIssues === undefined) {
     return [];
@@ -173,8 +207,12 @@ function extractDiscoveredIssues(implementation) {
   return normalizeDiscoveredIssues(implementation.discoveredIssues);
 }
 
+/**
+ * @param {DiscoveredIssue[]} issues
+ */
 function dedupeDiscoveredIssues(issues) {
   const seen = new Set();
+  /** @type {DiscoveredIssue[]} */
   const result = [];
 
   for (const issue of issues) {
@@ -187,6 +225,9 @@ function dedupeDiscoveredIssues(issues) {
   return result;
 }
 
+/**
+ * @param {SelfReviewResult} review
+ */
 function improvementInstructionsFor(review) {
   if (review.improvementInstructions.length > 0) {
     return review.improvementInstructions;
@@ -195,6 +236,10 @@ function improvementInstructionsFor(review) {
   return [...review.mustFix, ...review.shouldFix];
 }
 
+/**
+ * @param {{ iteration: number, implementation: ImplementationOutput, review: SelfReviewResult, improvementInstructions: string[] }} input
+ * @returns {IterationArtifact}
+ */
 function createIterationArtifact({ iteration, implementation, review, improvementInstructions }) {
   return {
     iteration,
@@ -205,6 +250,11 @@ function createIterationArtifact({ iteration, implementation, review, improvemen
   };
 }
 
+/**
+ * @param {BuildResult} result
+ * @param {IterationArtifact[]} iterationArtifacts
+ * @returns {BuildResult}
+ */
 function attachIterationArtifacts(result, iterationArtifacts) {
   Object.defineProperty(result, ITERATION_ARTIFACTS_PROPERTY, {
     value: iterationArtifacts,
@@ -214,6 +264,11 @@ function attachIterationArtifacts(result, iterationArtifacts) {
   return result;
 }
 
+/**
+ * @template T
+ * @param {T} value
+ * @returns {T}
+ */
 function cloneJsonValue(value) {
   return JSON.parse(JSON.stringify(value));
 }
