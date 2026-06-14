@@ -11,6 +11,7 @@ export class BuilderAgent {
   }
 
   async build(input) {
+    const iterationArtifacts = [];
     let request;
 
     try {
@@ -29,7 +30,6 @@ export class BuilderAgent {
       let changedFiles = extractChangedFiles(implementation);
       let discoveredIssues = extractDiscoveredIssues(implementation);
       let latestReview;
-      const iterationArtifacts = [];
 
       for (let iteration = 1; iteration <= request.maxIterations; iteration += 1) {
         latestReview = normalizeSelfReview(
@@ -100,7 +100,7 @@ export class BuilderAgent {
       }), iterationArtifacts);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      return createFailedBuildResult(message);
+      return attachIterationArtifacts(createFailedBuildResult(message), iterationArtifacts);
     }
   }
 }
@@ -199,8 +199,8 @@ function createIterationArtifact({ iteration, implementation, review, improvemen
   return {
     iteration,
     implementationSummary: summarizeImplementation(implementation),
-    review,
-    improvementInstructions,
+    review: cloneJsonValue(review),
+    improvementInstructions: cloneJsonValue(improvementInstructions),
     residualNotes: extractResidualNotes(implementation)
   };
 }
@@ -212,4 +212,8 @@ function attachIterationArtifacts(result, iterationArtifacts) {
   });
 
   return result;
+}
+
+function cloneJsonValue(value) {
+  return JSON.parse(JSON.stringify(value));
 }

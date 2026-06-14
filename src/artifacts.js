@@ -1,4 +1,4 @@
-import { mkdir, writeFile } from "node:fs/promises";
+import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 
 export async function writeBuildArtifacts(outDir, result) {
@@ -8,11 +8,13 @@ export async function writeBuildArtifacts(outDir, result) {
   const buildResultPath = join(outDir, "build-result.json");
   const iterationArtifacts = Array.isArray(result.iterationArtifacts) ? result.iterationArtifacts : [];
   const iterationArtifactPaths = [];
+  const iterationsDir = join(outDir, "iterations");
 
   await writeJson(selfReviewPath, result.review);
   await writeJson(buildResultPath, result);
+  await rm(iterationsDir, { recursive: true, force: true });
   for (const artifact of iterationArtifacts) {
-    const iterationDir = join(outDir, "iterations", String(artifact.iteration));
+    const iterationDir = join(iterationsDir, String(artifact.iteration));
     await mkdir(iterationDir, { recursive: true });
 
     const paths = {

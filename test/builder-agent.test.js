@@ -68,6 +68,46 @@ describe("BuilderAgent", () => {
     assert.deepEqual(result.changedFiles, ["src/feature.js", "test/feature.test.js"]);
   });
 
+  it("stores immutable snapshots for completed iteration artifacts", async () => {
+    const mutableReview = {
+      ...failingReview,
+      mustFix: [...failingReview.mustFix],
+      improvementInstructions: [...failingReview.improvementInstructions]
+    };
+    const adapter = createAdapter({ reviews: [mutableReview, passingReview] });
+    const originalImprove = adapter.improve;
+    adapter.improve = async (input) => {
+      input.review.mustFix.push("mutated review");
+      input.instructions.push("mutated instruction");
+      return originalImprove(input);
+    };
+
+    const result = await new BuilderAgent(adapter).build({
+      task: "Implement a small feature.",
+      maxIterations: 2
+    });
+
+    assert.equal(result.status, "ready");
+    assert.deepEqual(result.iterationArtifacts[0].review.mustFix, ["Add tests for the requested behavior."]);
+    assert.deepEqual(result.iterationArtifacts[0].improvementInstructions, ["Add targeted tests for the requested behavior."]);
+  });
+
+  it("preserves completed iteration artifacts when a later adapter step fails", async () => {
+    const adapter = createAdapter({ reviews: [failingReview] });
+    adapter.improve = async () => {
+      throw new Error("adapter improve failed");
+    };
+
+    const result = await new BuilderAgent(adapter).build({
+      task: "Implement a small feature.",
+      maxIterations: 2
+    });
+
+    assert.equal(result.status, "failed");
+    assert.equal(result.iterationArtifacts.length, 1);
+    assert.equal(result.iterationArtifacts[0].implementationSummary, "Changed files: src/feature.js");
+  });
+
   it("returns blocked when maxIterations is reached without passing", async () => {
     const adapter = createAdapter({ reviews: [failingReview, failingReview] });
     const result = await new BuilderAgent(adapter).build({
@@ -270,6 +310,8 @@ export default {
       JSON.stringify({ task: "Implement a small feature.", maxIterations: 2 }, null, 2),
       "utf8"
     );
+    await mkdir(join(outDir, "iterations", "3"), { recursive: true });
+    await writeFile(join(outDir, "iterations", "3", "stale.json"), "stale", "utf8");
     await writeFile(
       adapterPath,
       `
@@ -337,6 +379,7 @@ export default {
     assert.equal(iteration2Summary.summary, "Added targeted regression coverage.");
     assert.equal(iteration2Review.passed, true);
     assert.equal(Object.hasOwn(result, "iterationArtifacts"), false);
+    await assert.rejects(readFile(join(outDir, "iterations", "3", "stale.json"), "utf8"));
   });
 
   it("supports the kaizen-loop stdin/result-file contract", async () => {
