@@ -6,6 +6,7 @@ import { join } from "node:path";
 /** @import { AgentKind, AgentRunInput, AgentRunResult, KaizenLoopPayload } from "../types/contracts.js" */
 
 const PAYLOAD_STATUSES = new Set(["fixed", "partial", "blocked"]);
+const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 
 const AGENT_PROVIDERS = {
   codex: {
@@ -174,14 +175,29 @@ function uniqueStrings(value) {
 /**
  * @param {string} command
  * @param {string[]} args
- * @param {{ cwd: string, env: NodeJS.ProcessEnv }} options
+ * @param {{ cwd: string, env: NodeJS.ProcessEnv, timeoutMs?: number }} options
  */
 function runCommand(command, args, options) {
   return new Promise((resolve, reject) => {
+    const timeoutMs = options.timeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS;
+    const controller = new AbortController();
+    let timedOut = false;
+    let settled = false;
+    const timeout = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, timeoutMs);
+    const settle = (callback) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timeout);
+      callback();
+    };
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env,
-      stdio: ["ignore", "pipe", "pipe"]
+      stdio: ["ignore", "pipe", "pipe"],
+      signal: controller.signal
     });
     let stdout = "";
     let stderr = "";
@@ -194,9 +210,19 @@ function runCommand(command, args, options) {
     child.stderr.on("data", (chunk) => {
       stderr += chunk;
     });
-    child.on("error", reject);
+    child.on("error", (error) => {
+      settle(() => {
+        reject(timedOut ? new Error(`Agent command timed out after ${timeoutMs}ms.`) : error);
+      });
+    });
     child.on("close", (code) => {
-      resolve({ exitCode: code ?? 1, stdout, stderr });
+      settle(() => {
+        if (timedOut) {
+          reject(new Error(`Agent command timed out after ${timeoutMs}ms.`));
+          return;
+        }
+        resolve({ exitCode: code ?? 1, stdout, stderr });
+      });
     });
   });
 }

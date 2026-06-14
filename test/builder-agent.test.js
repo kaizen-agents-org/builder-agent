@@ -534,6 +534,7 @@ process.exit(2);
 
     assert.equal(result.status, "blocked");
     assert.equal(result.summary, "provider reported a structured block");
+    assert.equal(result.notes, "captured provider detail");
     assert.equal(result.blockedReason, "provider limit reached");
     assert.deepEqual(result.discoveredIssues, [{ title: "Provider limit", severity: "medium" }]);
   });
