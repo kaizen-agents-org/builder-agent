@@ -4,6 +4,12 @@ const BUILD_REQUEST_KEYS = new Set(["task", "goal", "constraints", "threshold", 
 
 export { DEFAULT_MAX_ITERATIONS, DEFAULT_THRESHOLD };
 
+/** @import { BuildRequest, BuildRequestInput } from "./contracts.js" */
+
+/**
+ * @param {BuildRequestInput} input
+ * @returns {BuildRequest}
+ */
 export function normalizeBuildRequest(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Build request must be an object.");

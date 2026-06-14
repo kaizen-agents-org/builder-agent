@@ -1,1 +1,1 @@
-{"version":3,"file":"BuildRequest.d.ts","sourceRoot":"","sources":["../../src/types/BuildRequest.js"],"names":[],"mappings":"AAMA;;;;;;EAoCC;AAzCD,qCAA+B,CAAC,CAAC;AADjC,gCAA0B,EAAE,CAAC"}
+{"version":3,"file":"BuildRequest.d.ts","sourceRoot":"","sources":["../../src/types/BuildRequest.js"],"names":[],"mappings":"AAMA,wEAAwE;AAExE;;;GAGG;AACH,6CAHW,iBAAiB,GACf,YAAY,CAsCxB;uCA1CoD,gBAAgB;kCAAhB,gBAAgB;AALrE,qCAA+B,CAAC,CAAC;AADjC,gCAA0B,EAAE,CAAC"}
