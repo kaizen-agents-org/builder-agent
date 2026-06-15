@@ -244,6 +244,26 @@ describe("validation", () => {
   });
 });
 
+describe("TypeScript build boundaries", () => {
+  it("emits declarations for reusable builder contracts and runners", async () => {
+    const [entrypoint, contracts, buildRequest, builderAgent, agentRunner] = await Promise.all([
+      readFile("dist/index.d.ts", "utf8"),
+      readFile("dist/types/contracts.d.ts", "utf8"),
+      readFile("dist/types/BuildRequest.d.ts", "utf8"),
+      readFile("dist/builder/BuilderAgent.d.ts", "utf8"),
+      readFile("dist/agents/AgentRunner.d.ts", "utf8")
+    ]);
+
+    assert.match(entrypoint, /export type BuildRequest = import\("\.\/types\/contracts\.js"\)\.BuildRequest/);
+    assert.match(entrypoint, /export type BuilderAdapter = import\("\.\/types\/contracts\.js"\)\.BuilderAdapter/);
+    assert.match(contracts, /export interface BuilderAdapter/);
+    assert.match(contracts, /export interface KaizenLoopPayload/);
+    assert.match(buildRequest, /normalizeBuildRequest\(input: BuildRequestInput\): BuildRequest/);
+    assert.match(builderAgent, /build\(input: BuildRequestInput\): Promise<BuildResult>/);
+    assert.match(agentRunner, /runImplementationAgent\([^)]*AgentRunInput[^)]*\): Promise<AgentRunResult>/);
+  });
+});
+
 describe("CLI", () => {
   it("runs the build command and writes structured artifacts", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
@@ -469,6 +489,54 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     assert.equal(result.summary, "implemented with codex");
     assert.deepEqual(args.slice(0, 5), ["exec", "--json", "--sandbox", "workspace-write", "-C"]);
     assert.equal(args.includes("--ask-for-approval"), false);
+  });
+
+  it("preserves structured blocked payloads when the codex backend exits non-zero", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+const outputIndex = args.indexOf("--output-last-message");
+writeFileSync(args[outputIndex + 1], JSON.stringify({
+  status: "blocked",
+  summary: "provider reported a structured block",
+  notes: "captured provider detail",
+  blockedReason: "provider limit reached",
+  discoveredIssues: [{ title: "Provider limit", severity: "medium" }]
+}));
+process.exit(2);
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: dir,
+          KAIZEN_PREFERRED_AGENT: "codex"
+        }
+      }),
+      /Command exited with 2/
+    );
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.summary, "provider reported a structured block");
+    assert.equal(result.notes, "captured provider detail");
+    assert.equal(result.blockedReason, "provider limit reached");
+    assert.deepEqual(result.discoveredIssues, [{ title: "Provider limit", severity: "medium" }]);
   });
 
   it("creates the kaizen-loop result directory when it is missing", async () => {
