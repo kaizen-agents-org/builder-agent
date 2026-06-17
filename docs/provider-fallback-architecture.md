@@ -22,7 +22,7 @@ Issue #24 asked for a Hermes-style comparison of provider registry, fallback, he
 - Classify unstructured provider failures as `command_missing`, `auth_failed`, `rate_limited`, `invalid_payload`, `timeout`, or `provider_blocked`.
 - Default fallback applies to `command_missing`, `auth_failed`, `rate_limited`, `invalid_payload`, and `timeout`. `provider_blocked` stops fallback unless the provider explicitly includes it in `fallbackOn`.
 - Preserve structured provider payloads, including intentional `blocked` payloads, instead of retrying them as availability failures.
-- Append provider evidence to `notes` when a later provider succeeds after fallback. Blocked all-provider failures already include the attempt trail in the blocked payload notes.
+- Append provider evidence to `notes` when a later provider succeeds after fallback, including the recorded fallback reason from the actual provider policy decision. Blocked all-provider failures already include the attempt trail in the blocked payload notes.
 
 ## Rejected Decisions
 
@@ -74,4 +74,3 @@ Issue #24 asked for a Hermes-style comparison of provider registry, fallback, he
   }
 }
 ```
-

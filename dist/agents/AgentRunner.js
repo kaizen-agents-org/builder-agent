@@ -50,8 +50,11 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
                     payload: attempts.length > 0 ? appendProviderEvidence(result.payload, allAttempts) : result.payload
                 };
             }
-            attempts.push(result);
-            if (!shouldFallback(result, provider)) {
+            const fallbackReason = result.failureClass ?? "invalid_payload";
+            const fallbackAllowed = shouldFallback(result, provider);
+            const failedAttempt = { ...result, fallbackReason, fallbackAllowed };
+            attempts.push(failedAttempt);
+            if (!fallbackAllowed) {
                 return {
                     exitCode: result.exitCode,
                     raw: formatAttempts(attempts),
@@ -409,26 +412,28 @@ function sanitizeFilename(value) {
     return value.replace(/[^a-z0-9._-]/gi, "_");
 }
 /**
- * @param {AgentRunResult & { agent?: AgentKind }} attempt
+ * @param {AgentRunResult & { agent?: AgentKind, fallbackAllowed?: boolean, fallbackReason?: string }} attempt
  */
 function formatAttempt(attempt) {
     const header = attempt.agent ? `Agent "${attempt.agent}" exited with code ${attempt.exitCode}.` : `Agent exited with code ${attempt.exitCode}.`;
     const details = [
         attempt.failureClass ? `Failure class: ${attempt.failureClass}.` : undefined,
+        attempt.fallbackReason ? `Fallback reason: ${attempt.fallbackReason}.` : undefined,
+        typeof attempt.fallbackAllowed === "boolean" ? `Fallback allowed: ${attempt.fallbackAllowed ? "yes" : "no"}.` : undefined,
         attempt.payloadSource ? `Payload source: ${attempt.payloadSource}.` : undefined,
         attempt.payload ? `Selected backend: ${attempt.agent}.` : undefined
     ].filter(Boolean).join("\n");
     return `${header}${details ? `\n${details}` : ""}\n${attempt.raw}`;
 }
 /**
- * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string }>} attempts
+ * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string, fallbackAllowed?: boolean, fallbackReason?: string }>} attempts
  */
 function formatAttempts(attempts) {
     return attempts.map(formatAttempt).join("\n\n");
 }
 /**
  * @param {KaizenLoopPayload} payload
- * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string }>} attempts
+ * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string, fallbackAllowed?: boolean, fallbackReason?: string }>} attempts
  */
 function appendProviderEvidence(payload, attempts) {
     const evidence = formatProviderEvidence(attempts);
@@ -438,13 +443,13 @@ function appendProviderEvidence(payload, attempts) {
     };
 }
 /**
- * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string }>} attempts
+ * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string, fallbackAllowed?: boolean, fallbackReason?: string }>} attempts
  */
 function formatProviderEvidence(attempts) {
     const selected = attempts.find((attempt) => attempt.payload);
     const lines = attempts.map((attempt) => {
-        const status = selected === attempt ? "selected" : shouldFallback(attempt, undefined) ? "fallback" : "stopped";
-        return `- ${attempt.agent ?? "unknown"}: exitCode=${attempt.exitCode}, status=${status}, failureClass=${attempt.failureClass ?? "none"}, payloadSource=${attempt.payloadSource ?? "none"}`;
+        const status = selected === attempt ? "selected" : attempt.fallbackAllowed ? "fallback" : "stopped";
+        return `- ${attempt.agent ?? "unknown"}: exitCode=${attempt.exitCode}, status=${status}, failureClass=${attempt.failureClass ?? "none"}, fallbackReason=${attempt.fallbackReason ?? "none"}, payloadSource=${attempt.payloadSource ?? "none"}`;
     });
     return [
         "Provider evidence:",

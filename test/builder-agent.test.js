@@ -852,6 +852,62 @@ console.log(JSON.stringify({
     assert.doesNotMatch(result.notes, /should not fallback/);
   });
 
+  it("falls back on provider-blocked failures when the provider opts in", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeHermesPath = join(binDir, "hermes-agent");
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeHermesPath,
+      `#!/usr/bin/env node
+console.error("provider blocked by content policy");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after provider-blocked fallback\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeHermesPath, 0o755);
+    await chmod(fakeClaudePath, 0o755);
+
+    await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "hermes-agent,claude",
+        KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+          "hermes-agent": {
+            command: "hermes-agent",
+            args: ["run", "{{prompt}}"],
+            fallbackOn: ["provider_blocked"],
+            output: "stdout"
+          }
+        })
+      }
+    });
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "fixed");
+    assert.equal(result.summary, "implemented after provider-blocked fallback");
+    assert.match(result.notes, /hermes-agent: exitCode=1, status=fallback, failureClass=provider_blocked, fallbackReason=provider_blocked/);
+    assert.match(result.notes, /claude: exitCode=0, status=selected, failureClass=none, fallbackReason=none/);
+    assert.match(result.notes, /Selected backend: claude/);
+    assert.match(result.notes, /Final payload source: stdout/);
+  });
+
   it("preserves structured blocked payloads when the codex backend exits non-zero", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
