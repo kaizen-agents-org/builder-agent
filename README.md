@@ -4,6 +4,22 @@ Builder Agent is the implementation-focused component of Kaizen Agents. It turns
 
 Builder Agent is deliberately not the final quality gate. Its self-review loop improves the implementation before external checks run, but approval remains the responsibility of mechanical verification, the independent verifier, repository policy, and human review where required.
 
+## Build Flow
+
+```mermaid
+flowchart LR
+    Request["build request<br/>task + goal + constraints"] --> Analyze["analyze task"]
+    Analyze --> Plan["create plan"]
+    Plan --> Implement["implement change"]
+    Implement --> Review["self-review"]
+    Review --> Ready{"ready?"}
+    Ready -->|no| Improve["generate improvement instructions"]
+    Improve --> Implement
+    Ready -->|yes| Result["build-result.json<br/>self-review.json"]
+```
+
+Builder Agent's output is evidence for the next gates, not merge approval.
+
 ## Role in Kaizen Agents
 
 Kaizen Agents separates responsibility across three main components:
@@ -22,6 +38,18 @@ flowchart LR
     C --> E["Mechanical verification"]
     D --> E
     E --> F["Independent verifier"]
+```
+
+In the integrated flow, `kaizen-loop` owns workspace setup and GitHub operations. Builder Agent only edits the workspace and writes structured build evidence:
+
+```mermaid
+flowchart TB
+    Loop["kaizen-loop"] -->|"stdin prompt"| Builder["builder-agent"]
+    Loop -->|"KAIZEN_BUILD_RESULT_PATH"| Builder
+    Builder -->|"runs provider<br/>Codex / Claude / custom"| Provider["implementation agent"]
+    Provider --> Workspace["workspace code changes"]
+    Builder --> Artifact["build-result.json<br/>discoveredIssues[]"]
+    Artifact --> Loop
 ```
 
 ## MVP Scope
@@ -180,7 +208,7 @@ Required environment:
 Optional environment:
 
 - `KAIZEN_WORKSPACE_DIR`: repository workspace. Defaults to the current directory.
-- `KAIZEN_PREFERRED_AGENT`: preferred backend or comma-separated fallback order, for example `codex,claude`. Defaults to `claude,codex`.
+- `KAIZEN_PREFERRED_AGENT`: preferred backend or comma-separated fallback order, for example `codex,claude`. Defaults to `codex,claude`.
 - `KAIZEN_AGENT_MODEL`: model name passed through to the selected backend.
 - `KAIZEN_AGENT_PROVIDERS`: JSON object for custom backend providers.
 
