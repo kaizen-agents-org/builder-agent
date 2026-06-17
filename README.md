@@ -211,13 +211,14 @@ Optional environment:
 - `KAIZEN_PREFERRED_AGENT`: preferred backend or comma-separated fallback order, for example `codex,claude`. Defaults to `codex,claude`.
 - `KAIZEN_AGENT_MODEL`: model name passed through to the selected backend.
 - `KAIZEN_AGENT_PROVIDERS`: JSON object for custom backend providers.
+- `KAIZEN_AGENT_PROVIDERS_FILE`: path to a JSON provider registry. Relative paths are resolved from `KAIZEN_WORKSPACE_DIR`.
 
 Built-in providers:
 
 - `claude`: runs `claude -p <prompt> --output-format json ...`.
 - `codex`: runs `codex exec --json --sandbox workspace-write ...`.
 
-If a provider exits or fails without returning a valid Builder Agent payload, Builder Agent tries the next provider in the normalized fallback order. Structured payloads are preserved even when the provider exits non-zero, so an intentional `blocked` result is not retried as an availability failure.
+If a provider exits or fails without returning a valid Builder Agent payload, Builder Agent classifies the failure before deciding whether to try the next provider. Default fallback classes are `command_missing`, `auth_failed`, `rate_limited`, `invalid_payload`, and `timeout`. `provider_blocked` stops fallback unless the provider explicitly opts in. Structured payloads are preserved even when the provider exits non-zero, so an intentional `blocked` result is not retried as an availability failure.
 
 Custom providers make other agent CLIs usable without changing Builder Agent code:
 
@@ -239,6 +240,28 @@ builder-agent < prompt.txt
 ```
 
 Provider `args` support `{{prompt}}`, `{{workspaceDir}}`, `{{model}}`, and `{{outputPath}}` placeholders. `{{model}}` renders as an empty value when `KAIZEN_AGENT_MODEL` is unset. `output` is `stdout` by default; use `last-message` for CLIs that write the final response to the `{{outputPath}}` file. Empty placeholder values are omitted; if the omitted value follows a flag-like argument such as `--model`, the flag is omitted too.
+
+Provider registries can also live in a JSON file:
+
+```sh
+KAIZEN_PREFERRED_AGENT=hermes-agent,opencode-go,codex,claude \
+KAIZEN_AGENT_PROVIDERS_FILE=.kaizen/agent-providers.json \
+builder-agent < prompt.txt
+```
+
+The file may be either the provider object itself or `{ "providers": { ... } }`. Provider entries support:
+
+- `command`: executable name or path.
+- `args`: command arguments with `{{prompt}}`, `{{workspaceDir}}`, `{{model}}`, and `{{outputPath}}` placeholders.
+- `promptTemplate`: provider-specific prompt wrapper. Defaults to `{{prompt}}`.
+- `output`: `stdout` or `last-message`.
+- `timeoutMs`: execution timeout.
+- `healthCheck`: optional `{ "command", "args", "timeoutMs" }` check run before execution. Omitted `command` uses the provider command.
+- `fallbackOn`: failure classes that should try the next provider.
+
+Fallback evidence is included in blocked run notes and appended to successful fallback payload notes. It records attempted providers, failure classes, fallback reasons, selected backend, and final payload source.
+
+See [provider-fallback-architecture.md](docs/provider-fallback-architecture.md) for the Hermes-style research notes, design decisions, and example registries for opencode-go, z.ai, Copilot-like wrappers, Antigravity-like wrappers, Grok-like wrappers, and Hermes-style agents.
 
 The integration payload is intentionally smaller than the standalone build artifact:
 

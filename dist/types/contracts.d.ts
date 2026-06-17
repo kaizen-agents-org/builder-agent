@@ -141,12 +141,25 @@ export interface AgentRunInput {
 export interface AgentProviderConfig {
     command: string;
     args?: string[];
+    promptTemplate?: string;
     output?: "stdout" | "last-message";
+    timeoutMs?: number;
+    fallbackOn?: AgentFailureClass[];
+    healthCheck?: {
+        command?: string;
+        args?: string[];
+        timeoutMs?: number;
+    };
 }
+export type AgentFailureClass = "command_missing" | "auth_failed" | "rate_limited" | "invalid_payload" | "timeout" | "provider_blocked";
 export interface AgentRunResult {
     exitCode: number;
     raw: string;
     payload?: KaizenLoopPayload;
+    failureClass?: AgentFailureClass;
+    fallbackReason?: AgentFailureClass;
+    fallbackAllowed?: boolean;
+    payloadSource?: "stdout" | "last-message" | "none";
 }
 export interface KaizenLoopBuilderIO {
     stdin: Readable;
