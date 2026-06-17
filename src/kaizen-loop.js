@@ -1,6 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
-import { normalizeAgent, runImplementationAgent } from "./agents/AgentRunner.js";
+import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
 
 /** @import { AgentRunResult, KaizenLoopBuilderIO, KaizenLoopPayload } from "./types/contracts.js" */
 
@@ -11,7 +11,7 @@ import { normalizeAgent, runImplementationAgent } from "./agents/AgentRunner.js"
 export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
   const prompt = await readStream(stdin);
   const workspaceDir = env.KAIZEN_WORKSPACE_DIR || process.cwd();
-  const preferredAgent = normalizeAgent(env.KAIZEN_PREFERRED_AGENT);
+  const preferredAgents = normalizeAgents(env.KAIZEN_PREFERRED_AGENT);
   const model = env.KAIZEN_AGENT_MODEL || undefined;
   const resultPath = env.KAIZEN_BUILD_RESULT_PATH;
 
@@ -20,7 +20,7 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
   }
 
   const result = await runImplementationAgent({
-    agent: preferredAgent,
+    agent: preferredAgents,
     prompt,
     workspaceDir,
     model,

@@ -169,7 +169,7 @@ When `kaizen-loop` invokes `builder-agent`, it calls the command with no argumen
 ```sh
 KAIZEN_BUILD_RESULT_PATH=.kaizen/builder/build-result.json \
 KAIZEN_WORKSPACE_DIR="$PWD" \
-KAIZEN_PREFERRED_AGENT=claude \
+KAIZEN_PREFERRED_AGENT=codex,claude \
 builder-agent < prompt.txt
 ```
 
@@ -180,8 +180,37 @@ Required environment:
 Optional environment:
 
 - `KAIZEN_WORKSPACE_DIR`: repository workspace. Defaults to the current directory.
-- `KAIZEN_PREFERRED_AGENT`: `claude` or `codex`. Defaults to `claude`.
+- `KAIZEN_PREFERRED_AGENT`: preferred backend or comma-separated fallback order, for example `codex,claude`. Defaults to `claude,codex`.
 - `KAIZEN_AGENT_MODEL`: model name passed through to the selected backend.
+- `KAIZEN_AGENT_PROVIDERS`: JSON object for custom backend providers.
+
+Built-in providers:
+
+- `claude`: runs `claude -p <prompt> --output-format json ...`.
+- `codex`: runs `codex exec --json --sandbox workspace-write ...`.
+
+If a provider exits or fails without returning a valid Builder Agent payload, Builder Agent tries the next provider in the normalized fallback order. Structured payloads are preserved even when the provider exits non-zero, so an intentional `blocked` result is not retried as an availability failure.
+
+Custom providers make other agent CLIs usable without changing Builder Agent code:
+
+```sh
+KAIZEN_PREFERRED_AGENT=opencode-go,codex,claude \
+KAIZEN_AGENT_PROVIDERS='{
+  "opencode-go": {
+    "command": "opencode-go",
+    "args": ["run", "--cwd", "{{workspaceDir}}", "--model", "{{model}}", "{{prompt}}"],
+    "output": "stdout"
+  },
+  "zai": {
+    "command": "zai",
+    "args": ["agent", "--workspace", "{{workspaceDir}}", "{{prompt}}"],
+    "output": "stdout"
+  }
+}' \
+builder-agent < prompt.txt
+```
+
+Provider `args` support `{{prompt}}`, `{{workspaceDir}}`, `{{model}}`, and `{{outputPath}}` placeholders. `output` is `stdout` by default; use `last-message` for CLIs that write the final response to the `{{outputPath}}` file.
 
 The integration payload is intentionally smaller than the standalone build artifact:
 

@@ -3,7 +3,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-/** @import { AgentKind, AgentRunInput, AgentRunResult, KaizenLoopPayload } from "../types/contracts.js" */
+/** @import { AgentKind, AgentProviderConfig, AgentRunInput, AgentRunResult, KaizenLoopPayload } from "../types/contracts.js" */
 
 const PAYLOAD_STATUSES = new Set(["fixed", "partial", "blocked"]);
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
@@ -11,12 +11,12 @@ const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const AGENT_PROVIDERS = {
   codex: {
     command: "codex",
-    readsLastMessageFile: true,
+    output: "last-message",
     createArgs: codexArgs
   },
   claude: {
     command: "claude",
-    readsLastMessageFile: false,
+    output: "stdout",
     createArgs: claudeArgs
   }
 };
@@ -29,19 +29,33 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
   const tempDir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 
   try {
-    const outputPath = join(tempDir, "last-message.txt");
-    const provider = AGENT_PROVIDERS[agent];
-    const args = provider.createArgs({ prompt, workspaceDir, model, outputPath });
+    const providers = loadAgentProviders(env);
+    const agents = normalizeAgents(agent);
+    const attempts = [];
 
-    const result = await runCommand(provider.command, args, { cwd: workspaceDir, env });
-    const lastMessage = provider.readsLastMessageFile ? await readFile(outputPath, "utf8").catch(() => "") : "";
-    const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
-    const payload = parseBuilderPayload(lastMessage || raw);
+    for (const agentName of agents) {
+      const result = await runAgentAttempt({
+        agent: agentName,
+        provider: providers[agentName],
+        prompt,
+        workspaceDir,
+        model,
+        env,
+        tempDir
+      });
 
+      if (result.payload) {
+        return result;
+      }
+
+      attempts.push(result);
+    }
+
+    const lastAttempt = attempts.at(-1);
     return {
-      exitCode: result.exitCode,
-      raw,
-      payload
+      exitCode: lastAttempt?.exitCode ?? 1,
+      raw: attempts.map(formatAttempt).join("\n\n"),
+      payload: undefined
     };
   } catch (error) {
     return {
@@ -59,7 +73,122 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
  * @returns {AgentKind}
  */
 export function normalizeAgent(value) {
-  return value === "codex" ? "codex" : "claude";
+  return normalizeAgents(value)[0];
+}
+
+/**
+ * @param {string | string[] | undefined} value
+ * @returns {AgentKind[]}
+ */
+export function normalizeAgents(value) {
+  const requested = Array.isArray(value) ? value : splitAgentList(value);
+  const normalized = unique(requested.length ? requested : ["claude"]);
+
+  for (const fallback of fallbackAgents(normalized)) {
+    if (!normalized.includes(fallback)) normalized.push(fallback);
+  }
+
+  return normalized;
+}
+
+/**
+ * @param {{
+ *   agent: AgentKind,
+ *   provider: ReturnType<typeof loadAgentProviders>[string] | undefined,
+ *   prompt: string,
+ *   workspaceDir: string,
+ *   model?: string,
+ *   env: NodeJS.ProcessEnv,
+ *   tempDir: string
+ * }} input
+ * @returns {Promise<AgentRunResult & { agent: AgentKind }>}
+ */
+async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, env, tempDir }) {
+  if (!provider) {
+    return {
+      agent,
+      exitCode: 1,
+      raw: `No provider is configured for agent "${agent}".`,
+      payload: undefined
+    };
+  }
+
+  try {
+    const outputPath = join(tempDir, `${sanitizeFilename(agent)}-last-message.txt`);
+    const args = provider.createArgs({ prompt, workspaceDir, model, outputPath });
+    const result = await runCommand(provider.command, args, { cwd: workspaceDir, env });
+    const lastMessage = provider.output === "last-message" ? await readFile(outputPath, "utf8").catch(() => "") : "";
+    const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
+    const payload = parseBuilderPayload(lastMessage || raw);
+
+    return {
+      agent,
+      exitCode: result.exitCode,
+      raw,
+      payload
+    };
+  } catch (error) {
+    return {
+      agent,
+      exitCode: 1,
+      raw: error instanceof Error ? error.message : String(error),
+      payload: undefined
+    };
+  }
+}
+
+/**
+ * @param {NodeJS.ProcessEnv} env
+ */
+function loadAgentProviders(env) {
+  return {
+    ...AGENT_PROVIDERS,
+    ...parseCustomProviders(env.KAIZEN_AGENT_PROVIDERS)
+  };
+}
+
+/**
+ * @param {string | undefined} raw
+ * @returns {Record<string, { command: string, output: "stdout" | "last-message", createArgs(input: { prompt: string, workspaceDir: string, model?: string, outputPath: string }): string[] }>}
+ */
+function parseCustomProviders(raw) {
+  if (!raw) return {};
+
+  const parsed = parseMaybeJson(raw);
+  if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+    throw new Error("KAIZEN_AGENT_PROVIDERS must be a JSON object.");
+  }
+
+  return Object.fromEntries(
+    Object.entries(parsed).map(([name, value]) => [name, createCustomProvider(name, value)])
+  );
+}
+
+/**
+ * @param {string} name
+ * @param {unknown} value
+ */
+function createCustomProvider(name, value) {
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Provider "${name}" must be an object.`);
+  }
+
+  const config = /** @type {AgentProviderConfig} */ (value);
+  if (typeof config.command !== "string" || !config.command.trim()) {
+    throw new Error(`Provider "${name}" must define a command.`);
+  }
+
+  const args = Array.isArray(config.args) ? config.args : [];
+  if (!args.every((arg) => typeof arg === "string")) {
+    throw new Error(`Provider "${name}" args must be strings.`);
+  }
+
+  const output = config.output === "last-message" ? "last-message" : "stdout";
+  return {
+    command: config.command,
+    output,
+    createArgs: (input) => renderArgs(args, input)
+  };
 }
 
 /**
@@ -97,6 +226,74 @@ function claudeArgs({ prompt, model }) {
   ];
   if (model) args.push("--model", model);
   return args;
+}
+
+/**
+ * @param {string[]} args
+ * @param {{ prompt: string, workspaceDir: string, model?: string, outputPath: string }} input
+ */
+function renderArgs(args, input) {
+  return args
+    .map((arg) => renderTemplate(arg, input))
+    .filter((arg) => arg.length > 0);
+}
+
+/**
+ * @param {string} value
+ * @param {{ prompt: string, workspaceDir: string, model?: string, outputPath: string }} input
+ */
+function renderTemplate(value, input) {
+  return value
+    .replaceAll("{{prompt}}", input.prompt)
+    .replaceAll("{{workspaceDir}}", input.workspaceDir)
+    .replaceAll("{{model}}", input.model ?? "")
+    .replaceAll("{{outputPath}}", input.outputPath);
+}
+
+/**
+ * @param {string | undefined} value
+ */
+function splitAgentList(value) {
+  if (!value) return [];
+
+  const parsed = value.trim().startsWith("[") ? parseMaybeJson(value) : undefined;
+  if (Array.isArray(parsed)) {
+    return parsed.flatMap((item) => (typeof item === "string" ? [item] : []));
+  }
+
+  return value.split(/[,\s]+/);
+}
+
+/**
+ * @param {string[]} values
+ */
+function unique(values) {
+  return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
+}
+
+/**
+ * @param {AgentKind[]} requested
+ */
+function fallbackAgents(requested) {
+  const builtIns = ["claude", "codex"];
+  return requested.some((agent) => builtIns.includes(agent))
+    ? builtIns
+    : ["claude", "codex"];
+}
+
+/**
+ * @param {string} value
+ */
+function sanitizeFilename(value) {
+  return value.replace(/[^a-z0-9._-]/gi, "_");
+}
+
+/**
+ * @param {AgentRunResult & { agent?: AgentKind }} attempt
+ */
+function formatAttempt(attempt) {
+  const header = attempt.agent ? `Agent "${attempt.agent}" exited with code ${attempt.exitCode}.` : `Agent exited with code ${attempt.exitCode}.`;
+  return `${header}\n${attempt.raw}`;
 }
 
 /**

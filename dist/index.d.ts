@@ -10,7 +10,7 @@ export type DiscoveredIssue = import("./types/contracts.js").DiscoveredIssue;
 export type KaizenLoopPayload = import("./types/contracts.js").KaizenLoopPayload;
 export type SelfReviewResult = import("./types/contracts.js").SelfReviewResult;
 export { BuilderAgent, runBuild } from "./builder/BuilderAgent.js";
-export { normalizeAgent, runImplementationAgent } from "./agents/AgentRunner.js";
+export { normalizeAgent, normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
 export { normalizeBuildRequest, DEFAULT_MAX_ITERATIONS, DEFAULT_THRESHOLD } from "./types/BuildRequest.js";
 export { createBuildResult, createFailedBuildResult, normalizeBuildResult } from "./types/BuildResult.js";
 export { DIMENSION_KEYS, isReviewPassed, normalizeSelfReview } from "./review/SelfReview.js";
