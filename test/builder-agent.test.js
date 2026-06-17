@@ -586,6 +586,52 @@ console.log(JSON.stringify({
     assert.deepEqual(args, ["run", "--cwd", dir, "--model", "zai-coder", "Fix issue #1"]);
   });
 
+  it("omits custom provider flag-value pairs when a placeholder value is empty", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    const argsPath = join(dir, "zai-args.json");
+    await mkdir(binDir);
+    const fakeZaiPath = join(binDir, "zai");
+
+    await writeFile(
+      fakeZaiPath,
+      `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({
+  status: "fixed",
+  summary: "implemented without model",
+  notes: "checked"
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeZaiPath, 0o755);
+
+    await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "zai",
+        KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+          zai: {
+            command: "zai",
+            args: ["agent", "--workspace", "{{workspaceDir}}", "--model", "{{model}}", "{{prompt}}"],
+            output: "stdout"
+          }
+        })
+      }
+    });
+
+    const args = JSON.parse(await readFile(argsPath, "utf8"));
+
+    assert.deepEqual(args, ["agent", "--workspace", dir, "Fix issue #1"]);
+  });
+
   it("preserves structured blocked payloads when the codex backend exits non-zero", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");

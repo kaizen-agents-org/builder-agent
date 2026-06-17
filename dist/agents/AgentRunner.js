@@ -211,9 +211,19 @@ function claudeArgs({ prompt, model }) {
  * @param {{ prompt: string, workspaceDir: string, model?: string, outputPath: string }} input
  */
 function renderArgs(args, input) {
-    return args
-        .map((arg) => renderTemplate(arg, input))
-        .filter((arg) => arg.length > 0);
+    const rendered = [];
+    for (const arg of args) {
+        const value = renderTemplate(arg, input);
+        if (value.length > 0) {
+            rendered.push({ source: arg, value });
+            continue;
+        }
+        const previous = rendered.at(-1);
+        if (previous && previous.value.startsWith("-")) {
+            rendered.pop();
+        }
+    }
+    return rendered.map((arg) => arg.value);
 }
 /**
  * @param {string} value

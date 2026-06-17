@@ -210,7 +210,7 @@ KAIZEN_AGENT_PROVIDERS='{
 builder-agent < prompt.txt
 ```
 
-Provider `args` support `{{prompt}}`, `{{workspaceDir}}`, `{{model}}`, and `{{outputPath}}` placeholders. `output` is `stdout` by default; use `last-message` for CLIs that write the final response to the `{{outputPath}}` file.
+Provider `args` support `{{prompt}}`, `{{workspaceDir}}`, `{{model}}`, and `{{outputPath}}` placeholders. `output` is `stdout` by default; use `last-message` for CLIs that write the final response to the `{{outputPath}}` file. Empty placeholder values are omitted; if the omitted value follows a flag-like argument such as `--model`, the flag is omitted too.
 
 The integration payload is intentionally smaller than the standalone build artifact:
 
