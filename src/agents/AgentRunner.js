@@ -1,22 +1,26 @@
 import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join, resolve } from "node:path";
 
 /** @import { AgentKind, AgentProviderConfig, AgentRunInput, AgentRunResult, KaizenLoopPayload } from "../types/contracts.js" */
 
 const PAYLOAD_STATUSES = new Set(["fixed", "partial", "blocked"]);
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
+const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
+const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
 
 const AGENT_PROVIDERS = {
   codex: {
     command: "codex",
     output: "last-message",
+    fallbackOn: DEFAULT_FALLBACK_ON,
     createArgs: codexArgs
   },
   claude: {
     command: "claude",
     output: "stdout",
+    fallbackOn: DEFAULT_FALLBACK_ON,
     createArgs: claudeArgs
   }
 };
@@ -29,14 +33,15 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
   const tempDir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 
   try {
-    const providers = loadAgentProviders(env);
+    const providers = await loadAgentProviders(env, workspaceDir);
     const agents = normalizeAgents(agent);
     const attempts = [];
 
     for (const agentName of agents) {
+      const provider = providers[agentName];
       const result = await runAgentAttempt({
         agent: agentName,
-        provider: providers[agentName],
+        provider,
         prompt,
         workspaceDir,
         model,
@@ -45,16 +50,28 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
       });
 
       if (result.payload) {
-        return result;
+        const allAttempts = [...attempts, result];
+        return {
+          ...result,
+          raw: formatAttempts(allAttempts),
+          payload: attempts.length > 0 ? appendProviderEvidence(result.payload, allAttempts) : result.payload
+        };
       }
 
       attempts.push(result);
+      if (!shouldFallback(result, provider)) {
+        return {
+          exitCode: result.exitCode,
+          raw: formatAttempts(attempts),
+          payload: undefined
+        };
+      }
     }
 
     const lastAttempt = attempts.at(-1);
     return {
       exitCode: lastAttempt?.exitCode ?? 1,
-      raw: attempts.map(formatAttempt).join("\n\n"),
+      raw: formatAttempts(attempts),
       payload: undefined
     };
   } catch (error) {
@@ -94,7 +111,7 @@ export function normalizeAgents(value) {
 /**
  * @param {{
  *   agent: AgentKind,
- *   provider: ReturnType<typeof loadAgentProviders>[string] | undefined,
+ *   provider: Awaited<ReturnType<typeof loadAgentProviders>>[string] | undefined,
  *   prompt: string,
  *   workspaceDir: string,
  *   model?: string,
@@ -108,6 +125,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
     return {
       agent,
       exitCode: 1,
+      failureClass: "command_missing",
       raw: `No provider is configured for agent "${agent}".`,
       payload: undefined
     };
@@ -115,23 +133,49 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
 
   try {
     const outputPath = join(tempDir, `${sanitizeFilename(agent)}-last-message.txt`);
+    if (provider.healthCheck) {
+      const healthCheck = provider.healthCheck;
+      const healthResult = await runCommand(
+        healthCheck.command,
+        renderArgs(healthCheck.args, { prompt, workspaceDir, model, outputPath }),
+        { cwd: workspaceDir, env, timeoutMs: healthCheck.timeoutMs }
+      );
+      if (healthResult.exitCode !== 0) {
+        const raw = `${healthResult.stdout}${healthResult.stderr}`;
+        return {
+          agent,
+          exitCode: healthResult.exitCode,
+          failureClass: classifyFailure({ exitCode: healthResult.exitCode, raw }),
+          payloadSource: "none",
+          raw,
+          payload: undefined
+        };
+      }
+    }
+
     const args = provider.createArgs({ prompt, workspaceDir, model, outputPath });
-    const result = await runCommand(provider.command, args, { cwd: workspaceDir, env });
+    const result = await runCommand(provider.command, args, { cwd: workspaceDir, env, timeoutMs: provider.timeoutMs });
     const lastMessage = provider.output === "last-message" ? await readFile(outputPath, "utf8").catch(() => "") : "";
     const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
+    const payloadSource = lastMessage ? "last-message" : "stdout";
     const payload = parseBuilderPayload(lastMessage || raw);
 
     return {
       agent,
       exitCode: result.exitCode,
+      failureClass: payload ? undefined : classifyFailure({ exitCode: result.exitCode, raw }),
+      payloadSource: payload ? payloadSource : "none",
       raw,
       payload
     };
   } catch (error) {
+    const raw = error instanceof Error ? error.message : String(error);
     return {
       agent,
       exitCode: 1,
-      raw: error instanceof Error ? error.message : String(error),
+      failureClass: classifyFailure({ exitCode: 1, raw, error }),
+      payloadSource: "none",
+      raw,
       payload: undefined
     };
   }
@@ -139,29 +183,60 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
 
 /**
  * @param {NodeJS.ProcessEnv} env
+ * @param {string} workspaceDir
  */
-function loadAgentProviders(env) {
+async function loadAgentProviders(env, workspaceDir) {
   return {
     ...AGENT_PROVIDERS,
+    ...parseCustomProviders(await readProviderFile(env.KAIZEN_AGENT_PROVIDERS_FILE, workspaceDir), "KAIZEN_AGENT_PROVIDERS_FILE"),
     ...parseCustomProviders(env.KAIZEN_AGENT_PROVIDERS)
   };
 }
 
 /**
- * @param {string | undefined} raw
- * @returns {Record<string, { command: string, output: "stdout" | "last-message", createArgs(input: { prompt: string, workspaceDir: string, model?: string, outputPath: string }): string[] }>}
+ * @param {string | undefined} path
+ * @param {string} workspaceDir
+ * @returns {Promise<string | undefined>}
  */
-function parseCustomProviders(raw) {
+async function readProviderFile(path, workspaceDir) {
+  if (!path) return undefined;
+  const resolved = isAbsolute(path) ? path : resolve(workspaceDir, path);
+  return readFile(resolved, "utf8");
+}
+
+/**
+ * @param {string | undefined} raw
+ * @param {string} [source]
+ * @returns {Record<string, { command: string, output: "stdout" | "last-message", fallbackOn: string[], timeoutMs?: number, healthCheck?: { command: string, args: string[], timeoutMs?: number }, createArgs(input: { prompt: string, workspaceDir: string, model?: string, outputPath: string }): string[] }>}
+ */
+function parseCustomProviders(raw, source = "KAIZEN_AGENT_PROVIDERS") {
   if (!raw) return {};
 
   const parsed = parseMaybeJson(raw);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
-    throw new Error("KAIZEN_AGENT_PROVIDERS must be a JSON object.");
+    throw new Error(`${source} must be a JSON object.`);
   }
+  const providerMap = normalizeProviderMap(parsed, source);
 
   return Object.fromEntries(
-    Object.entries(parsed).map(([name, value]) => [name, createCustomProvider(name, value)])
+    Object.entries(providerMap).map(([name, value]) => [name, createCustomProvider(name, value)])
   );
+}
+
+/**
+ * @param {Record<string, unknown>} parsed
+ * @param {string} source
+ */
+function normalizeProviderMap(parsed, source) {
+  const providers = parsed.providers;
+  if (providers !== undefined) {
+    if (!providers || typeof providers !== "object" || Array.isArray(providers)) {
+      throw new Error(`${source} providers must be an object.`);
+    }
+    return /** @type {Record<string, unknown>} */ (providers);
+  }
+
+  return parsed;
 }
 
 /**
@@ -183,11 +258,76 @@ function createCustomProvider(name, value) {
     throw new Error(`Provider "${name}" args must be strings.`);
   }
 
+  const promptTemplate = typeof config.promptTemplate === "string" && config.promptTemplate.trim()
+    ? config.promptTemplate
+    : "{{prompt}}";
   const output = config.output === "last-message" ? "last-message" : "stdout";
+  const fallbackOn = normalizeFallbackOn(config.fallbackOn, name);
+  const timeoutMs = normalizeTimeoutMs(config.timeoutMs, `Provider "${name}" timeoutMs`);
   return {
     command: config.command,
     output,
-    createArgs: (input) => renderArgs(args, input)
+    fallbackOn,
+    ...(timeoutMs ? { timeoutMs } : {}),
+    ...createHealthCheck(config.healthCheck, config.command, name),
+    createArgs: (input) => {
+      const renderedPrompt = renderTemplate(promptTemplate, input);
+      return renderArgs(args, { ...input, prompt: renderedPrompt });
+    }
+  };
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} name
+ */
+function normalizeFallbackOn(value, name) {
+  if (value === undefined) return DEFAULT_FALLBACK_ON;
+  if (!Array.isArray(value) || !value.every((item) => typeof item === "string" && FAILURE_CLASSES.has(item))) {
+    throw new Error(`Provider "${name}" fallbackOn must contain known failure classes.`);
+  }
+  return unique(value);
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} label
+ */
+function normalizeTimeoutMs(value, label) {
+  if (value === undefined) return undefined;
+  if (!Number.isInteger(value) || value <= 0) {
+    throw new Error(`${label} must be a positive integer.`);
+  }
+  return value;
+}
+
+/**
+ * @param {unknown} value
+ * @param {string} providerCommand
+ * @param {string} name
+ */
+function createHealthCheck(value, providerCommand, name) {
+  if (value === undefined) return {};
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error(`Provider "${name}" healthCheck must be an object.`);
+  }
+
+  const healthCheck = /** @type {{ command?: unknown, args?: unknown, timeoutMs?: unknown }} */ (value);
+  const command = typeof healthCheck.command === "string" && healthCheck.command.trim()
+    ? healthCheck.command
+    : providerCommand;
+  const args = Array.isArray(healthCheck.args) ? healthCheck.args : [];
+  if (!args.every((arg) => typeof arg === "string")) {
+    throw new Error(`Provider "${name}" healthCheck args must be strings.`);
+  }
+  const timeoutMs = normalizeTimeoutMs(healthCheck.timeoutMs, `Provider "${name}" healthCheck timeoutMs`);
+
+  return {
+    healthCheck: {
+      command,
+      args,
+      ...(timeoutMs ? { timeoutMs } : {})
+    }
   };
 }
 
@@ -292,6 +432,17 @@ function fallbackAgents(requested) {
 }
 
 /**
+ * @param {AgentRunResult & { failureClass?: string }} attempt
+ * @param {{ fallbackOn?: string[] } | undefined} provider
+ */
+function shouldFallback(attempt, provider) {
+  if (attempt.payload) return false;
+  const failureClass = attempt.failureClass ?? "invalid_payload";
+  const fallbackOn = provider?.fallbackOn ?? DEFAULT_FALLBACK_ON;
+  return fallbackOn.includes(failureClass);
+}
+
+/**
  * @param {string} value
  */
 function sanitizeFilename(value) {
@@ -303,7 +454,75 @@ function sanitizeFilename(value) {
  */
 function formatAttempt(attempt) {
   const header = attempt.agent ? `Agent "${attempt.agent}" exited with code ${attempt.exitCode}.` : `Agent exited with code ${attempt.exitCode}.`;
-  return `${header}\n${attempt.raw}`;
+  const details = [
+    attempt.failureClass ? `Failure class: ${attempt.failureClass}.` : undefined,
+    attempt.payloadSource ? `Payload source: ${attempt.payloadSource}.` : undefined,
+    attempt.payload ? `Selected backend: ${attempt.agent}.` : undefined
+  ].filter(Boolean).join("\n");
+  return `${header}${details ? `\n${details}` : ""}\n${attempt.raw}`;
+}
+
+/**
+ * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string }>} attempts
+ */
+function formatAttempts(attempts) {
+  return attempts.map(formatAttempt).join("\n\n");
+}
+
+/**
+ * @param {KaizenLoopPayload} payload
+ * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string }>} attempts
+ */
+function appendProviderEvidence(payload, attempts) {
+  const evidence = formatProviderEvidence(attempts);
+  return {
+    ...payload,
+    notes: payload.notes ? `${payload.notes}\n\n${evidence}` : evidence
+  };
+}
+
+/**
+ * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string }>} attempts
+ */
+function formatProviderEvidence(attempts) {
+  const selected = attempts.find((attempt) => attempt.payload);
+  const lines = attempts.map((attempt) => {
+    const status = selected === attempt ? "selected" : shouldFallback(attempt, undefined) ? "fallback" : "stopped";
+    return `- ${attempt.agent ?? "unknown"}: exitCode=${attempt.exitCode}, status=${status}, failureClass=${attempt.failureClass ?? "none"}, payloadSource=${attempt.payloadSource ?? "none"}`;
+  });
+  return [
+    "Provider evidence:",
+    ...lines,
+    ...(selected ? [`Selected backend: ${selected.agent ?? "unknown"}`, `Final payload source: ${selected.payloadSource ?? "unknown"}`] : [])
+  ].join("\n");
+}
+
+/**
+ * @param {{ exitCode: number, raw: string, error?: unknown }} input
+ */
+function classifyFailure({ exitCode, raw, error }) {
+  const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
+  const text = `${code}\n${raw}`.toLowerCase();
+
+  if (text.includes("enoent") || text.includes("not found") || text.includes("command not found")) {
+    return "command_missing";
+  }
+  if (text.includes("timed out") || text.includes("timeout")) {
+    return "timeout";
+  }
+  if (/\b401\b/.test(text) || text.includes("unauthorized") || text.includes("unauthenticated") || text.includes("not authenticated") || text.includes("api key") || text.includes("login required")) {
+    return "auth_failed";
+  }
+  if (/\b429\b/.test(text) || text.includes("rate limit") || text.includes("too many requests") || text.includes("quota exceeded")) {
+    return "rate_limited";
+  }
+  if (text.includes("content policy") || text.includes("safety") || text.includes("provider blocked")) {
+    return "provider_blocked";
+  }
+  if (exitCode === 0) {
+    return "invalid_payload";
+  }
+  return "invalid_payload";
 }
 
 /**

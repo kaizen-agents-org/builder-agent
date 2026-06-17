@@ -682,6 +682,176 @@ console.log(JSON.stringify({
     assert.deepEqual(args, ["agent", "--workspace", dir, "Fix issue #1"]);
   });
 
+  it("loads custom providers from KAIZEN_AGENT_PROVIDERS_FILE and applies prompt templates", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    const argsPath = join(dir, "hermes-args.json");
+    const providerConfigPath = join(dir, "providers.json");
+    await mkdir(binDir);
+    const fakeHermesPath = join(binDir, "hermes-agent");
+
+    await writeFile(
+      fakeHermesPath,
+      `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({
+  status: "fixed",
+  summary: "implemented by hermes-style provider",
+  notes: "checked"
+}));
+`,
+      "utf8"
+    );
+    await writeFile(
+      providerConfigPath,
+      JSON.stringify({
+        providers: {
+          "hermes-agent": {
+            command: "hermes-agent",
+            args: ["run", "--input", "{{prompt}}"],
+            promptTemplate: "Hermes task:\n{{prompt}}",
+            output: "stdout"
+          }
+        }
+      }),
+      "utf8"
+    );
+    await chmod(fakeHermesPath, 0o755);
+
+    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "hermes-agent",
+        KAIZEN_AGENT_PROVIDERS_FILE: providerConfigPath
+      }
+    });
+
+    const output = JSON.parse(stdout);
+    const args = JSON.parse(await readFile(argsPath, "utf8"));
+
+    assert.equal(output.status, "fixed");
+    assert.equal(output.summary, "implemented by hermes-style provider");
+    assert.deepEqual(args, ["run", "--input", "Hermes task:\nFix issue #1"]);
+  });
+
+  it("falls back when a provider health check fails with a fallbackable class", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeHermesPath = join(binDir, "hermes-agent");
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeHermesPath,
+      `#!/usr/bin/env node
+if (process.argv[2] === "health") {
+  console.error("401 unauthorized");
+  process.exit(1);
+}
+console.log(JSON.stringify({
+  status: "fixed",
+  summary: "primary should not run",
+  notes: "checked"
+}));
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after health-check fallback\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeHermesPath, 0o755);
+    await chmod(fakeClaudePath, 0o755);
+
+    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "hermes-agent,claude",
+        KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+          "hermes-agent": {
+            command: "hermes-agent",
+            args: ["run", "{{prompt}}"],
+            healthCheck: { args: ["health"] },
+            output: "stdout"
+          }
+        })
+      }
+    });
+
+    const output = JSON.parse(stdout);
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(output.status, "fixed");
+    assert.equal(result.summary, "implemented after health-check fallback");
+    assert.match(result.notes, /Provider evidence/);
+    assert.match(result.notes, /hermes-agent: exitCode=1, status=fallback, failureClass=auth_failed/);
+    assert.match(result.notes, /Selected backend: claude/);
+  });
+
+  it("stops fallback for provider-blocked failures unless the provider opts in", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+console.error("content policy safety refusal");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"should not fallback\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+    await chmod(fakeClaudePath, 0o755);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: dir,
+          KAIZEN_PREFERRED_AGENT: "codex,claude"
+        }
+      }),
+      /Command exited with 2/
+    );
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.summary, "Builder agent exited with code 1.");
+    assert.match(result.notes, /Failure class: provider_blocked/);
+    assert.doesNotMatch(result.notes, /should not fallback/);
+  });
+
   it("preserves structured blocked payloads when the codex backend exits non-zero", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
