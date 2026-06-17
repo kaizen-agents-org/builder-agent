@@ -491,6 +491,197 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     assert.equal(args.includes("--ask-for-approval"), false);
   });
 
+  it("falls back to the next preferred backend when an agent fails without a payload", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+console.error("codex is not authenticated");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented by fallback\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+    await chmod(fakeClaudePath, 0o755);
+
+    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "codex,claude"
+      }
+    });
+
+    const output = JSON.parse(stdout);
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(output.status, "fixed");
+    assert.equal(result.summary, "implemented by fallback");
+  });
+
+  it("returns aggregated attempt output when all preferred backends fail without a payload", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+console.error("codex failed");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.error("claude failed");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+    await chmod(fakeClaudePath, 0o755);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: dir,
+          KAIZEN_PREFERRED_AGENT: "codex,claude"
+        }
+      }),
+      /Command exited with 2/
+    );
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.summary, "Builder agent exited with code 1.");
+    assert.match(result.notes, /Agent "codex" exited with code 1/);
+    assert.match(result.notes, /codex failed/);
+    assert.match(result.notes, /Agent "claude" exited with code 1/);
+    assert.match(result.notes, /claude failed/);
+  });
+
+  it("runs custom providers from KAIZEN_AGENT_PROVIDERS", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    const argsPath = join(dir, "opencode-args.json");
+    await mkdir(binDir);
+    const fakeOpenCodePath = join(binDir, "opencode-go");
+
+    await writeFile(
+      fakeOpenCodePath,
+      `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({
+  status: "fixed",
+  summary: "implemented by custom provider",
+  notes: "checked"
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeOpenCodePath, 0o755);
+
+    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "opencode-go",
+        KAIZEN_AGENT_MODEL: "zai-coder",
+        KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+          "opencode-go": {
+            command: "opencode-go",
+            args: ["run", "--cwd", "{{workspaceDir}}", "--model", "{{model}}", "{{prompt}}"],
+            output: "stdout"
+          }
+        })
+      }
+    });
+
+    const output = JSON.parse(stdout);
+    const args = JSON.parse(await readFile(argsPath, "utf8"));
+
+    assert.equal(output.status, "fixed");
+    assert.equal(output.summary, "implemented by custom provider");
+    assert.deepEqual(args, ["run", "--cwd", dir, "--model", "zai-coder", "Fix issue #1"]);
+  });
+
+  it("omits custom provider flag-value pairs when a placeholder value is empty", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    const argsPath = join(dir, "zai-args.json");
+    await mkdir(binDir);
+    const fakeZaiPath = join(binDir, "zai");
+
+    await writeFile(
+      fakeZaiPath,
+      `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+console.log(JSON.stringify({
+  status: "fixed",
+  summary: "implemented without model",
+  notes: "checked"
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeZaiPath, 0o755);
+
+    await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "zai",
+        KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+          zai: {
+            command: "zai",
+            args: ["agent", "--workspace", "{{workspaceDir}}", "--model", "{{model}}", "{{prompt}}"],
+            output: "stdout"
+          }
+        })
+      }
+    });
+
+    const args = JSON.parse(await readFile(argsPath, "utf8"));
+
+    assert.deepEqual(args, ["agent", "--workspace", dir, "Fix issue #1"]);
+  });
+
   it("preserves structured blocked payloads when the codex backend exits non-zero", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");

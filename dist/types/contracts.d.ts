@@ -1,7 +1,8 @@
 import type { Readable, Writable } from "node:stream";
 export type BuildStatus = "ready" | "blocked" | "failed";
 export type KaizenLoopStatus = "fixed" | "partial" | "blocked";
-export type AgentKind = "claude" | "codex";
+export type BuiltInAgentKind = "claude" | "codex";
+export type AgentKind = BuiltInAgentKind | (string & {});
 export interface BuildRequest {
     task: string;
     goal?: string;
@@ -131,11 +132,16 @@ export interface KaizenLoopPayload {
     discoveredIssues: DiscoveredIssue[];
 }
 export interface AgentRunInput {
-    agent: AgentKind;
+    agent: AgentKind | AgentKind[];
     prompt: string;
     workspaceDir: string;
     model?: string;
     env: NodeJS.ProcessEnv;
+}
+export interface AgentProviderConfig {
+    command: string;
+    args?: string[];
+    output?: "stdout" | "last-message";
 }
 export interface AgentRunResult {
     exitCode: number;
