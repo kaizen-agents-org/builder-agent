@@ -464,7 +464,8 @@ function formatAttempt(attempt) {
     attempt.payloadSource ? `Payload source: ${attempt.payloadSource}.` : undefined,
     attempt.payload ? `Selected backend: ${attempt.agent}.` : undefined
   ].filter(Boolean).join("\n");
-  return `${header}${details ? `\n${details}` : ""}\n${attempt.raw}`;
+  const metadata = `${header}${details ? `\n${details}` : ""}`;
+  return attempt.raw ? `${attempt.raw}\n${metadata}` : metadata;
 }
 
 /**
@@ -521,11 +522,8 @@ function classifyFailure({ exitCode, raw, error }) {
   if (/\b429\b/.test(text) || text.includes("rate limit") || text.includes("too many requests") || text.includes("quota exceeded")) {
     return "rate_limited";
   }
-  if (text.includes("content policy") || text.includes("safety") || text.includes("provider blocked")) {
+  if (text.includes("content policy") || text.includes("provider blocked") || text.includes("safety refusal") || text.includes("safety policy")) {
     return "provider_blocked";
-  }
-  if (exitCode === 0) {
-    return "invalid_payload";
   }
   return "invalid_payload";
 }

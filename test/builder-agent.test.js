@@ -852,6 +852,52 @@ console.log(JSON.stringify({
     assert.doesNotMatch(result.notes, /should not fallback/);
   });
 
+  it("falls back when a provider emits an unrelated safety log", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+console.error("project safety check failed");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"fallback after project safety check\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+    await chmod(fakeClaudePath, 0o755);
+
+    await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "codex,claude"
+      }
+    });
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "fixed");
+    assert.equal(result.summary, "fallback after project safety check");
+    assert.match(result.notes, /codex: exitCode=1, status=fallback, failureClass=invalid_payload/);
+    assert.match(result.notes, /Selected backend: claude/);
+  });
+
   it("falls back on provider-blocked failures when the provider opts in", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
