@@ -536,6 +536,56 @@ console.log(JSON.stringify({
     assert.equal(result.summary, "implemented by fallback");
   });
 
+  it("returns aggregated attempt output when all preferred backends fail without a payload", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+console.error("codex failed");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.error("claude failed");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+    await chmod(fakeClaudePath, 0o755);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: dir,
+          KAIZEN_PREFERRED_AGENT: "codex,claude"
+        }
+      }),
+      /Command exited with 2/
+    );
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.summary, "Builder agent exited with code 1.");
+    assert.match(result.notes, /Agent "codex" exited with code 1/);
+    assert.match(result.notes, /codex failed/);
+    assert.match(result.notes, /Agent "claude" exited with code 1/);
+    assert.match(result.notes, /claude failed/);
+  });
+
   it("runs custom providers from KAIZEN_AGENT_PROVIDERS", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");

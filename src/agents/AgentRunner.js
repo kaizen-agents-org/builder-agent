@@ -288,10 +288,7 @@ function unique(values) {
  * @param {AgentKind[]} requested
  */
 function fallbackAgents(requested) {
-  const builtIns = ["claude", "codex"];
-  return requested.some((agent) => builtIns.includes(agent))
-    ? builtIns
-    : ["claude", "codex"];
+  return ["claude", "codex"];
 }
 
 /**
