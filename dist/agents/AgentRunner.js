@@ -73,7 +73,7 @@ export function normalizeAgent(value) {
  */
 export function normalizeAgents(value) {
     const requested = Array.isArray(value) ? value : splitAgentList(value);
-    const normalized = unique(requested.length ? requested : ["claude"]);
+    const normalized = unique(requested.length ? requested : ["codex"]);
     for (const fallback of fallbackAgents(normalized)) {
         if (!normalized.includes(fallback))
             normalized.push(fallback);

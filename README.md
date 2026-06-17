@@ -208,7 +208,7 @@ Required environment:
 Optional environment:
 
 - `KAIZEN_WORKSPACE_DIR`: repository workspace. Defaults to the current directory.
-- `KAIZEN_PREFERRED_AGENT`: preferred backend or comma-separated fallback order, for example `codex,claude`. Defaults to `claude,codex`.
+- `KAIZEN_PREFERRED_AGENT`: preferred backend or comma-separated fallback order, for example `codex,claude`. Defaults to `codex,claude`.
 - `KAIZEN_AGENT_MODEL`: model name passed through to the selected backend.
 - `KAIZEN_AGENT_PROVIDERS`: JSON object for custom backend providers.
 
