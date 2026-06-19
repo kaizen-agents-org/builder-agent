@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
-import { BuilderAgent, normalizeAgents, normalizeBuildRequest, normalizeBuildResult, normalizeSelfReview } from "../src/index.js";
+import { BuilderAgent, normalizeAgent, normalizeAgents, normalizeBuildRequest, normalizeBuildResult, normalizeSelfReview } from "../src/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -141,6 +141,7 @@ describe("validation", () => {
 
   it("normalizes agent defaults to codex first", () => {
     assert.deepEqual(normalizeAgents(undefined), ["codex", "claude"]);
+    assert.equal(normalizeAgent(undefined), "codex");
   });
 
   it("overrides an incorrect passed flag from self-review input", () => {
