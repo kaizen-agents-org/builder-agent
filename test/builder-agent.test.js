@@ -144,6 +144,10 @@ describe("validation", () => {
     assert.equal(normalizeAgent(undefined), "codex");
   });
 
+  it("normalizes custom provider fallbacks to codex first", () => {
+    assert.deepEqual(normalizeAgents("opencode-go"), ["opencode-go", "codex", "claude"]);
+  });
+
   it("overrides an incorrect passed flag from self-review input", () => {
     const review = normalizeSelfReview({ ...passingReview, passed: false }, 85);
 
