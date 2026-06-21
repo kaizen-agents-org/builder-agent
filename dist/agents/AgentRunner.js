@@ -392,7 +392,7 @@ function unique(values) {
  * @param {AgentKind[]} requested
  */
 function fallbackAgents(requested) {
-    return ["claude", "codex"];
+    return ["codex", "claude"];
 }
 /**
  * @param {AgentRunResult & { failureClass?: string }} attempt
