@@ -46,7 +46,7 @@ Issue creation and execution authorization are separate:
 - Add the repository's existing selection label only when the user asks to queue, approve, run, execute, or put the issue on the Kaizen Loop. In repositories that still select by the base `kaizen` label, this means adding `kaizen` only for explicit execution intent.
 - Use existing execution-control labels when they apply, such as `kaizen:pr-only`, `kaizen:direct`, `kaizen:agent:codex`, or `kaizen:agent:claude`.
 - If the user states a priority or the issue template Priority field is populated, add the matching existing priority label (`kaizen:P0`, `kaizen:P1`, or `kaizen:P2`). If the label does not exist, keep the priority in the issue body instead.
-- If the user asks for immediate execution, file the issue, add the available selection/control labels, then report the explicit command that should run next, such as `kaizen fix <issue>`.
+- If the user asks for immediate execution, file the issue, add the available selection/control labels, then report the documented command that should run next for the target repository.
 - If the issue needs human clarification before automation, prefer `kaizen:needs-human` and do not add a selection label.
 
 ## Issue Body
