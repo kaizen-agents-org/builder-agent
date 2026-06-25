@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
-import { BuilderAgent, normalizeBuildRequest, normalizeBuildResult, normalizeSelfReview } from "../src/index.js";
+import { BuilderAgent, normalizeAgents, normalizeBuildRequest, normalizeBuildResult, normalizeSelfReview } from "../src/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -130,6 +130,12 @@ describe("BuilderAgent", () => {
 });
 
 describe("validation", () => {
+  it("defaults agent order to codex with claude fallback", () => {
+    assert.deepEqual(normalizeAgents(undefined), ["codex", "claude"]);
+    assert.deepEqual(normalizeAgents("claude"), ["claude", "codex"]);
+    assert.deepEqual(normalizeAgents("opencode-go"), ["opencode-go", "codex", "claude"]);
+  });
+
   it("normalizes build request defaults", () => {
     assert.deepEqual(normalizeBuildRequest({ task: "  Do work.  " }), {
       task: "Do work.",
@@ -584,6 +590,59 @@ process.exit(1);
     assert.match(result.notes, /codex failed/);
     assert.match(result.notes, /Agent "claude" exited with code 1/);
     assert.match(result.notes, /claude failed/);
+  });
+
+  it("keeps both early and late failure details in long blocked output", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+console.error("codex early detail");
+console.error("x".repeat(5000));
+console.error("codex usage limit reached");
+console.error("y".repeat(5000));
+console.error("codex shutdown auth warning");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.error("claude fallback failed");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+    await chmod(fakeClaudePath, 0o755);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: dir,
+          KAIZEN_PREFERRED_AGENT: "codex"
+        }
+      }),
+      /Command exited with 2/
+    );
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "blocked");
+    assert.match(result.notes, /codex early detail/);
+    assert.match(result.notes, /codex usage limit reached/);
+    assert.match(result.notes, /codex shutdown auth warning/);
+    assert.ok(result.notes.length <= 2000);
   });
 
   it("runs custom providers from KAIZEN_AGENT_PROVIDERS", async () => {

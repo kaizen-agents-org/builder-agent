@@ -42,7 +42,7 @@ function blockedPayload(result) {
     return {
         status: "blocked",
         summary: reason,
-        notes: tail(result.raw, 2000),
+        notes: summarizeRaw(result.raw, 2000),
         blockedReason: reason,
         discoveredIssues: []
     };
@@ -65,4 +65,28 @@ function tail(text, maxLength) {
     if (text.length <= maxLength)
         return text;
     return text.slice(text.length - maxLength);
+}
+/**
+ * @param {string} text
+ * @param {number} maxLength
+ */
+function excerpt(text, maxLength) {
+    if (text.length <= maxLength)
+        return text;
+    const half = Math.floor((maxLength - "\n...\n".length) / 2);
+    return `${text.slice(0, half)}\n...\n${text.slice(text.length - half)}`;
+}
+/**
+ * @param {string} text
+ * @param {number} maxLength
+ */
+function summarizeRaw(text, maxLength) {
+    const important = text
+        .split(/\r?\n/)
+        .filter((line) => /usage limit|Failed to authenticate|API Error|Auth required|No access token|timed out handshaking|exited with code/i.test(line))
+        .slice(0, 12)
+        .join("\n");
+    const body = excerpt(text, Math.max(500, maxLength - important.length - "\n\n--- raw excerpt ---\n".length));
+    const summary = important ? `${important}\n\n--- raw excerpt ---\n${body}` : body;
+    return tail(summary, maxLength);
 }
