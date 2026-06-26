@@ -465,7 +465,7 @@ console.log(JSON.stringify({
     await writeFile(
       fakeCodexPath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+import { writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 const outputIndex = args.indexOf("--output-last-message");
@@ -606,7 +606,7 @@ process.exit(1);
     await writeFile(
       fakeOpenCodePath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+import { writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
@@ -656,7 +656,7 @@ console.log(JSON.stringify({
     await writeFile(
       fakeZaiPath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+import { writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
@@ -703,7 +703,7 @@ console.log(JSON.stringify({
     await writeFile(
       fakeHermesPath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+import { writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
@@ -973,7 +973,7 @@ console.log(JSON.stringify({
     await writeFile(
       fakeCodexPath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+import { writeFileSync } from "node:fs";
 const args = process.argv.slice(2);
 const outputIndex = args.indexOf("--output-last-message");
 writeFileSync(args[outputIndex + 1], JSON.stringify({
