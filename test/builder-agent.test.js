@@ -460,12 +460,14 @@ console.log(JSON.stringify({
     const resultPath = join(dir, "build-result.json");
     const argsPath = join(dir, "codex-args.json");
     await mkdir(binDir);
+    await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
     const fakeCodexPath = join(binDir, "codex");
 
     await writeFile(
       fakeCodexPath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+(async () => {
+const { writeFileSync } = await import("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 const outputIndex = args.indexOf("--output-last-message");
@@ -474,6 +476,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
   summary: "implemented with codex",
   notes: "checked"
 }));
+})();
 `,
       "utf8"
     );
@@ -601,12 +604,14 @@ process.exit(1);
     const resultPath = join(dir, "build-result.json");
     const argsPath = join(dir, "opencode-args.json");
     await mkdir(binDir);
+    await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
     const fakeOpenCodePath = join(binDir, "opencode-go");
 
     await writeFile(
       fakeOpenCodePath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+(async () => {
+const { writeFileSync } = await import("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
@@ -614,6 +619,7 @@ console.log(JSON.stringify({
   summary: "implemented by custom provider",
   notes: "checked"
 }));
+})();
 `,
       "utf8"
     );
@@ -651,12 +657,14 @@ console.log(JSON.stringify({
     const resultPath = join(dir, "build-result.json");
     const argsPath = join(dir, "zai-args.json");
     await mkdir(binDir);
+    await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
     const fakeZaiPath = join(binDir, "zai");
 
     await writeFile(
       fakeZaiPath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+(async () => {
+const { writeFileSync } = await import("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
@@ -664,6 +672,7 @@ console.log(JSON.stringify({
   summary: "implemented without model",
   notes: "checked"
 }));
+})();
 `,
       "utf8"
     );
@@ -698,12 +707,14 @@ console.log(JSON.stringify({
     const argsPath = join(dir, "hermes-args.json");
     const providerConfigPath = join(dir, "providers.json");
     await mkdir(binDir);
+    await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
     const fakeHermesPath = join(binDir, "hermes-agent");
 
     await writeFile(
       fakeHermesPath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+(async () => {
+const { writeFileSync } = await import("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
@@ -711,6 +722,7 @@ console.log(JSON.stringify({
   summary: "implemented by hermes-style provider",
   notes: "checked"
 }));
+})();
 `,
       "utf8"
     );
@@ -968,12 +980,14 @@ console.log(JSON.stringify({
     const binDir = join(dir, "bin");
     const resultPath = join(dir, "build-result.json");
     await mkdir(binDir);
+    await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
     const fakeCodexPath = join(binDir, "codex");
 
     await writeFile(
       fakeCodexPath,
       `#!/usr/bin/env node
-const { writeFileSync } = require("node:fs");
+(async () => {
+const { writeFileSync } = await import("node:fs");
 const args = process.argv.slice(2);
 const outputIndex = args.indexOf("--output-last-message");
 writeFileSync(args[outputIndex + 1], JSON.stringify({
@@ -984,6 +998,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
   discoveredIssues: [{ title: "Provider limit", severity: "medium" }]
 }));
 process.exit(2);
+})();
 `,
       "utf8"
     );
