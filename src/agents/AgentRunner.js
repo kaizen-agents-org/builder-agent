@@ -366,7 +366,7 @@ function claudeArgs({ prompt, model }) {
     "--permission-mode",
     "acceptEdits",
     "--allowedTools",
-    "Bash(git add:*) Bash(git commit:*) Bash(npm:*) Read Write Edit Glob Grep"
+    "Bash(npm:*) Read Write Edit Glob Grep"
   ];
   if (model) args.push("--model", model);
   return args;
