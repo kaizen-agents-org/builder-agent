@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
+import { normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
 /** @import { AgentKind, AgentProviderConfig, AgentRunInput, AgentRunResult, KaizenLoopPayload } from "../types/contracts.js" */
-const PAYLOAD_STATUSES = new Set(["fixed", "partial", "blocked"]);
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
@@ -494,60 +494,12 @@ function parseBuilderPayload(raw) {
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
         return undefined;
     }
-    if (!PAYLOAD_STATUSES.has(payload.status)) {
+    try {
+        return normalizeKaizenLoopPayload(payload);
+    }
+    catch {
         return undefined;
     }
-    return {
-        status: payload.status,
-        summary: typeof payload.summary === "string" ? payload.summary : "",
-        notes: typeof payload.notes === "string" ? payload.notes : "",
-        discoveredIssues: normalizeDiscoveredIssues(payload.discoveredIssues),
-        ...(typeof payload.blockedReason === "string" ? { blockedReason: payload.blockedReason } : {})
-    };
-}
-/**
- * @param {unknown} value
- */
-function normalizeDiscoveredIssues(value) {
-    if (value === undefined)
-        return [];
-    if (!Array.isArray(value))
-        return [];
-    return value
-        .map((item) => normalizeDiscoveredIssue(item))
-        .filter((item) => item !== undefined);
-}
-/**
- * @param {unknown} item
- */
-function normalizeDiscoveredIssue(item) {
-    if (!item || typeof item !== "object" || Array.isArray(item))
-        return undefined;
-    const issue = /** @type {Record<string, unknown>} */ (item);
-    if (typeof issue.title !== "string" || issue.title.trim().length === 0)
-        return undefined;
-    return {
-        title: issue.title.trim(),
-        ...(typeof issue.body === "string" && issue.body.trim() ? { body: issue.body.trim() } : {}),
-        ...(typeof issue.expected === "string" && issue.expected.trim() ? { expected: issue.expected.trim() } : {}),
-        ...(typeof issue.evidence === "string" && issue.evidence.trim() ? { evidence: issue.evidence.trim() } : {}),
-        ...(typeof issue.repo === "string" && issue.repo.trim() ? { repo: issue.repo.trim() } : {}),
-        ...(typeof issue.severity === "string" && issue.severity.trim() ? { severity: issue.severity.trim() } : {}),
-        ...(Array.isArray(issue.labels) ? { labels: uniqueStrings(issue.labels) } : {})
-    };
-}
-/**
- * @param {unknown[]} value
- */
-function uniqueStrings(value) {
-    return [
-        ...new Set(value.flatMap((item) => {
-            if (typeof item !== "string")
-                return [];
-            const trimmed = item.trim();
-            return trimmed ? [trimmed] : [];
-        }))
-    ];
 }
 /**
  * @param {string} command

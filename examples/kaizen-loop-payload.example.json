@@ -1,0 +1,15 @@
+{
+  "status": "fixed",
+  "summary": "Implemented the scoped issue and updated verification.",
+  "notes": "Ran npm test and npm run validate:json.",
+  "discoveredIssues": [
+    {
+      "title": "Verifier treats status words in summaries as hard failures",
+      "repo": "verifier",
+      "body": "The verifier rejected an otherwise passing run because the builder summary mentioned a legacy status name.",
+      "expected": "Only actual verification failures should block PR creation.",
+      "evidence": "verifier.log showed a must_fix from builder summary text.",
+      "labels": ["kaizen"]
+    }
+  ]
+}

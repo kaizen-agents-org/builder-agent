@@ -6,7 +6,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
-import { BuilderAgent, normalizeAgent, normalizeAgents, normalizeBuildRequest, normalizeBuildResult, normalizeSelfReview } from "../src/index.js";
+import { BuilderAgent, normalizeAgent, normalizeAgents, normalizeBuildRequest, normalizeBuildResult, normalizeKaizenLoopPayload, normalizeSelfReview } from "../src/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -251,14 +251,81 @@ describe("validation", () => {
     assert.equal(schema.properties.discoveredIssues.type, "array");
     assert.equal(schema.required.includes("discoveredIssues"), false);
   });
+
+  it("normalizes kaizen-loop payloads with the published schema shape", () => {
+    const payload = normalizeKaizenLoopPayload({
+      status: "partial",
+      summary: "  Implemented most of the change.  ",
+      notes: "Ran targeted checks.",
+      discoveredIssues: [
+        {
+          title: "  Missing verifier diagnostic  ",
+          repo: " verifier ",
+          labels: ["kaizen", "kaizen"]
+        }
+      ]
+    });
+
+    assert.deepEqual(payload, {
+      status: "partial",
+      summary: "  Implemented most of the change.  ",
+      notes: "Ran targeted checks.",
+      discoveredIssues: [
+        {
+          title: "Missing verifier diagnostic",
+          repo: "verifier",
+          labels: ["kaizen"]
+        }
+      ]
+    });
+  });
+
+  it("rejects malformed kaizen-loop discovered issues explicitly", () => {
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "fixed",
+        summary: "Implemented.",
+        notes: "",
+        discoveredIssues: [{ repo: "verifier" }]
+      }),
+      /discoveredIssues\[0\]\.title/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "fixed",
+        summary: "Implemented.",
+        notes: "",
+        discoveredIssues: [{ title: "Bad routing", repo: 123 }]
+      }),
+      /discoveredIssues\[0\]\.repo must be a string/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "blocked",
+        summary: "Blocked.",
+        notes: "",
+        blockedReason: false
+      }),
+      /blockedReason must be a string/
+    );
+  });
+
+  it("publishes the kaizen-loop payload schema", async () => {
+    const schema = JSON.parse(await readFile("schemas/kaizen-loop-payload.schema.json", "utf8"));
+
+    assert.deepEqual(schema.properties.status.enum, ["fixed", "partial", "blocked"]);
+    assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
+    assert.equal(schema.required.includes("discoveredIssues"), false);
+  });
 });
 
 describe("TypeScript build boundaries", () => {
   it("emits declarations for reusable builder contracts and runners", async () => {
-    const [entrypoint, contracts, buildRequest, builderAgent, agentRunner] = await Promise.all([
+    const [entrypoint, contracts, buildRequest, kaizenLoopPayload, builderAgent, agentRunner] = await Promise.all([
       readFile("dist/index.d.ts", "utf8"),
       readFile("dist/types/contracts.d.ts", "utf8"),
       readFile("dist/types/BuildRequest.d.ts", "utf8"),
+      readFile("dist/types/KaizenLoopPayload.d.ts", "utf8"),
       readFile("dist/builder/BuilderAgent.d.ts", "utf8"),
       readFile("dist/agents/AgentRunner.d.ts", "utf8")
     ]);
@@ -268,6 +335,7 @@ describe("TypeScript build boundaries", () => {
     assert.match(contracts, /export interface BuilderAdapter/);
     assert.match(contracts, /export interface KaizenLoopPayload/);
     assert.match(buildRequest, /normalizeBuildRequest\(input: BuildRequestInput\): BuildRequest/);
+    assert.match(kaizenLoopPayload, /normalizeKaizenLoopPayload\(input: unknown\): import\("\.\/contracts\.js"\)\.KaizenLoopPayload/);
     assert.match(builderAgent, /build\(input: BuildRequestInput\): Promise<BuildResult>/);
     assert.match(agentRunner, /runImplementationAgent\([^)]*AgentRunInput[^)]*\): Promise<AgentRunResult>/);
   });
@@ -501,6 +569,46 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     assert.equal(result.summary, "implemented with codex");
     assert.deepEqual(args.slice(0, 5), ["exec", "--json", "--sandbox", "workspace-write", "-C"]);
     assert.equal(args.includes("--ask-for-approval"), false);
+  });
+
+  it("treats malformed kaizen-loop provider payloads as invalid instead of dropping discovered issues", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"repo\":\"verifier\"}]}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: dir,
+          KAIZEN_PREFERRED_AGENT: "claude"
+        }
+      }),
+      /Command exited with 2/
+    );
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.summary, "Builder agent exited with code 1.");
+    assert.match(result.notes, /Agent "claude" exited with code 0/);
+    assert.match(result.notes, /Failure class: invalid_payload/);
+    assert.deepEqual(result.discoveredIssues, []);
   });
 
   it("falls back to the next preferred backend when an agent fails without a payload", async () => {

@@ -1,0 +1,74 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://kaizen-agents.org/schemas/builder-agent/kaizen-loop-payload.schema.json",
+  "title": "KaizenLoopPayload",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "status",
+    "summary",
+    "notes"
+  ],
+  "properties": {
+    "status": {
+      "type": "string",
+      "enum": ["fixed", "partial", "blocked"],
+      "description": "Result status consumed by kaizen-loop."
+    },
+    "summary": {
+      "type": "string",
+      "description": "Short implementation summary for the source issue or task."
+    },
+    "notes": {
+      "type": "string",
+      "description": "Verification run or skipped, residual risk, reviewer notes, and fallback evidence when relevant."
+    },
+    "blockedReason": {
+      "type": "string",
+      "description": "Reason the builder could not complete the task when status is blocked."
+    },
+    "discoveredIssues": {
+      "type": "array",
+      "description": "Bugs or follow-up issues found while implementing this task. The orchestrator, not Builder Agent, may file these as GitHub issues.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["title"],
+        "properties": {
+          "title": {
+            "type": "string",
+            "minLength": 1
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expected": {
+            "type": "string",
+            "minLength": 1
+          },
+          "evidence": {
+            "type": "string",
+            "minLength": 1
+          },
+          "repo": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Optional target repository or Kaizen component alias such as kaizen-loop, builder-agent, verifier, or .github."
+          },
+          "severity": {
+            "type": "string",
+            "minLength": 1
+          },
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "minLength": 1
+            }
+          }
+        }
+      }
+    }
+  }
+}
