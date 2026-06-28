@@ -1,6 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
+import { normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
 
 /** @import { AgentRunResult, KaizenLoopBuilderIO, KaizenLoopPayload } from "./types/contracts.js" */
 
@@ -26,7 +27,7 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
     model,
     env
   });
-  const payload = result.payload ?? blockedPayload(result);
+  const payload = safeNormalizePayload(result.payload ?? blockedPayload(result));
 
   await mkdir(dirname(resultPath), { recursive: true });
   await writeFile(resultPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
@@ -37,6 +38,21 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
   }
 
   return payload;
+}
+
+function safeNormalizePayload(payload) {
+  try {
+    return normalizeKaizenLoopPayload(payload);
+  } catch (error) {
+    const reason = "Builder agent returned an invalid Kaizen Loop payload.";
+    return normalizeKaizenLoopPayload({
+      status: "blocked",
+      summary: reason,
+      notes: error instanceof Error ? error.message : String(error),
+      blockedReason: reason,
+      discoveredIssues: []
+    });
+  }
 }
 
 /**

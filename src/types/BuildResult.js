@@ -1,5 +1,6 @@
 import { createFailedReview, normalizeSelfReview } from "../review/SelfReview.js";
 import { DEFAULT_THRESHOLD } from "./BuildRequest.js";
+import { normalizeDiscoveredIssues as normalizeSharedDiscoveredIssues } from "./DiscoveredIssue.js";
 
 const STATUS_VALUES = new Set(["ready", "blocked", "failed"]);
 const BUILD_RESULT_KEYS = new Set([
@@ -85,36 +86,5 @@ function assertAllowedKeys(input, allowedKeys, label) {
 }
 
 export function normalizeDiscoveredIssues(value) {
-  if (value === undefined) return [];
-  if (!Array.isArray(value)) {
-    throw new Error("Build result discoveredIssues must be an array.");
-  }
-
-  return value.map((item, index) => normalizeDiscoveredIssue(item, index));
-}
-
-function normalizeDiscoveredIssue(item, index) {
-  if (!item || typeof item !== "object" || Array.isArray(item)) {
-    throw new Error(`Build result discoveredIssues[${index}] must be an object.`);
-  }
-
-  assertAllowedKeys(
-    item,
-    new Set(["title", "body", "expected", "evidence", "repo", "severity", "labels"]),
-    `Build result discoveredIssues[${index}]`
-  );
-
-  if (typeof item.title !== "string" || item.title.trim().length === 0) {
-    throw new Error(`Build result discoveredIssues[${index}].title must be a non-empty string.`);
-  }
-
-  return {
-    title: item.title.trim(),
-    ...(typeof item.body === "string" && item.body.trim() ? { body: item.body.trim() } : {}),
-    ...(typeof item.expected === "string" && item.expected.trim() ? { expected: item.expected.trim() } : {}),
-    ...(typeof item.evidence === "string" && item.evidence.trim() ? { evidence: item.evidence.trim() } : {}),
-    ...(typeof item.repo === "string" && item.repo.trim() ? { repo: item.repo.trim() } : {}),
-    ...(typeof item.severity === "string" && item.severity.trim() ? { severity: item.severity.trim() } : {}),
-    ...(Array.isArray(item.labels) ? { labels: uniqueStrings(item.labels, `discoveredIssues[${index}].labels`) } : {})
-  };
+  return normalizeSharedDiscoveredIssues(value, { label: "Build result discoveredIssues" });
 }

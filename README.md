@@ -163,6 +163,7 @@ node src/cli.js validate-request --request examples/build-request.example.json
 - [build-request.schema.json](schemas/build-request.schema.json): input accepted by Builder Agent.
 - [self-review.schema.json](schemas/self-review.schema.json): adapter self-review output before controller recomputes `passed`.
 - [build-result.schema.json](schemas/build-result.schema.json): final artifact written for external verification handoff, including changed files, review findings, and residual notes.
+- [kaizen-loop-payload.schema.json](schemas/kaizen-loop-payload.schema.json): compact `fixed` / `partial` / `blocked` integration payload written through `KAIZEN_BUILD_RESULT_PATH`.
 
 Run the builder loop with an adapter:
 
@@ -282,7 +283,7 @@ The integration payload is intentionally smaller than the standalone build artif
 }
 ```
 
-`status` is one of `fixed`, `partial`, or `blocked`. The `summary` should state what changed and why. The `notes` field should capture verification run or skipped, residual risk, and reviewer notes when relevant. `discoveredIssues` is optional and defaults to an empty array. `builder-agent` does not create pull requests, push branches, or file GitHub issues; those remain `kaizen-loop` responsibility.
+`status` is one of `fixed`, `partial`, or `blocked`. The `summary` should state what changed and why. The `notes` field should capture verification run or skipped, residual risk, and reviewer notes when relevant. `discoveredIssues` is optional and defaults to an empty array. The published contract is [kaizen-loop-payload.schema.json](schemas/kaizen-loop-payload.schema.json), and Builder Agent validates provider payloads with the same runtime normalizer before writing `KAIZEN_BUILD_RESULT_PATH`. `builder-agent` does not create pull requests, push branches, or file GitHub issues; those remain `kaizen-loop` responsibility.
 
 ## Adapter Contract
 

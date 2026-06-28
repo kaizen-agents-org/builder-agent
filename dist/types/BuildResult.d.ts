@@ -16,15 +16,7 @@ export function createBuildResult(input: any): {
         passed: boolean;
     };
     residualNotes: any[];
-    discoveredIssues: {
-        labels?: any[] | undefined;
-        severity?: any;
-        repo?: any;
-        evidence?: any;
-        expected?: any;
-        body?: any;
-        title: any;
-    }[];
+    discoveredIssues: import("./contracts.js").DiscoveredIssue[];
 };
 export function normalizeBuildResult(input: any, threshold?: number): {
     status: any;
@@ -44,15 +36,7 @@ export function normalizeBuildResult(input: any, threshold?: number): {
         passed: boolean;
     };
     residualNotes: any[];
-    discoveredIssues: {
-        labels?: any[] | undefined;
-        severity?: any;
-        repo?: any;
-        evidence?: any;
-        expected?: any;
-        body?: any;
-        title: any;
-    }[];
+    discoveredIssues: import("./contracts.js").DiscoveredIssue[];
 };
 export function createFailedBuildResult(message: any): {
     status: string;
@@ -75,13 +59,5 @@ export function createFailedBuildResult(message: any): {
     discoveredIssues: never[];
 };
 export function uniqueStrings(value: any, label: any): any[];
-export function normalizeDiscoveredIssues(value: any): {
-    labels?: any[] | undefined;
-    severity?: any;
-    repo?: any;
-    evidence?: any;
-    expected?: any;
-    body?: any;
-    title: any;
-}[];
+export function normalizeDiscoveredIssues(value: any): import("./contracts.js").DiscoveredIssue[];
 //# sourceMappingURL=BuildResult.d.ts.map

@@ -1,1 +1,1 @@
-{"version":3,"file":"BuildResult.d.ts","sourceRoot":"","sources":["../../src/types/BuildResult.js"],"names":[],"mappings":"AAcA;;;;;;;;;;;;;;;;;;;;;;;;;;;EAiCC;AAED;;;;;;;;;;;;;;;;;;;;;;;;;;;EAOC;AAED;;;;;;;;;;;;;;;;;;;EAUC;AAED,6DAMC;AAUD;;;;;;;;IAOC"}
+{"version":3,"file":"BuildResult.d.ts","sourceRoot":"","sources":["../../src/types/BuildResult.js"],"names":[],"mappings":"AAeA;;;;;;;;;;;;;;;;;;;EAiCC;AAED;;;;;;;;;;;;;;;;;;;EAOC;AAED;;;;;;;;;;;;;;;;;;;EAUC;AAED,6DAMC;AAUD,kGAEC"}
