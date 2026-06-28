@@ -484,8 +484,17 @@ export default {
     const binDir = join(dir, "bin");
     const resultPath = join(dir, "build-result.json");
     await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
     const fakeClaudePath = join(binDir, "claude");
 
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+console.error("codex fallback disabled for this fixture");
+process.exit(1);
+`,
+      "utf8"
+    );
     await writeFile(
       fakeClaudePath,
       `#!/usr/bin/env node
@@ -495,6 +504,7 @@ console.log(JSON.stringify({
 `,
       "utf8"
     );
+    await chmod(fakeCodexPath, 0o755);
     await chmod(fakeClaudePath, 0o755);
 
     const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {

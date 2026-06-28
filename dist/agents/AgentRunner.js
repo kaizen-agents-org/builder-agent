@@ -144,14 +144,15 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
         const lastMessage = provider.output === "last-message" ? await readFile(outputPath, "utf8").catch(() => "") : "";
         const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
         const payloadSource = lastMessage ? "last-message" : "stdout";
-        const payload = parseBuilderPayload(lastMessage || raw);
+        const parsedPayload = parseBuilderPayload(lastMessage || raw);
+        const rawWithParseError = parsedPayload.error ? `${raw}\n${parsedPayload.error.message}` : raw;
         return {
             agent,
             exitCode: result.exitCode,
-            failureClass: payload ? undefined : classifyFailure({ exitCode: result.exitCode, raw }),
-            payloadSource: payload ? payloadSource : "none",
-            raw,
-            payload
+            failureClass: parsedPayload.payload ? undefined : classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError }),
+            payloadSource: parsedPayload.payload ? payloadSource : "none",
+            raw: rawWithParseError,
+            payload: parsedPayload.payload
         };
     }
     catch (error) {
@@ -483,7 +484,7 @@ function classifyFailure({ exitCode, raw, error }) {
 }
 /**
  * @param {string} raw
- * @returns {KaizenLoopPayload | undefined}
+ * @returns {{ payload?: KaizenLoopPayload, error?: Error }}
  */
 function parseBuilderPayload(raw) {
     const topLevel = parseMaybeJson(raw);
@@ -492,13 +493,13 @@ function parseBuilderPayload(raw) {
         : raw;
     const payload = parseMaybeJson(extractLastJsonObject(finalText));
     if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
-        return undefined;
+        return {};
     }
     try {
-        return normalizeKaizenLoopPayload(payload);
+        return { payload: normalizeKaizenLoopPayload(payload) };
     }
-    catch {
-        return undefined;
+    catch (error) {
+        return { error: error instanceof Error ? error : new Error(String(error)) };
     }
 }
 /**

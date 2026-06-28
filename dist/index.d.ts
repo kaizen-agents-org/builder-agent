@@ -1,3 +1,4 @@
+export { normalizeDiscoveredIssues } from "./types/DiscoveredIssue.js";
 export { normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
 export type AgentKind = import("./types/contracts.js").AgentKind;
 export type AgentRunInput = import("./types/contracts.js").AgentRunInput;
