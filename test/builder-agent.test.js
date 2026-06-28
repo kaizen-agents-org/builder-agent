@@ -499,12 +499,14 @@ process.exit(1);
     await writeFile(
       fakeClaudePath,
       `#!/usr/bin/env node
-import { writeFileSync } from "node:fs";
+(async () => {
+const { writeFileSync } = await import("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
   result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"evidence\":\"log excerpt\"}]}\n```")}
 }));
+})();
 `,
       "utf8"
     );
