@@ -6,6 +6,7 @@ const STATUS_VALUES = new Set(["ready", "blocked", "failed"]);
 const BUILD_RESULT_KEYS = new Set([
   "status",
   "iterations",
+  "taskUnderstanding",
   "planSummary",
   "changedFiles",
   "review",
@@ -17,6 +18,7 @@ export function createBuildResult(input) {
   const {
     status,
     iterations,
+    taskUnderstanding,
     planSummary,
     changedFiles,
     review,
@@ -40,6 +42,7 @@ export function createBuildResult(input) {
   return {
     status,
     iterations,
+    taskUnderstanding: normalizeTaskUnderstanding(taskUnderstanding),
     planSummary: planSummary.trim(),
     changedFiles: uniqueStrings(changedFiles, "changedFiles"),
     review: normalizeSelfReview(review, threshold),
@@ -61,6 +64,10 @@ export function createFailedBuildResult(message) {
   return {
     status: "failed",
     iterations: 0,
+    taskUnderstanding: {
+      summary: "Builder Agent could not complete task analysis.",
+      constraints: []
+    },
     planSummary: "Builder Agent could not complete the build loop.",
     changedFiles: [],
     review: createFailedReview(message),
@@ -75,6 +82,43 @@ export function uniqueStrings(value, label) {
   }
 
   return [...new Set(value.map((item) => item.trim()))];
+}
+
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.js").TaskUnderstanding}
+ */
+export function normalizeTaskUnderstanding(value) {
+  if (value === undefined) {
+    return {
+      summary: "Task understanding was not recorded by this build result.",
+      constraints: []
+    };
+  }
+
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Build result taskUnderstanding must be an object.");
+  }
+  assertAllowedKeys(value, new Set(["summary", "goal", "constraints"]), "Build result taskUnderstanding");
+
+  if (typeof value.summary !== "string" || value.summary.trim().length === 0) {
+    throw new Error("Build result taskUnderstanding.summary must be a non-empty string.");
+  }
+
+  /** @type {import("./contracts.js").TaskUnderstanding} */
+  const result = {
+    summary: value.summary.trim(),
+    constraints: uniqueStrings(value.constraints ?? [], "taskUnderstanding.constraints")
+  };
+
+  if (value.goal !== undefined) {
+    if (typeof value.goal !== "string" || value.goal.trim().length === 0) {
+      throw new Error("Build result taskUnderstanding.goal must be a non-empty string.");
+    }
+    result.goal = value.goal.trim();
+  }
+
+  return result;
 }
 
 function assertAllowedKeys(input, allowedKeys, label) {

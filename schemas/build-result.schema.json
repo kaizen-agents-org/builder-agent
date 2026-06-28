@@ -23,6 +23,32 @@
       "minimum": 0,
       "description": "Number of implementation/self-review iterations completed."
     },
+    "taskUnderstanding": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Concise task understanding captured before implementation for verifier handoff.",
+      "required": ["summary", "constraints"],
+      "properties": {
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Adapter analysis summary, or a deterministic task-based fallback."
+        },
+        "goal": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Optional normalized goal from the build request."
+        },
+        "constraints": {
+          "type": "array",
+          "description": "Normalized request constraints known before implementation.",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
     "planSummary": {
       "type": "string",
       "minLength": 1,
