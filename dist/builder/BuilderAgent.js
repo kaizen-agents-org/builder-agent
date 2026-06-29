@@ -147,7 +147,7 @@ function createTaskUnderstanding({ request, analysis }) {
     /** @type {import("../types/contracts.js").TaskUnderstanding} */
     const result = {
         summary,
-        constraints: request.constraints
+        constraints: [...request.constraints]
     };
     if (request.goal) {
         result.goal = request.goal;

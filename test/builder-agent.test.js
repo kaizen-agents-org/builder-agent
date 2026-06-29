@@ -76,6 +76,21 @@ describe("BuilderAgent", () => {
     });
   });
 
+  it("captures request constraints before later adapter hooks can mutate them", async () => {
+    const adapter = createAdapter({ reviews: [passingReview] });
+    adapter.createPlan = async ({ request }) => {
+      request.constraints.push("Mutated during planning.");
+      return { summary: "Implement the requested change." };
+    };
+
+    const result = await new BuilderAgent(adapter).build({
+      task: "Implement a small feature.",
+      constraints: ["Keep the change additive."]
+    });
+
+    assert.deepEqual(result.taskUnderstanding.constraints, ["Keep the change additive."]);
+  });
+
   it("runs improve and re-reviews until the threshold is met", async () => {
     const adapter = createAdapter({ reviews: [failingReview, passingReview] });
     const result = await new BuilderAgent(adapter).build({
@@ -219,6 +234,15 @@ describe("validation", () => {
     assert.throws(
       () => normalizeBuildResult({ ...result, extra: true }),
       /unknown field/
+    );
+    assert.throws(
+      () => normalizeBuildResult({
+        ...result,
+        taskUnderstanding: {
+          summary: "Understand the requested behavior before implementation."
+        }
+      }),
+      /taskUnderstanding\.constraints is required/
     );
   });
 
