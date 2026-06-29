@@ -1,6 +1,7 @@
 export function createBuildResult(input: any): {
     status: any;
     iterations: any;
+    taskUnderstanding: import("./contracts.js").TaskUnderstanding;
     planSummary: string;
     changedFiles: any[];
     review: {
@@ -21,6 +22,7 @@ export function createBuildResult(input: any): {
 export function normalizeBuildResult(input: any, threshold?: number): {
     status: any;
     iterations: any;
+    taskUnderstanding: import("./contracts.js").TaskUnderstanding;
     planSummary: string;
     changedFiles: any[];
     review: {
@@ -41,6 +43,10 @@ export function normalizeBuildResult(input: any, threshold?: number): {
 export function createFailedBuildResult(message: any): {
     status: string;
     iterations: number;
+    taskUnderstanding: {
+        summary: string;
+        constraints: never[];
+    };
     planSummary: string;
     changedFiles: never[];
     review: {
@@ -59,5 +65,10 @@ export function createFailedBuildResult(message: any): {
     discoveredIssues: never[];
 };
 export function uniqueStrings(value: any, label: any): any[];
+/**
+ * @param {unknown} value
+ * @returns {import("./contracts.js").TaskUnderstanding}
+ */
+export function normalizeTaskUnderstanding(value: unknown): import("./contracts.js").TaskUnderstanding;
 export function normalizeDiscoveredIssues(value: any): import("./contracts.js").DiscoveredIssue[];
 //# sourceMappingURL=BuildResult.d.ts.map

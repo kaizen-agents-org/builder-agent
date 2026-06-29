@@ -50,9 +50,16 @@ export interface DiscoveredIssue {
   labels?: string[];
 }
 
+export interface TaskUnderstanding {
+  summary: string;
+  goal?: string;
+  constraints: string[];
+}
+
 export interface BuildResult {
   status: BuildStatus;
   iterations: number;
+  taskUnderstanding: TaskUnderstanding;
   planSummary: string;
   changedFiles: string[];
   review: SelfReviewResult;
@@ -64,6 +71,7 @@ export interface BuildResult {
 export interface BuildResultInput {
   status: BuildStatus;
   iterations: number;
+  taskUnderstanding?: TaskUnderstanding;
   planSummary: string;
   changedFiles: string[];
   review: SelfReviewResult;

@@ -24,6 +24,7 @@ export class BuilderAgent {
             request = normalizeBuildRequest(input);
             assertAdapter(this.adapter);
             const analysis = await this.adapter.analyzeTask({ request });
+            const taskUnderstanding = createTaskUnderstanding({ request, analysis });
             const plan = await this.adapter.createPlan({ request, analysis });
             const planSummary = summarizePlan(plan);
             let implementation = await this.adapter.implement({
@@ -50,6 +51,7 @@ export class BuilderAgent {
                     return attachIterationArtifacts(createBuildResult({
                         status: "ready",
                         iterations: iteration,
+                        taskUnderstanding,
                         planSummary,
                         changedFiles,
                         review: latestReview,
@@ -62,6 +64,7 @@ export class BuilderAgent {
                     return attachIterationArtifacts(createBuildResult({
                         status: "blocked",
                         iterations: iteration,
+                        taskUnderstanding,
                         planSummary,
                         changedFiles,
                         review: latestReview,
@@ -88,6 +91,7 @@ export class BuilderAgent {
             return attachIterationArtifacts(createBuildResult({
                 status: "blocked",
                 iterations: request.maxIterations,
+                taskUnderstanding,
                 planSummary,
                 changedFiles,
                 review: latestReview,
@@ -133,6 +137,47 @@ function summarizePlan(plan) {
         return plan.summary;
     }
     return "Builder Agent executed the adapter-provided implementation plan.";
+}
+/**
+ * @param {{ request: import("../types/contracts.js").BuildRequest, analysis: unknown }} input
+ * @returns {import("../types/contracts.js").TaskUnderstanding}
+ */
+function createTaskUnderstanding({ request, analysis }) {
+    const summary = summarizeAnalysis(analysis) ?? `Task: ${request.task}`;
+    /** @type {import("../types/contracts.js").TaskUnderstanding} */
+    const result = {
+        summary,
+        constraints: [...request.constraints]
+    };
+    if (request.goal) {
+        result.goal = request.goal;
+    }
+    return result;
+}
+/**
+ * @param {unknown} analysis
+ * @returns {string | undefined}
+ */
+function summarizeAnalysis(analysis) {
+    if (typeof analysis === "string" && analysis.trim().length > 0) {
+        return analysis.trim();
+    }
+    if (!analysis || typeof analysis !== "object" || Array.isArray(analysis)) {
+        return undefined;
+    }
+    if (typeof analysis.taskUnderstanding === "string" && analysis.taskUnderstanding.trim().length > 0) {
+        return analysis.taskUnderstanding.trim();
+    }
+    if (analysis.taskUnderstanding && typeof analysis.taskUnderstanding === "object" && !Array.isArray(analysis.taskUnderstanding)) {
+        const nestedSummary = analysis.taskUnderstanding.summary;
+        if (typeof nestedSummary === "string" && nestedSummary.trim().length > 0) {
+            return nestedSummary.trim();
+        }
+    }
+    if (typeof analysis.summary === "string" && analysis.summary.trim().length > 0) {
+        return analysis.summary.trim();
+    }
+    return undefined;
 }
 /**
  * @param {ImplementationOutput} implementation

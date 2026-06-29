@@ -1,6 +1,12 @@
 {
   "status": "ready",
   "iterations": 2,
+  "taskUnderstanding": {
+    "summary": "Implement create-project input validation before file writes and cover the empty-name path with a focused test.",
+    "constraints": [
+      "Keep the validation scoped to create-project inputs."
+    ]
+  },
   "planSummary": "Added create-project input validation before file writes and covered the empty-name path with a focused test.",
   "changedFiles": [
     "src/commands/create-project.ts",
