@@ -52,7 +52,43 @@ describe("BuilderAgent", () => {
     assert.equal(result.status, "ready");
     assert.equal(result.iterations, 1);
     assert.equal(result.review.passed, true);
+    assert.deepEqual(result.taskUnderstanding, {
+      summary: "analysis",
+      constraints: []
+    });
     assert.deepEqual(result.changedFiles, ["src/feature.js"]);
+  });
+
+  it("falls back to normalized request details when analysis has no summary", async () => {
+    const adapter = createAdapter({ reviews: [passingReview] });
+    adapter.analyzeTask = async () => ({});
+
+    const result = await new BuilderAgent(adapter).build({
+      task: "  Implement a small feature.  ",
+      goal: "  Preserve verifier handoff evidence.  ",
+      constraints: ["  Keep the change additive.  "]
+    });
+
+    assert.deepEqual(result.taskUnderstanding, {
+      summary: "Task: Implement a small feature.",
+      goal: "Preserve verifier handoff evidence.",
+      constraints: ["Keep the change additive."]
+    });
+  });
+
+  it("captures request constraints before later adapter hooks can mutate them", async () => {
+    const adapter = createAdapter({ reviews: [passingReview] });
+    adapter.createPlan = async ({ request }) => {
+      request.constraints.push("Mutated during planning.");
+      return { summary: "Implement the requested change." };
+    };
+
+    const result = await new BuilderAgent(adapter).build({
+      task: "Implement a small feature.",
+      constraints: ["Keep the change additive."]
+    });
+
+    assert.deepEqual(result.taskUnderstanding.constraints, ["Keep the change additive."]);
   });
 
   it("runs improve and re-reviews until the threshold is met", async () => {
@@ -179,6 +215,10 @@ describe("validation", () => {
     const result = normalizeBuildResult({
       status: "ready",
       iterations: 1,
+      taskUnderstanding: {
+        summary: "Understand the requested behavior before implementation.",
+        constraints: ["Keep the change focused."]
+      },
       planSummary: "Implement the requested change.",
       changedFiles: ["src/feature.js"],
       review: passingReview,
@@ -186,10 +226,23 @@ describe("validation", () => {
     });
 
     assert.equal(result.review.passed, true);
+    assert.deepEqual(result.taskUnderstanding, {
+      summary: "Understand the requested behavior before implementation.",
+      constraints: ["Keep the change focused."]
+    });
     assert.deepEqual(result.discoveredIssues, []);
     assert.throws(
       () => normalizeBuildResult({ ...result, extra: true }),
       /unknown field/
+    );
+    assert.throws(
+      () => normalizeBuildResult({
+        ...result,
+        taskUnderstanding: {
+          summary: "Understand the requested behavior before implementation."
+        }
+      }),
+      /taskUnderstanding\.constraints is required/
     );
   });
 
@@ -248,6 +301,8 @@ describe("validation", () => {
   it("keeps discovered issues optional in the published build result schema", async () => {
     const schema = JSON.parse(await readFile("schemas/build-result.schema.json", "utf8"));
 
+    assert.equal(schema.properties.taskUnderstanding.type, "object");
+    assert.equal(schema.required.includes("taskUnderstanding"), false);
     assert.equal(schema.properties.discoveredIssues.type, "array");
     assert.equal(schema.required.includes("discoveredIssues"), false);
   });
@@ -333,6 +388,8 @@ describe("TypeScript build boundaries", () => {
     assert.match(entrypoint, /export type BuildRequest = import\("\.\/types\/contracts\.js"\)\.BuildRequest/);
     assert.match(entrypoint, /export type BuilderAdapter = import\("\.\/types\/contracts\.js"\)\.BuilderAdapter/);
     assert.match(contracts, /export interface BuilderAdapter/);
+    assert.match(contracts, /export interface TaskUnderstanding/);
+    assert.match(contracts, /taskUnderstanding: TaskUnderstanding/);
     assert.match(contracts, /export interface KaizenLoopPayload/);
     assert.match(buildRequest, /normalizeBuildRequest\(input: BuildRequestInput\): BuildRequest/);
     assert.match(kaizenLoopPayload, /normalizeKaizenLoopPayload\(input: unknown\): import\("\.\/contracts\.js"\)\.KaizenLoopPayload/);
@@ -393,6 +450,10 @@ export default {
 
     assert.equal(output.status, "ready");
     assert.equal(result.status, "ready");
+    assert.deepEqual(result.taskUnderstanding, {
+      summary: "Task: Implement a small feature.",
+      constraints: []
+    });
     assert.equal(review.passed, true);
   });
 
