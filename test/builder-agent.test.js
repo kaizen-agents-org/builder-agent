@@ -483,6 +483,7 @@ export default {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
     const resultPath = join(dir, "build-result.json");
+    const argsPath = join(dir, "claude-args.json");
     await mkdir(binDir);
     const fakeCodexPath = join(binDir, "codex");
     const fakeClaudePath = join(binDir, "claude");
@@ -498,9 +499,14 @@ process.exit(1);
     await writeFile(
       fakeClaudePath,
       `#!/usr/bin/env node
+(async () => {
+const { writeFileSync } = await import("node:fs");
+const args = process.argv.slice(2);
+writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
   result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"evidence\":\"log excerpt\"}]}\n```")}
 }));
+})();
 `,
       "utf8"
     );
@@ -519,10 +525,22 @@ console.log(JSON.stringify({
 
     const output = JSON.parse(stdout);
     const result = JSON.parse(await readFile(resultPath, "utf8"));
+    const args = JSON.parse(await readFile(argsPath, "utf8"));
+    const allowedToolsIndex = args.indexOf("--allowedTools");
+    assert.notEqual(allowedToolsIndex, -1);
+    const allowedTools = args[allowedToolsIndex + 1];
 
     assert.equal(output.status, "fixed");
     assert.equal(result.status, "fixed");
     assert.equal(result.summary, "implemented");
+    assert.doesNotMatch(allowedTools, /Bash\(git add:\*\)/);
+    assert.doesNotMatch(allowedTools, /Bash\(git commit:\*\)/);
+    assert.match(allowedTools, /Bash\(npm:\*\)/);
+    assert.match(allowedTools, /\bRead\b/);
+    assert.match(allowedTools, /\bWrite\b/);
+    assert.match(allowedTools, /\bEdit\b/);
+    assert.match(allowedTools, /\bGlob\b/);
+    assert.match(allowedTools, /\bGrep\b/);
     assert.deepEqual(result.discoveredIssues, [
       {
         title: "Verifier false positive",
