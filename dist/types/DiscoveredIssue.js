@@ -1,9 +1,4 @@
 const DISCOVERED_ISSUE_KEYS = new Set(["title", "body", "expected", "evidence", "repo", "severity", "labels"]);
-/**
- * @param {unknown} value
- * @param {{ label: string }} options
- * @returns {import("./contracts.js").DiscoveredIssue[]}
- */
 export function normalizeDiscoveredIssues(value, { label }) {
     if (value === undefined)
         return [];
@@ -18,17 +13,18 @@ function normalizeDiscoveredIssue(item, index, label) {
         throw new Error(`${itemLabel} must be an object.`);
     }
     assertAllowedKeys(item, DISCOVERED_ISSUE_KEYS, itemLabel);
-    if (typeof item.title !== "string" || item.title.trim().length === 0) {
+    const input = item;
+    if (typeof input.title !== "string" || input.title.trim().length === 0) {
         throw new Error(`${itemLabel}.title must be a non-empty string.`);
     }
     return {
-        title: item.title.trim(),
-        ...optionalStringField(item, "body", itemLabel),
-        ...optionalStringField(item, "expected", itemLabel),
-        ...optionalStringField(item, "evidence", itemLabel),
-        ...optionalStringField(item, "repo", itemLabel),
-        ...optionalStringField(item, "severity", itemLabel),
-        ...optionalLabels(item, itemLabel)
+        title: input.title.trim(),
+        ...optionalStringField(input, "body", itemLabel),
+        ...optionalStringField(input, "expected", itemLabel),
+        ...optionalStringField(input, "evidence", itemLabel),
+        ...optionalStringField(input, "repo", itemLabel),
+        ...optionalStringField(input, "severity", itemLabel),
+        ...optionalLabels(input, itemLabel)
     };
 }
 function optionalStringField(item, key, itemLabel) {

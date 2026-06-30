@@ -1,3 +1,17 @@
+export type {
+  AgentKind,
+  AgentRunInput,
+  AgentRunResult,
+  BuildArtifactPaths,
+  BuildRequest,
+  BuildRequestInput,
+  BuildResult,
+  BuilderAdapter,
+  DiscoveredIssue,
+  KaizenLoopPayload,
+  SelfReviewResult
+} from "./types/contracts.js";
+
 export { BuilderAgent, runBuild } from "./builder/BuilderAgent.js";
 export { normalizeAgent, normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
 export { normalizeBuildRequest, DEFAULT_MAX_ITERATIONS, DEFAULT_THRESHOLD } from "./types/BuildRequest.js";

@@ -1,1 +1,1 @@
-{"version":3,"file":"artifacts.d.ts","sourceRoot":"","sources":["../src/artifacts.js"],"names":[],"mappings":"AAGA;;;;;;;;;;GAmCC"}
+{"version":3,"file":"artifacts.d.ts","sourceRoot":"","sources":["../src/artifacts.ts"],"names":[],"mappings":"AAEA,OAAO,KAAK,EAAE,kBAAkB,EAAE,WAAW,EAAqB,MAAM,sBAAsB,CAAC;AAE/F,wBAAsB,mBAAmB,CAAC,MAAM,EAAE,MAAM,EAAE,MAAM,EAAE,WAAW,GAAG,OAAO,CAAC,kBAAkB,CAAC,CAmC1G"}

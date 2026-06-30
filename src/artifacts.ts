@@ -1,13 +1,14 @@
 import { mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { BuildArtifactPaths, BuildResult, IterationArtifact } from "./types/contracts.js";
 
-export async function writeBuildArtifacts(outDir, result) {
+export async function writeBuildArtifacts(outDir: string, result: BuildResult): Promise<BuildArtifactPaths> {
   await mkdir(outDir, { recursive: true });
 
   const selfReviewPath = join(outDir, "self-review.json");
   const buildResultPath = join(outDir, "build-result.json");
-  const iterationArtifacts = Array.isArray(result.iterationArtifacts) ? result.iterationArtifacts : [];
-  const iterationArtifactPaths = [];
+  const iterationArtifacts: IterationArtifact[] = Array.isArray(result.iterationArtifacts) ? result.iterationArtifacts : [];
+  const iterationArtifactPaths: BuildArtifactPaths["iterationArtifactPaths"] = [];
   const iterationsDir = join(outDir, "iterations");
 
   await writeJson(selfReviewPath, result.review);
@@ -38,6 +39,6 @@ export async function writeBuildArtifacts(outDir, result) {
   };
 }
 
-async function writeJson(path, value) {
+async function writeJson(path: string, value: unknown): Promise<void> {
   await writeFile(path, `${JSON.stringify(value, null, 2)}\n`, "utf8");
 }

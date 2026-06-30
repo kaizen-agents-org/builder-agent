@@ -2,14 +2,9 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
 import { normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
+import type { AgentRunResult, KaizenLoopBuilderIO, KaizenLoopPayload } from "./types/contracts.js";
 
-/** @import { AgentRunResult, KaizenLoopBuilderIO, KaizenLoopPayload } from "./types/contracts.js" */
-
-/**
- * @param {KaizenLoopBuilderIO} input
- * @returns {Promise<KaizenLoopPayload>}
- */
-export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
+export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }: KaizenLoopBuilderIO): Promise<KaizenLoopPayload> {
   const prompt = await readStream(stdin);
   const workspaceDir = env.KAIZEN_WORKSPACE_DIR || process.cwd();
   const preferredAgents = normalizeAgents(env.KAIZEN_PREFERRED_AGENT);
@@ -40,7 +35,7 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
   return payload;
 }
 
-function safeNormalizePayload(payload) {
+function safeNormalizePayload(payload: unknown): KaizenLoopPayload {
   try {
     return normalizeKaizenLoopPayload(payload);
   } catch (error) {
@@ -55,11 +50,7 @@ function safeNormalizePayload(payload) {
   }
 }
 
-/**
- * @param {AgentRunResult} result
- * @returns {KaizenLoopPayload}
- */
-function blockedPayload(result) {
+function blockedPayload(result: AgentRunResult): KaizenLoopPayload {
   const reason =
     result.exitCode === 0
       ? "Builder agent did not return the required Kaizen Loop JSON payload."
@@ -74,10 +65,7 @@ function blockedPayload(result) {
   };
 }
 
-/**
- * @param {AsyncIterable<Buffer | string>} stream
- */
-async function readStream(stream) {
+async function readStream(stream: AsyncIterable<Buffer | string>): Promise<string> {
   let text = "";
   for await (const chunk of stream) {
     text += chunk;
@@ -85,11 +73,7 @@ async function readStream(stream) {
   return text;
 }
 
-/**
- * @param {string} text
- * @param {number} maxLength
- */
-function tail(text, maxLength) {
+function tail(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
   return text.slice(text.length - maxLength);
 }

@@ -171,11 +171,11 @@ Exit code model:
 - `2`: blocked
 - `3`: failed
 
-## Phase 6: Incremental TypeScript Migration
+## Phase 6: TypeScript Source Migration
 
-Status: started.
+Status: implemented.
 
-The migration should preserve existing CLI behavior while making Builder Agent reusable outside Kaizen Agents. Each step should keep generated JavaScript and declaration output available from `dist/`.
+The migration preserves existing CLI behavior while making Builder Agent reusable outside Kaizen Agents. Source modules live in `src/**/*.ts`, and `npm run build` emits JavaScript and declaration output from `dist/`.
 
 Boundary targets:
 
@@ -187,11 +187,11 @@ Boundary targets:
 
 Current migration step:
 
-- Added `tsconfig.json` with `allowJs` declaration/build output.
-- Added `src/types/contracts.ts` as the typed public contract layer.
-- Split Codex/Claude backend invocation into `src/agents/AgentRunner.js`.
+- Converted `src` modules to TypeScript and disabled `allowJs`.
+- Kept `.js` specifiers in TypeScript imports for NodeNext runtime output.
+- Published package runtime entrypoints from `dist/index.js` and `dist/cli.js`.
 - Exported contract aliases and runner functions from `dist/index.d.ts`.
-- Added regression coverage that verifies the generated declarations expose the reusable boundaries.
+- Added regression coverage that verifies source modules stay TypeScript, package entrypoints target `dist`, generated declarations expose the reusable boundaries, and CLI tests execute the built `dist/cli.js`.
 
 ## Open Questions
 

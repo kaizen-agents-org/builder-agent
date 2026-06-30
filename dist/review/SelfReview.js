@@ -25,17 +25,18 @@ export function normalizeSelfReview(input, threshold) {
         throw new Error("Self-review must be an object.");
     }
     assertAllowedKeys(input, REVIEW_KEYS, "Self-review");
-    if (typeof input.passed !== "boolean") {
+    const reviewInput = input;
+    if (typeof reviewInput.passed !== "boolean") {
         throw new Error("Self-review passed must be a boolean.");
     }
     const review = {
-        score: normalizeScore(input.score, "score"),
-        confidence: normalizeConfidence(input.confidence),
-        dimensions: normalizeDimensions(input.dimensions),
-        mustFix: normalizeStringArray(input.mustFix, "mustFix"),
-        shouldFix: normalizeStringArray(input.shouldFix, "shouldFix"),
-        niceToHave: normalizeStringArray(input.niceToHave, "niceToHave"),
-        improvementInstructions: normalizeStringArray(input.improvementInstructions, "improvementInstructions"),
+        score: normalizeScore(reviewInput.score, "score"),
+        confidence: normalizeConfidence(reviewInput.confidence),
+        dimensions: normalizeDimensions(reviewInput.dimensions),
+        mustFix: normalizeStringArray(reviewInput.mustFix, "mustFix"),
+        shouldFix: normalizeStringArray(reviewInput.shouldFix, "shouldFix"),
+        niceToHave: normalizeStringArray(reviewInput.niceToHave, "niceToHave"),
+        improvementInstructions: normalizeStringArray(reviewInput.improvementInstructions, "improvementInstructions"),
         passed: false
     };
     review.passed = isReviewPassed(review, threshold);
@@ -59,10 +60,11 @@ function normalizeDimensions(input) {
         throw new Error("Self-review dimensions must be an object.");
     }
     assertAllowedKeys(input, DIMENSION_KEY_SET, "Self-review dimensions");
-    return Object.fromEntries(DIMENSION_KEYS.map((key) => [key, normalizeScore(input[key], `dimensions.${key}`)]));
+    const dimensions = input;
+    return Object.fromEntries(DIMENSION_KEYS.map((key) => [key, normalizeScore(dimensions[key], `dimensions.${key}`)]));
 }
 function normalizeScore(value, label) {
-    if (!Number.isInteger(value) || value < 0 || value > 100) {
+    if (typeof value !== "number" || !Number.isInteger(value) || value < 0 || value > 100) {
         throw new Error(`Self-review ${label} must be an integer from 0 to 100.`);
     }
     return value;
