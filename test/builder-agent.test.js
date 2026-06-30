@@ -399,6 +399,7 @@ describe("TypeScript build boundaries", () => {
 
     assert.equal(packageJson.main, "./dist/index.js");
     assert.equal(packageJson.bin["builder-agent"], "./dist/cli.js");
+    assert.equal(packageJson.types, "./dist/index.d.ts");
     assert.match(cli, /^#!\/usr\/bin\/env node/);
     assert.notEqual(cliStat.mode & 0o111, 0);
     assert.match(entrypoint, /export type \{[^}]*BuildRequest[^}]*BuilderAdapter[^}]*\} from "\.\/types\/contracts\.js"/);
@@ -1171,7 +1172,7 @@ console.log(JSON.stringify({
           "hermes-agent": {
             command: "hermes-agent",
             args: ["run", "{{prompt}}"],
-            fallbackOn: ["provider_blocked"],
+            fallbackOn: [" provider_blocked "],
             output: "stdout"
           }
         })

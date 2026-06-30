@@ -317,10 +317,14 @@ function createCustomProvider(name: string, value: unknown): AgentProvider {
  */
 function normalizeFallbackOn(value: unknown, name: string): AgentFailureClass[] {
   if (value === undefined) return DEFAULT_FALLBACK_ON;
-  if (!Array.isArray(value) || !value.every(isAgentFailureClass)) {
+  if (!Array.isArray(value)) {
     throw new Error(`Provider "${name}" fallbackOn must contain known failure classes.`);
   }
-  return [...new Set(value)];
+  const normalized = value.map((item) => (typeof item === "string" ? item.trim() : item));
+  if (!normalized.every(isAgentFailureClass)) {
+    throw new Error(`Provider "${name}" fallbackOn must contain known failure classes.`);
+  }
+  return [...new Set(normalized)];
 }
 
 /**
