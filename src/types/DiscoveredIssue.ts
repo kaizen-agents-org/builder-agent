@@ -1,11 +1,8 @@
+import type { DiscoveredIssue } from "./contracts.js";
+
 const DISCOVERED_ISSUE_KEYS = new Set(["title", "body", "expected", "evidence", "repo", "severity", "labels"]);
 
-/**
- * @param {unknown} value
- * @param {{ label: string }} options
- * @returns {import("./contracts.js").DiscoveredIssue[]}
- */
-export function normalizeDiscoveredIssues(value, { label }) {
+export function normalizeDiscoveredIssues(value: unknown, { label }: { label: string }): DiscoveredIssue[] {
   if (value === undefined) return [];
   if (!Array.isArray(value)) {
     throw new Error(`${label} must be an array.`);
@@ -14,29 +11,30 @@ export function normalizeDiscoveredIssues(value, { label }) {
   return value.map((item, index) => normalizeDiscoveredIssue(item, index, label));
 }
 
-function normalizeDiscoveredIssue(item, index, label) {
+function normalizeDiscoveredIssue(item: unknown, index: number, label: string): DiscoveredIssue {
   const itemLabel = `${label}[${index}]`;
   if (!item || typeof item !== "object" || Array.isArray(item)) {
     throw new Error(`${itemLabel} must be an object.`);
   }
   assertAllowedKeys(item, DISCOVERED_ISSUE_KEYS, itemLabel);
+  const input = item as Record<string, unknown>;
 
-  if (typeof item.title !== "string" || item.title.trim().length === 0) {
+  if (typeof input.title !== "string" || input.title.trim().length === 0) {
     throw new Error(`${itemLabel}.title must be a non-empty string.`);
   }
 
   return {
-    title: item.title.trim(),
-    ...optionalStringField(item, "body", itemLabel),
-    ...optionalStringField(item, "expected", itemLabel),
-    ...optionalStringField(item, "evidence", itemLabel),
-    ...optionalStringField(item, "repo", itemLabel),
-    ...optionalStringField(item, "severity", itemLabel),
-    ...optionalLabels(item, itemLabel)
+    title: input.title.trim(),
+    ...optionalStringField(input, "body", itemLabel),
+    ...optionalStringField(input, "expected", itemLabel),
+    ...optionalStringField(input, "evidence", itemLabel),
+    ...optionalStringField(input, "repo", itemLabel),
+    ...optionalStringField(input, "severity", itemLabel),
+    ...optionalLabels(input, itemLabel)
   };
 }
 
-function optionalStringField(item, key, itemLabel) {
+function optionalStringField(item: Record<string, unknown>, key: keyof DiscoveredIssue, itemLabel: string): Partial<DiscoveredIssue> {
   const value = item[key];
   if (value === undefined) return {};
   if (typeof value !== "string") {
@@ -46,7 +44,7 @@ function optionalStringField(item, key, itemLabel) {
   return trimmed ? { [key]: trimmed } : {};
 }
 
-function optionalLabels(item, itemLabel) {
+function optionalLabels(item: Record<string, unknown>, itemLabel: string): Pick<DiscoveredIssue, "labels"> | Record<string, never> {
   if (item.labels === undefined) return {};
   if (!Array.isArray(item.labels)) {
     throw new Error(`${itemLabel}.labels must be an array.`);
@@ -54,15 +52,15 @@ function optionalLabels(item, itemLabel) {
   return { labels: uniqueStrings(item.labels, `${itemLabel}.labels`) };
 }
 
-function uniqueStrings(value, label) {
+function uniqueStrings(value: unknown[], label: string): string[] {
   if (value.some((item) => typeof item !== "string" || item.trim().length === 0)) {
     throw new Error(`${label} must be an array of non-empty strings.`);
   }
 
-  return [...new Set(value.map((item) => item.trim()))];
+  return [...new Set(value.map((item) => (item as string).trim()))];
 }
 
-function assertAllowedKeys(input, allowedKeys, label) {
+function assertAllowedKeys(input: object, allowedKeys: Set<string>, label: string): void {
   const unknownKeys = Object.keys(input).filter((key) => !allowedKeys.has(key));
 
   if (unknownKeys.length > 0) {

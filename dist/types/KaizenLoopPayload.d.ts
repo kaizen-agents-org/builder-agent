@@ -1,11 +1,4 @@
-/**
- * @param {unknown} input
- * @returns {import("./contracts.js").KaizenLoopPayload}
- */
-export function normalizeKaizenLoopPayload(input: unknown): import("./contracts.js").KaizenLoopPayload;
-/**
- * @param {unknown} value
- * @returns {import("./contracts.js").DiscoveredIssue[]}
- */
-export function normalizeDiscoveredIssues(value: unknown): import("./contracts.js").DiscoveredIssue[];
+import type { DiscoveredIssue, KaizenLoopPayload } from "./contracts.js";
+export declare function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload;
+export declare function normalizeDiscoveredIssues(value: unknown): DiscoveredIssue[];
 //# sourceMappingURL=KaizenLoopPayload.d.ts.map

@@ -6,6 +6,7 @@ import { runBuild } from "./builder/BuilderAgent.js";
 import { writeBuildArtifacts } from "./artifacts.js";
 import { runKaizenLoopBuilder } from "./kaizen-loop.js";
 import { normalizeBuildRequest } from "./types/BuildRequest.js";
+import type { BuildRequestInput, BuildStatus, BuilderAdapter, KaizenLoopStatus } from "./types/contracts.js";
 
 const DEFAULT_OUT_DIR = ".kaizen/builder";
 
@@ -14,7 +15,7 @@ main(process.argv.slice(2)).catch((error) => {
   process.exitCode = 3;
 });
 
-async function main(args) {
+async function main(args: string[]): Promise<void> {
   const command = args[0];
 
   if (command === "--version" || command === "-v") {
@@ -64,8 +65,8 @@ async function main(args) {
   process.exitCode = exitCodeFor(result.status);
 }
 
-function parseOptions(args) {
-  const options = {};
+function parseOptions(args: string[]): Record<string, string> {
+  const options: Record<string, string> = {};
 
   for (let index = 0; index < args.length; index += 1) {
     const arg = args[index];
@@ -86,7 +87,7 @@ function parseOptions(args) {
   return options;
 }
 
-function requireOption(options, key) {
+function requireOption(options: Record<string, string>, key: string): string {
   if (!options[key]) {
     throw new Error(`Missing required option --${key}`);
   }
@@ -94,22 +95,22 @@ function requireOption(options, key) {
   return options[key];
 }
 
-async function readJson(path) {
-  return JSON.parse(await readFile(path, "utf8"));
+async function readJson(path: string): Promise<BuildRequestInput> {
+  return JSON.parse(await readFile(path, "utf8")) as BuildRequestInput;
 }
 
-async function loadAdapter(path) {
+async function loadAdapter(path: string): Promise<BuilderAdapter> {
   const moduleUrl = pathToFileURL(resolve(path)).href;
-  const module = await import(moduleUrl);
+  const module = await import(moduleUrl) as Record<string, unknown>;
 
   if (typeof module.createAdapter === "function") {
-    return module.createAdapter();
+    return module.createAdapter() as BuilderAdapter;
   }
 
-  return module.default ?? module;
+  return (module.default ?? module) as BuilderAdapter;
 }
 
-function exitCodeFor(status) {
+function exitCodeFor(status: BuildStatus): number {
   if (status === "ready") {
     return 0;
   }
@@ -121,7 +122,7 @@ function exitCodeFor(status) {
   return 3;
 }
 
-function exitCodeForKaizenLoopPayload(status) {
+function exitCodeForKaizenLoopPayload(status: KaizenLoopStatus): number {
   if (status === "fixed" || status === "partial") {
     return 0;
   }
@@ -129,7 +130,7 @@ function exitCodeForKaizenLoopPayload(status) {
   return 2;
 }
 
-function printUsage() {
+function printUsage(): void {
   console.log(`Usage:
   builder-agent validate-request --request build-request.json
   builder-agent build --request build-request.json --adapter ./adapter.js [--out .kaizen/builder]

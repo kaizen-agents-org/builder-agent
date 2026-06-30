@@ -29,7 +29,7 @@ export function createBuildResult(input) {
         taskUnderstanding: normalizeTaskUnderstanding(taskUnderstanding),
         planSummary: planSummary.trim(),
         changedFiles: uniqueStrings(changedFiles, "changedFiles"),
-        review: normalizeSelfReview(review, threshold),
+        review: normalizeSelfReview(review, threshold ?? DEFAULT_THRESHOLD),
         residualNotes: uniqueStrings(residualNotes, "residualNotes"),
         discoveredIssues: normalizeDiscoveredIssues(discoveredIssues)
     };
@@ -62,10 +62,6 @@ export function uniqueStrings(value, label) {
     }
     return [...new Set(value.map((item) => item.trim()))];
 }
-/**
- * @param {unknown} value
- * @returns {import("./contracts.js").TaskUnderstanding}
- */
 export function normalizeTaskUnderstanding(value) {
     if (value === undefined) {
         return {
@@ -77,22 +73,22 @@ export function normalizeTaskUnderstanding(value) {
         throw new Error("Build result taskUnderstanding must be an object.");
     }
     assertAllowedKeys(value, new Set(["summary", "goal", "constraints"]), "Build result taskUnderstanding");
-    if (typeof value.summary !== "string" || value.summary.trim().length === 0) {
+    const input = value;
+    if (typeof input.summary !== "string" || input.summary.trim().length === 0) {
         throw new Error("Build result taskUnderstanding.summary must be a non-empty string.");
     }
-    if (!Object.hasOwn(value, "constraints")) {
+    if (!Object.hasOwn(input, "constraints")) {
         throw new Error("Build result taskUnderstanding.constraints is required.");
     }
-    /** @type {import("./contracts.js").TaskUnderstanding} */
     const result = {
-        summary: value.summary.trim(),
-        constraints: uniqueStrings(value.constraints, "taskUnderstanding.constraints")
+        summary: input.summary.trim(),
+        constraints: uniqueStrings(input.constraints, "taskUnderstanding.constraints")
     };
-    if (value.goal !== undefined) {
-        if (typeof value.goal !== "string" || value.goal.trim().length === 0) {
+    if (input.goal !== undefined) {
+        if (typeof input.goal !== "string" || input.goal.trim().length === 0) {
             throw new Error("Build result taskUnderstanding.goal must be a non-empty string.");
         }
-        result.goal = value.goal.trim();
+        result.goal = input.goal.trim();
     }
     return result;
 }

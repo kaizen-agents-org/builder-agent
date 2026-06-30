@@ -84,7 +84,7 @@ async function loadAdapter(path) {
     if (typeof module.createAdapter === "function") {
         return module.createAdapter();
     }
-    return module.default ?? module;
+    return (module.default ?? module);
 }
 function exitCodeFor(status) {
     if (status === "ready") {

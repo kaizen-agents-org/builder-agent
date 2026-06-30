@@ -2,11 +2,6 @@ import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
 import { normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
-/** @import { AgentRunResult, KaizenLoopBuilderIO, KaizenLoopPayload } from "./types/contracts.js" */
-/**
- * @param {KaizenLoopBuilderIO} input
- * @returns {Promise<KaizenLoopPayload>}
- */
 export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
     const prompt = await readStream(stdin);
     const workspaceDir = env.KAIZEN_WORKSPACE_DIR || process.cwd();
@@ -47,10 +42,6 @@ function safeNormalizePayload(payload) {
         });
     }
 }
-/**
- * @param {AgentRunResult} result
- * @returns {KaizenLoopPayload}
- */
 function blockedPayload(result) {
     const reason = result.exitCode === 0
         ? "Builder agent did not return the required Kaizen Loop JSON payload."
@@ -63,9 +54,6 @@ function blockedPayload(result) {
         discoveredIssues: []
     };
 }
-/**
- * @param {AsyncIterable<Buffer | string>} stream
- */
 async function readStream(stream) {
     let text = "";
     for await (const chunk of stream) {
@@ -73,10 +61,6 @@ async function readStream(stream) {
     }
     return text;
 }
-/**
- * @param {string} text
- * @param {number} maxLength
- */
 function tail(text, maxLength) {
     if (text.length <= maxLength)
         return text;

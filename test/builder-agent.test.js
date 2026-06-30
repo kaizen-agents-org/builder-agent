@@ -1,12 +1,12 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
-import { BuilderAgent, normalizeAgent, normalizeAgents, normalizeBuildRequest, normalizeBuildResult, normalizeKaizenLoopPayload, normalizeSelfReview } from "../src/index.js";
+import { BuilderAgent, normalizeAgent, normalizeAgents, normalizeBuildRequest, normalizeBuildResult, normalizeKaizenLoopPayload, normalizeSelfReview } from "../dist/index.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -375,26 +375,43 @@ describe("validation", () => {
 });
 
 describe("TypeScript build boundaries", () => {
+  it("keeps source modules in TypeScript", async () => {
+    const sourceFiles = await listFiles("src");
+
+    assert.equal(sourceFiles.some((file) => file.endsWith(".js")), false);
+    assert.equal(sourceFiles.some((file) => file.endsWith(".ts")), true);
+  });
+
   it("emits declarations for reusable builder contracts and runners", async () => {
-    const [entrypoint, contracts, buildRequest, kaizenLoopPayload, builderAgent, agentRunner] = await Promise.all([
+    const [packageJsonText, entrypoint, contracts, buildRequest, kaizenLoopPayload, builderAgent, agentRunner, kaizenLoop, cli, cliStat] = await Promise.all([
+      readFile("package.json", "utf8"),
       readFile("dist/index.d.ts", "utf8"),
       readFile("dist/types/contracts.d.ts", "utf8"),
       readFile("dist/types/BuildRequest.d.ts", "utf8"),
       readFile("dist/types/KaizenLoopPayload.d.ts", "utf8"),
       readFile("dist/builder/BuilderAgent.d.ts", "utf8"),
-      readFile("dist/agents/AgentRunner.d.ts", "utf8")
+      readFile("dist/agents/AgentRunner.d.ts", "utf8"),
+      readFile("dist/kaizen-loop.d.ts", "utf8"),
+      readFile("dist/cli.js", "utf8"),
+      stat("dist/cli.js")
     ]);
+    const packageJson = JSON.parse(packageJsonText);
 
-    assert.match(entrypoint, /export type BuildRequest = import\("\.\/types\/contracts\.js"\)\.BuildRequest/);
-    assert.match(entrypoint, /export type BuilderAdapter = import\("\.\/types\/contracts\.js"\)\.BuilderAdapter/);
+    assert.equal(packageJson.main, "./dist/index.js");
+    assert.equal(packageJson.bin["builder-agent"], "./dist/cli.js");
+    assert.equal(packageJson.types, "./dist/index.d.ts");
+    assert.match(cli, /^#!\/usr\/bin\/env node/);
+    assert.notEqual(cliStat.mode & 0o111, 0);
+    assert.match(entrypoint, /export type \{[^}]*BuildRequest[^}]*BuilderAdapter[^}]*\} from "\.\/types\/contracts\.js"/);
     assert.match(contracts, /export interface BuilderAdapter/);
     assert.match(contracts, /export interface TaskUnderstanding/);
     assert.match(contracts, /taskUnderstanding: TaskUnderstanding/);
     assert.match(contracts, /export interface KaizenLoopPayload/);
     assert.match(buildRequest, /normalizeBuildRequest\(input: BuildRequestInput\): BuildRequest/);
-    assert.match(kaizenLoopPayload, /normalizeKaizenLoopPayload\(input: unknown\): import\("\.\/contracts\.js"\)\.KaizenLoopPayload/);
+    assert.match(kaizenLoopPayload, /normalizeKaizenLoopPayload\(input: unknown\): KaizenLoopPayload/);
     assert.match(builderAgent, /build\(input: BuildRequestInput\): Promise<BuildResult>/);
     assert.match(agentRunner, /runImplementationAgent\([^)]*AgentRunInput[^)]*\): Promise<AgentRunResult>/);
+    assert.match(kaizenLoop, /runKaizenLoopBuilder\([^)]*KaizenLoopBuilderIO[^)]*\): Promise<KaizenLoopPayload>/);
   });
 });
 
@@ -435,7 +452,7 @@ export default {
     );
 
     const { stdout } = await execFileAsync(process.execPath, [
-      "src/cli.js",
+      "dist/cli.js",
       "build",
       "--request",
       requestPath,
@@ -506,7 +523,7 @@ export default {
     );
 
     const { stdout } = await execFileAsync(process.execPath, [
-      "src/cli.js",
+      "dist/cli.js",
       "build",
       "--request",
       requestPath,
@@ -574,7 +591,7 @@ console.log(JSON.stringify({
     await chmod(fakeCodexPath, 0o755);
     await chmod(fakeClaudePath, 0o755);
 
-    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    const { stdout } = await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -639,7 +656,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     );
     await chmod(fakeCodexPath, 0o755);
 
-    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    const { stdout } = await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -679,7 +696,7 @@ console.log(JSON.stringify({
     await chmod(fakeClaudePath, 0o755);
 
     await assert.rejects(
-      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
         env: {
           ...process.env,
           PATH: `${binDir}:${process.env.PATH}`,
@@ -728,7 +745,7 @@ console.log(JSON.stringify({
     await chmod(fakeCodexPath, 0o755);
     await chmod(fakeClaudePath, 0o755);
 
-    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    const { stdout } = await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -773,7 +790,7 @@ process.exit(1);
     await chmod(fakeClaudePath, 0o755);
 
     await assert.rejects(
-      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
         env: {
           ...process.env,
           PATH: `${binDir}:${process.env.PATH}`,
@@ -822,7 +839,7 @@ console.log(JSON.stringify({
     );
     await chmod(fakeOpenCodePath, 0o755);
 
-    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    const { stdout } = await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -875,7 +892,7 @@ console.log(JSON.stringify({
     );
     await chmod(fakeZaiPath, 0o755);
 
-    await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -939,7 +956,7 @@ console.log(JSON.stringify({
     );
     await chmod(fakeHermesPath, 0o755);
 
-    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    const { stdout } = await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -993,7 +1010,7 @@ console.log(JSON.stringify({
     await chmod(fakeHermesPath, 0o755);
     await chmod(fakeClaudePath, 0o755);
 
-    const { stdout } = await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    const { stdout } = await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -1050,7 +1067,7 @@ console.log(JSON.stringify({
     await chmod(fakeClaudePath, 0o755);
 
     await assert.rejects(
-      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
         env: {
           ...process.env,
           PATH: `${binDir}:${process.env.PATH}`,
@@ -1098,7 +1115,7 @@ console.log(JSON.stringify({
     await chmod(fakeCodexPath, 0o755);
     await chmod(fakeClaudePath, 0o755);
 
-    await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -1144,7 +1161,7 @@ console.log(JSON.stringify({
     await chmod(fakeHermesPath, 0o755);
     await chmod(fakeClaudePath, 0o755);
 
-    await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -1155,7 +1172,7 @@ console.log(JSON.stringify({
           "hermes-agent": {
             command: "hermes-agent",
             args: ["run", "{{prompt}}"],
-            fallbackOn: ["provider_blocked"],
+            fallbackOn: [" provider_blocked "],
             output: "stdout"
           }
         })
@@ -1202,7 +1219,7 @@ process.exit(2);
     await chmod(fakeCodexPath, 0o755);
 
     await assert.rejects(
-      spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+      spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
         env: {
           ...process.env,
           PATH: `${binDir}:${process.env.PATH}`,
@@ -1241,7 +1258,7 @@ console.log(JSON.stringify({
     );
     await chmod(fakeClaudePath, 0o755);
 
-    await spawnWithInput(process.execPath, ["src/cli.js"], "Fix issue #1", {
+    await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
@@ -1320,4 +1337,20 @@ function spawnWithInput(command, args, input, options) {
     });
     child.stdin.end(input);
   });
+}
+
+async function listFiles(root) {
+  const entries = await readdir(root, { withFileTypes: true });
+  const files = [];
+
+  for (const entry of entries) {
+    const path = join(root, entry.name);
+    if (entry.isDirectory()) {
+      files.push(...await listFiles(path));
+    } else {
+      files.push(path);
+    }
+  }
+
+  return files;
 }

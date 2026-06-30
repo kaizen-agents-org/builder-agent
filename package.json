@@ -4,14 +4,14 @@
   "description": "Self-improving implementation agent component for Kaizen Agents.",
   "type": "module",
   "bin": {
-    "builder-agent": "./src/cli.js"
+    "builder-agent": "./dist/cli.js"
   },
-  "main": "./src/index.js",
+  "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
     "test": "npm run build && node --test",
-    "validate:json": "node scripts/validate-json.js"
+    "validate:json": "npm run build && node scripts/validate-json.js"
   },
   "files": [
     "dist",

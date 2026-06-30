@@ -1,6 +1,7 @@
 import { createFailedReview, normalizeSelfReview } from "../review/SelfReview.js";
 import { DEFAULT_THRESHOLD } from "./BuildRequest.js";
 import { normalizeDiscoveredIssues as normalizeSharedDiscoveredIssues } from "./DiscoveredIssue.js";
+import type { BuildResult, BuildResultInput, DiscoveredIssue, TaskUnderstanding } from "./contracts.js";
 
 const STATUS_VALUES = new Set(["ready", "blocked", "failed"]);
 const BUILD_RESULT_KEYS = new Set([
@@ -14,7 +15,7 @@ const BUILD_RESULT_KEYS = new Set([
   "discoveredIssues"
 ]);
 
-export function createBuildResult(input) {
+export function createBuildResult(input: BuildResultInput): BuildResult {
   const {
     status,
     iterations,
@@ -45,22 +46,22 @@ export function createBuildResult(input) {
     taskUnderstanding: normalizeTaskUnderstanding(taskUnderstanding),
     planSummary: planSummary.trim(),
     changedFiles: uniqueStrings(changedFiles, "changedFiles"),
-    review: normalizeSelfReview(review, threshold),
+    review: normalizeSelfReview(review, threshold ?? DEFAULT_THRESHOLD),
     residualNotes: uniqueStrings(residualNotes, "residualNotes"),
     discoveredIssues: normalizeDiscoveredIssues(discoveredIssues)
   };
 }
 
-export function normalizeBuildResult(input, threshold = DEFAULT_THRESHOLD) {
+export function normalizeBuildResult(input: unknown, threshold = DEFAULT_THRESHOLD): BuildResult {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Build result must be an object.");
   }
   assertAllowedKeys(input, BUILD_RESULT_KEYS, "Build result");
 
-  return createBuildResult({ ...input, threshold });
+  return createBuildResult({ ...(input as BuildResultInput), threshold });
 }
 
-export function createFailedBuildResult(message) {
+export function createFailedBuildResult(message: string): BuildResult {
   return {
     status: "failed",
     iterations: 0,
@@ -76,7 +77,7 @@ export function createFailedBuildResult(message) {
   };
 }
 
-export function uniqueStrings(value, label) {
+export function uniqueStrings(value: unknown, label: string): string[] {
   if (!Array.isArray(value) || value.some((item) => typeof item !== "string" || item.trim().length === 0)) {
     throw new Error(`Build result ${label} must be an array of non-empty strings.`);
   }
@@ -84,11 +85,7 @@ export function uniqueStrings(value, label) {
   return [...new Set(value.map((item) => item.trim()))];
 }
 
-/**
- * @param {unknown} value
- * @returns {import("./contracts.js").TaskUnderstanding}
- */
-export function normalizeTaskUnderstanding(value) {
+export function normalizeTaskUnderstanding(value: unknown): TaskUnderstanding {
   if (value === undefined) {
     return {
       summary: "Task understanding was not recorded by this build result.",
@@ -100,31 +97,31 @@ export function normalizeTaskUnderstanding(value) {
     throw new Error("Build result taskUnderstanding must be an object.");
   }
   assertAllowedKeys(value, new Set(["summary", "goal", "constraints"]), "Build result taskUnderstanding");
+  const input = value as Record<string, unknown>;
 
-  if (typeof value.summary !== "string" || value.summary.trim().length === 0) {
+  if (typeof input.summary !== "string" || input.summary.trim().length === 0) {
     throw new Error("Build result taskUnderstanding.summary must be a non-empty string.");
   }
-  if (!Object.hasOwn(value, "constraints")) {
+  if (!Object.hasOwn(input, "constraints")) {
     throw new Error("Build result taskUnderstanding.constraints is required.");
   }
 
-  /** @type {import("./contracts.js").TaskUnderstanding} */
-  const result = {
-    summary: value.summary.trim(),
-    constraints: uniqueStrings(value.constraints, "taskUnderstanding.constraints")
+  const result: TaskUnderstanding = {
+    summary: input.summary.trim(),
+    constraints: uniqueStrings(input.constraints, "taskUnderstanding.constraints")
   };
 
-  if (value.goal !== undefined) {
-    if (typeof value.goal !== "string" || value.goal.trim().length === 0) {
+  if (input.goal !== undefined) {
+    if (typeof input.goal !== "string" || input.goal.trim().length === 0) {
       throw new Error("Build result taskUnderstanding.goal must be a non-empty string.");
     }
-    result.goal = value.goal.trim();
+    result.goal = input.goal.trim();
   }
 
   return result;
 }
 
-function assertAllowedKeys(input, allowedKeys, label) {
+function assertAllowedKeys(input: object, allowedKeys: Set<string>, label: string): void {
   const unknownKeys = Object.keys(input).filter((key) => !allowedKeys.has(key));
 
   if (unknownKeys.length > 0) {
@@ -132,6 +129,6 @@ function assertAllowedKeys(input, allowedKeys, label) {
   }
 }
 
-export function normalizeDiscoveredIssues(value) {
+export function normalizeDiscoveredIssues(value: unknown): DiscoveredIssue[] {
   return normalizeSharedDiscoveredIssues(value, { label: "Build result discoveredIssues" });
 }
