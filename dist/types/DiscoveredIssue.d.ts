@@ -1,9 +1,5 @@
-/**
- * @param {unknown} value
- * @param {{ label: string }} options
- * @returns {import("./contracts.js").DiscoveredIssue[]}
- */
-export function normalizeDiscoveredIssues(value: unknown, { label }: {
+import type { DiscoveredIssue } from "./contracts.js";
+export declare function normalizeDiscoveredIssues(value: unknown, { label }: {
     label: string;
-}): import("./contracts.js").DiscoveredIssue[];
+}): DiscoveredIssue[];
 //# sourceMappingURL=DiscoveredIssue.d.ts.map

@@ -1,1 +1,1 @@
-{"version":3,"file":"DiscoveredIssue.d.ts","sourceRoot":"","sources":["../../src/types/DiscoveredIssue.js"],"names":[],"mappings":"AAEA;;;;GAIG;AACH,iDAJW,OAAO,aACP;IAAE,KAAK,EAAE,MAAM,CAAA;CAAE,GACf,OAAO,gBAAgB,EAAE,eAAe,EAAE,CAStD"}
+{"version":3,"file":"DiscoveredIssue.d.ts","sourceRoot":"","sources":["../../src/types/DiscoveredIssue.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,eAAe,EAAE,MAAM,gBAAgB,CAAC;AAItD,wBAAgB,yBAAyB,CAAC,KAAK,EAAE,OAAO,EAAE,EAAE,KAAK,EAAE,EAAE;IAAE,KAAK,EAAE,MAAM,CAAA;CAAE,GAAG,eAAe,EAAE,CAOzG"}

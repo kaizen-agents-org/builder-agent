@@ -3,7 +3,6 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
-/** @import { AgentKind, AgentProviderConfig, AgentRunInput, AgentRunResult, KaizenLoopPayload } from "../types/contracts.js" */
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
@@ -21,10 +20,6 @@ const AGENT_PROVIDERS = {
         createArgs: claudeArgs
     }
 };
-/**
- * @param {AgentRunInput} input
- * @returns {Promise<AgentRunResult>}
- */
 export async function runImplementationAgent({ agent, prompt, workspaceDir, model, env }) {
     const tempDir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     try {
@@ -80,17 +75,9 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
         await rm(tempDir, { recursive: true, force: true });
     }
 }
-/**
- * @param {string | undefined} value
- * @returns {AgentKind}
- */
 export function normalizeAgent(value) {
     return normalizeAgents(value)[0];
 }
-/**
- * @param {string | string[] | undefined} value
- * @returns {AgentKind[]}
- */
 export function normalizeAgents(value) {
     const requested = Array.isArray(value) ? value : splitAgentList(value);
     const normalized = unique(requested.length ? requested : ["codex"]);
@@ -214,7 +201,7 @@ function normalizeProviderMap(parsed, source) {
         if (!providers || typeof providers !== "object" || Array.isArray(providers)) {
             throw new Error(`${source} providers must be an object.`);
         }
-        return /** @type {Record<string, unknown>} */ (providers);
+        return providers;
     }
     return parsed;
 }
@@ -226,7 +213,7 @@ function createCustomProvider(name, value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         throw new Error(`Provider "${name}" must be an object.`);
     }
-    const config = /** @type {AgentProviderConfig} */ (value);
+    const config = value;
     if (typeof config.command !== "string" || !config.command.trim()) {
         throw new Error(`Provider "${name}" must define a command.`);
     }
@@ -259,10 +246,10 @@ function createCustomProvider(name, value) {
 function normalizeFallbackOn(value, name) {
     if (value === undefined)
         return DEFAULT_FALLBACK_ON;
-    if (!Array.isArray(value) || !value.every((item) => typeof item === "string" && FAILURE_CLASSES.has(item))) {
+    if (!Array.isArray(value) || !value.every(isAgentFailureClass)) {
         throw new Error(`Provider "${name}" fallbackOn must contain known failure classes.`);
     }
-    return unique(value);
+    return [...new Set(value)];
 }
 /**
  * @param {unknown} value
@@ -271,10 +258,13 @@ function normalizeFallbackOn(value, name) {
 function normalizeTimeoutMs(value, label) {
     if (value === undefined)
         return undefined;
-    if (!Number.isInteger(value) || value <= 0) {
+    if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
         throw new Error(`${label} must be a positive integer.`);
     }
     return value;
+}
+function isAgentFailureClass(value) {
+    return typeof value === "string" && FAILURE_CLASSES.has(value);
 }
 /**
  * @param {unknown} value
@@ -287,7 +277,7 @@ function createHealthCheck(value, providerCommand, name) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         throw new Error(`Provider "${name}" healthCheck must be an object.`);
     }
-    const healthCheck = /** @type {{ command?: unknown, args?: unknown, timeoutMs?: unknown }} */ (value);
+    const healthCheck = value;
     const command = typeof healthCheck.command === "string" && healthCheck.command.trim()
         ? healthCheck.command
         : providerCommand;

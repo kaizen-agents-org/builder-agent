@@ -1,74 +1,8 @@
-export function createBuildResult(input: any): {
-    status: any;
-    iterations: any;
-    taskUnderstanding: import("./contracts.js").TaskUnderstanding;
-    planSummary: string;
-    changedFiles: any[];
-    review: {
-        score: any;
-        confidence: number;
-        dimensions: {
-            [k: string]: any;
-        };
-        mustFix: any[];
-        shouldFix: any[];
-        niceToHave: any[];
-        improvementInstructions: any[];
-        passed: boolean;
-    };
-    residualNotes: any[];
-    discoveredIssues: import("./contracts.js").DiscoveredIssue[];
-};
-export function normalizeBuildResult(input: any, threshold?: number): {
-    status: any;
-    iterations: any;
-    taskUnderstanding: import("./contracts.js").TaskUnderstanding;
-    planSummary: string;
-    changedFiles: any[];
-    review: {
-        score: any;
-        confidence: number;
-        dimensions: {
-            [k: string]: any;
-        };
-        mustFix: any[];
-        shouldFix: any[];
-        niceToHave: any[];
-        improvementInstructions: any[];
-        passed: boolean;
-    };
-    residualNotes: any[];
-    discoveredIssues: import("./contracts.js").DiscoveredIssue[];
-};
-export function createFailedBuildResult(message: any): {
-    status: string;
-    iterations: number;
-    taskUnderstanding: {
-        summary: string;
-        constraints: never[];
-    };
-    planSummary: string;
-    changedFiles: never[];
-    review: {
-        score: number;
-        confidence: number;
-        dimensions: {
-            [k: string]: number;
-        };
-        mustFix: any[];
-        shouldFix: never[];
-        niceToHave: never[];
-        improvementInstructions: never[];
-        passed: boolean;
-    };
-    residualNotes: any[];
-    discoveredIssues: never[];
-};
-export function uniqueStrings(value: any, label: any): any[];
-/**
- * @param {unknown} value
- * @returns {import("./contracts.js").TaskUnderstanding}
- */
-export function normalizeTaskUnderstanding(value: unknown): import("./contracts.js").TaskUnderstanding;
-export function normalizeDiscoveredIssues(value: any): import("./contracts.js").DiscoveredIssue[];
+import type { BuildResult, BuildResultInput, DiscoveredIssue, TaskUnderstanding } from "./contracts.js";
+export declare function createBuildResult(input: BuildResultInput): BuildResult;
+export declare function normalizeBuildResult(input: unknown, threshold?: number): BuildResult;
+export declare function createFailedBuildResult(message: string): BuildResult;
+export declare function uniqueStrings(value: unknown, label: string): string[];
+export declare function normalizeTaskUnderstanding(value: unknown): TaskUnderstanding;
+export declare function normalizeDiscoveredIssues(value: unknown): DiscoveredIssue[];
 //# sourceMappingURL=BuildResult.d.ts.map

@@ -1,8 +1,8 @@
 import { readFile } from "node:fs/promises";
-import { normalizeSelfReview } from "../src/review/SelfReview.js";
-import { normalizeBuildRequest } from "../src/types/BuildRequest.js";
-import { normalizeBuildResult } from "../src/types/BuildResult.js";
-import { normalizeKaizenLoopPayload } from "../src/types/KaizenLoopPayload.js";
+import { normalizeSelfReview } from "../dist/review/SelfReview.js";
+import { normalizeBuildRequest } from "../dist/types/BuildRequest.js";
+import { normalizeBuildResult } from "../dist/types/BuildResult.js";
+import { normalizeKaizenLoopPayload } from "../dist/types/KaizenLoopPayload.js";
 
 const JSON_FILES = [
   "schemas/build-request.schema.json",

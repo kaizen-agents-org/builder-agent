@@ -80,17 +80,17 @@ For standalone loop development, the CLI loads an adapter module that performs t
 
 ## Reusable TypeScript Boundaries
 
-The package is migrating incrementally from JavaScript to TypeScript. Runtime entrypoints remain compatible with the current CLI, while `npm run build` emits JavaScript and declarations into `dist/` for typed reuse.
+The source modules are implemented in TypeScript. `npm run build` emits JavaScript and declarations into `dist/` for runtime use and typed reuse.
 
 Current boundaries:
 
-- CLI (`src/cli.js`): parses commands, environment, adapter paths, request JSON, and output paths.
+- CLI (`src/cli.ts`): parses commands, environment, adapter paths, request JSON, and output paths.
 - Contract layer (`src/types/`): owns normalized build request, build result, self-review, discovered issue, and adapter types.
-- Agent runner (`src/agents/AgentRunner.js`): invokes Codex or Claude behind a small provider interface.
-- Builder service (`src/builder/BuilderAgent.js`): orchestrates analyze, implement, review, and improve iterations without GitHub policy knowledge.
-- Artifact writer (`src/artifacts.js`): persists final and per-iteration handoff artifacts.
+- Agent runner (`src/agents/AgentRunner.ts`): invokes Codex or Claude behind a small provider interface.
+- Builder service (`src/builder/BuilderAgent.ts`): orchestrates analyze, implement, review, and improve iterations without GitHub policy knowledge.
+- Artifact writer (`src/artifacts.ts`): persists final and per-iteration handoff artifacts.
 
-Generated declarations are published from `dist/index.d.ts`. The source CLI remains `src/cli.js` so existing orchestration calls do not need to change during the migration.
+Generated declarations are published from `dist/index.d.ts`. The package entrypoint is `dist/index.js`, and the `builder-agent` bin points to `dist/cli.js`.
 
 ## Responsibility Boundaries
 
@@ -142,7 +142,8 @@ Default passing conditions:
 Check installation:
 
 ```sh
-node src/cli.js --version
+npm run build
+node dist/cli.js --version
 ```
 
 Build typed output:
@@ -155,7 +156,7 @@ Validate a request:
 
 ```sh
 npm run validate:json
-node src/cli.js validate-request --request examples/build-request.example.json
+node dist/cli.js validate-request --request examples/build-request.example.json
 ```
 
 `npm run validate:json` parses the published schemas and validates the checked-in examples against the same runtime contract used by the CLI. The schemas in `schemas/` are the MVP contract for orchestration boundaries:
@@ -168,7 +169,7 @@ node src/cli.js validate-request --request examples/build-request.example.json
 Run the builder loop with an adapter:
 
 ```sh
-node src/cli.js build \
+node dist/cli.js build \
   --request examples/build-request.example.json \
   --adapter examples/adapter.example.js \
   --out .kaizen/builder

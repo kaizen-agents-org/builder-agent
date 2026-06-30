@@ -1,1 +1,1 @@
-{"version":3,"file":"kaizen-loop.d.ts","sourceRoot":"","sources":["../src/kaizen-loop.js"],"names":[],"mappings":"AAKA,qGAAqG;AAErG;;;GAGG;AACH,qEAHW,mBAAmB,GACjB,OAAO,CAAC,iBAAiB,CAAC,CA+BtC;yCAnC2E,sBAAsB;uCAAtB,sBAAsB"}
+{"version":3,"file":"kaizen-loop.d.ts","sourceRoot":"","sources":["../src/kaizen-loop.ts"],"names":[],"mappings":"AAIA,OAAO,KAAK,EAAkB,mBAAmB,EAAE,iBAAiB,EAAE,MAAM,sBAAsB,CAAC;AAEnG,wBAAsB,oBAAoB,CAAC,EAAE,KAAK,EAAE,MAAM,EAAE,MAAM,EAAE,GAAG,EAAE,EAAE,mBAAmB,GAAG,OAAO,CAAC,iBAAiB,CAAC,CA6B1H"}

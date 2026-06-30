@@ -1,16 +1,12 @@
+import type { BuildRequest, BuildRequestInput } from "./contracts.js";
+
 const DEFAULT_THRESHOLD = 85;
 const DEFAULT_MAX_ITERATIONS = 3;
 const BUILD_REQUEST_KEYS = new Set(["task", "goal", "constraints", "threshold", "maxIterations"]);
 
 export { DEFAULT_MAX_ITERATIONS, DEFAULT_THRESHOLD };
 
-/** @import { BuildRequest, BuildRequestInput } from "./contracts.js" */
-
-/**
- * @param {BuildRequestInput} input
- * @returns {BuildRequest}
- */
-export function normalizeBuildRequest(input) {
+export function normalizeBuildRequest(input: BuildRequestInput): BuildRequest {
   if (!input || typeof input !== "object" || Array.isArray(input)) {
     throw new Error("Build request must be an object.");
   }
@@ -48,7 +44,7 @@ export function normalizeBuildRequest(input) {
   };
 }
 
-function assertAllowedKeys(input, allowedKeys, label) {
+function assertAllowedKeys(input: object, allowedKeys: Set<string>, label: string): void {
   const unknownKeys = Object.keys(input).filter((key) => !allowedKeys.has(key));
 
   if (unknownKeys.length > 0) {

@@ -3,14 +3,48 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
+import type { AgentFailureClass, AgentKind, AgentProviderConfig, AgentRunInput, AgentRunResult, KaizenLoopPayload } from "../types/contracts.js";
 
-/** @import { AgentKind, AgentProviderConfig, AgentRunInput, AgentRunResult, KaizenLoopPayload } from "../types/contracts.js" */
+type AgentCommandInput = {
+  prompt: string;
+  workspaceDir: string;
+  model?: string;
+  outputPath: string;
+};
+
+type AgentProvider = {
+  command: string;
+  output: "stdout" | "last-message";
+  fallbackOn: AgentFailureClass[];
+  timeoutMs?: number;
+  healthCheck?: {
+    command: string;
+    args: string[];
+    timeoutMs?: number;
+  };
+  createArgs(input: AgentCommandInput): string[];
+};
+
+type AgentAttempt = AgentRunResult & {
+  agent: AgentKind;
+};
+
+type RenderedArg = {
+  source: string;
+  value: string;
+};
+
+type CommandResult = {
+  exitCode: number;
+  stdout: string;
+  stderr: string;
+};
 
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
-const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
+const DEFAULT_FALLBACK_ON: AgentFailureClass[] = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
 
-const AGENT_PROVIDERS = {
+const AGENT_PROVIDERS: Record<string, AgentProvider> = {
   codex: {
     command: "codex",
     output: "last-message",
@@ -25,17 +59,13 @@ const AGENT_PROVIDERS = {
   }
 };
 
-/**
- * @param {AgentRunInput} input
- * @returns {Promise<AgentRunResult>}
- */
-export async function runImplementationAgent({ agent, prompt, workspaceDir, model, env }) {
+export async function runImplementationAgent({ agent, prompt, workspaceDir, model, env }: AgentRunInput): Promise<AgentRunResult> {
   const tempDir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 
   try {
     const providers = await loadAgentProviders(env, workspaceDir);
     const agents = normalizeAgents(agent);
-    const attempts = [];
+    const attempts: AgentAttempt[] = [];
 
     for (const agentName of agents) {
       const provider = providers[agentName];
@@ -88,21 +118,13 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
   }
 }
 
-/**
- * @param {string | undefined} value
- * @returns {AgentKind}
- */
-export function normalizeAgent(value) {
-  return normalizeAgents(value)[0];
+export function normalizeAgent(value: string | undefined): AgentKind {
+  return normalizeAgents(value)[0] as AgentKind;
 }
 
-/**
- * @param {string | string[] | undefined} value
- * @returns {AgentKind[]}
- */
-export function normalizeAgents(value) {
+export function normalizeAgents(value: string | string[] | undefined): AgentKind[] {
   const requested = Array.isArray(value) ? value : splitAgentList(value);
-  const normalized = unique(requested.length ? requested : ["codex"]);
+  const normalized = unique(requested.length ? requested : ["codex"]) as AgentKind[];
 
   for (const fallback of fallbackAgents(normalized)) {
     if (!normalized.includes(fallback)) normalized.push(fallback);
@@ -123,7 +145,15 @@ export function normalizeAgents(value) {
  * }} input
  * @returns {Promise<AgentRunResult & { agent: AgentKind }>}
  */
-async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, env, tempDir }) {
+async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, env, tempDir }: {
+  agent: AgentKind;
+  provider: AgentProvider | undefined;
+  prompt: string;
+  workspaceDir: string;
+  model?: string;
+  env: NodeJS.ProcessEnv;
+  tempDir: string;
+}): Promise<AgentAttempt> {
   if (!provider) {
     return {
       agent,
@@ -189,7 +219,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
  * @param {NodeJS.ProcessEnv} env
  * @param {string} workspaceDir
  */
-async function loadAgentProviders(env, workspaceDir) {
+async function loadAgentProviders(env: NodeJS.ProcessEnv, workspaceDir: string): Promise<Record<string, AgentProvider>> {
   return {
     ...AGENT_PROVIDERS,
     ...parseCustomProviders(await readProviderFile(env.KAIZEN_AGENT_PROVIDERS_FILE, workspaceDir), "KAIZEN_AGENT_PROVIDERS_FILE"),
@@ -202,7 +232,7 @@ async function loadAgentProviders(env, workspaceDir) {
  * @param {string} workspaceDir
  * @returns {Promise<string | undefined>}
  */
-async function readProviderFile(path, workspaceDir) {
+async function readProviderFile(path: string | undefined, workspaceDir: string): Promise<string | undefined> {
   if (!path) return undefined;
   const resolved = isAbsolute(path) ? path : resolve(workspaceDir, path);
   return readFile(resolved, "utf8");
@@ -213,14 +243,14 @@ async function readProviderFile(path, workspaceDir) {
  * @param {string} [source]
  * @returns {Record<string, { command: string, output: "stdout" | "last-message", fallbackOn: string[], timeoutMs?: number, healthCheck?: { command: string, args: string[], timeoutMs?: number }, createArgs(input: { prompt: string, workspaceDir: string, model?: string, outputPath: string }): string[] }>}
  */
-function parseCustomProviders(raw, source = "KAIZEN_AGENT_PROVIDERS") {
+function parseCustomProviders(raw: string | undefined, source = "KAIZEN_AGENT_PROVIDERS"): Record<string, AgentProvider> {
   if (!raw) return {};
 
   const parsed = parseMaybeJson(raw);
   if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
     throw new Error(`${source} must be a JSON object.`);
   }
-  const providerMap = normalizeProviderMap(parsed, source);
+  const providerMap = normalizeProviderMap(parsed as Record<string, unknown>, source);
 
   return Object.fromEntries(
     Object.entries(providerMap).map(([name, value]) => [name, createCustomProvider(name, value)])
@@ -231,13 +261,13 @@ function parseCustomProviders(raw, source = "KAIZEN_AGENT_PROVIDERS") {
  * @param {Record<string, unknown>} parsed
  * @param {string} source
  */
-function normalizeProviderMap(parsed, source) {
+function normalizeProviderMap(parsed: Record<string, unknown>, source: string): Record<string, unknown> {
   const providers = parsed.providers;
   if (providers !== undefined) {
     if (!providers || typeof providers !== "object" || Array.isArray(providers)) {
       throw new Error(`${source} providers must be an object.`);
     }
-    return /** @type {Record<string, unknown>} */ (providers);
+    return providers as Record<string, unknown>;
   }
 
   return parsed;
@@ -247,12 +277,12 @@ function normalizeProviderMap(parsed, source) {
  * @param {string} name
  * @param {unknown} value
  */
-function createCustomProvider(name, value) {
+function createCustomProvider(name: string, value: unknown): AgentProvider {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Provider "${name}" must be an object.`);
   }
 
-  const config = /** @type {AgentProviderConfig} */ (value);
+  const config = value as AgentProviderConfig;
   if (typeof config.command !== "string" || !config.command.trim()) {
     throw new Error(`Provider "${name}" must define a command.`);
   }
@@ -285,24 +315,28 @@ function createCustomProvider(name, value) {
  * @param {unknown} value
  * @param {string} name
  */
-function normalizeFallbackOn(value, name) {
+function normalizeFallbackOn(value: unknown, name: string): AgentFailureClass[] {
   if (value === undefined) return DEFAULT_FALLBACK_ON;
-  if (!Array.isArray(value) || !value.every((item) => typeof item === "string" && FAILURE_CLASSES.has(item))) {
+  if (!Array.isArray(value) || !value.every(isAgentFailureClass)) {
     throw new Error(`Provider "${name}" fallbackOn must contain known failure classes.`);
   }
-  return unique(value);
+  return [...new Set(value)];
 }
 
 /**
  * @param {unknown} value
  * @param {string} label
  */
-function normalizeTimeoutMs(value, label) {
+function normalizeTimeoutMs(value: unknown, label: string): number | undefined {
   if (value === undefined) return undefined;
-  if (!Number.isInteger(value) || value <= 0) {
+  if (typeof value !== "number" || !Number.isInteger(value) || value <= 0) {
     throw new Error(`${label} must be a positive integer.`);
   }
   return value;
+}
+
+function isAgentFailureClass(value: unknown): value is AgentFailureClass {
+  return typeof value === "string" && FAILURE_CLASSES.has(value);
 }
 
 /**
@@ -310,13 +344,13 @@ function normalizeTimeoutMs(value, label) {
  * @param {string} providerCommand
  * @param {string} name
  */
-function createHealthCheck(value, providerCommand, name) {
+function createHealthCheck(value: unknown, providerCommand: string, name: string): Pick<AgentProvider, "healthCheck"> | Record<string, never> {
   if (value === undefined) return {};
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     throw new Error(`Provider "${name}" healthCheck must be an object.`);
   }
 
-  const healthCheck = /** @type {{ command?: unknown, args?: unknown, timeoutMs?: unknown }} */ (value);
+  const healthCheck = value as { command?: unknown, args?: unknown, timeoutMs?: unknown };
   const command = typeof healthCheck.command === "string" && healthCheck.command.trim()
     ? healthCheck.command
     : providerCommand;
@@ -338,7 +372,7 @@ function createHealthCheck(value, providerCommand, name) {
 /**
  * @param {{ prompt: string, workspaceDir: string, model?: string, outputPath: string }} input
  */
-function codexArgs({ prompt, workspaceDir, model, outputPath }) {
+function codexArgs({ prompt, workspaceDir, model, outputPath }: AgentCommandInput): string[] {
   const args = [
     "exec",
     "--json",
@@ -357,7 +391,7 @@ function codexArgs({ prompt, workspaceDir, model, outputPath }) {
 /**
  * @param {{ prompt: string, model?: string }} input
  */
-function claudeArgs({ prompt, model }) {
+function claudeArgs({ prompt, model }: AgentCommandInput): string[] {
   const args = [
     "-p",
     prompt,
@@ -376,8 +410,8 @@ function claudeArgs({ prompt, model }) {
  * @param {string[]} args
  * @param {{ prompt: string, workspaceDir: string, model?: string, outputPath: string }} input
  */
-function renderArgs(args, input) {
-  const rendered = [];
+function renderArgs(args: string[], input: AgentCommandInput): string[] {
+  const rendered: RenderedArg[] = [];
 
   for (const arg of args) {
     const value = renderTemplate(arg, input);
@@ -399,7 +433,7 @@ function renderArgs(args, input) {
  * @param {string} value
  * @param {{ prompt: string, workspaceDir: string, model?: string, outputPath: string }} input
  */
-function renderTemplate(value, input) {
+function renderTemplate(value: string, input: AgentCommandInput): string {
   return value
     .replaceAll("{{prompt}}", input.prompt)
     .replaceAll("{{workspaceDir}}", input.workspaceDir)
@@ -410,7 +444,7 @@ function renderTemplate(value, input) {
 /**
  * @param {string | undefined} value
  */
-function splitAgentList(value) {
+function splitAgentList(value: string | undefined): string[] {
   if (!value) return [];
 
   const parsed = value.trim().startsWith("[") ? parseMaybeJson(value) : undefined;
@@ -424,14 +458,14 @@ function splitAgentList(value) {
 /**
  * @param {string[]} values
  */
-function unique(values) {
+function unique(values: string[]): string[] {
   return [...new Set(values.map((value) => value.trim()).filter(Boolean))];
 }
 
 /**
  * @param {AgentKind[]} requested
  */
-function fallbackAgents(requested) {
+function fallbackAgents(requested: AgentKind[]): AgentKind[] {
   return ["codex", "claude"];
 }
 
@@ -439,7 +473,7 @@ function fallbackAgents(requested) {
  * @param {AgentRunResult & { failureClass?: string }} attempt
  * @param {{ fallbackOn?: string[] } | undefined} provider
  */
-function shouldFallback(attempt, provider) {
+function shouldFallback(attempt: AgentRunResult, provider: AgentProvider | undefined): boolean {
   if (attempt.payload) return false;
   const failureClass = attempt.failureClass ?? "invalid_payload";
   const fallbackOn = provider?.fallbackOn ?? DEFAULT_FALLBACK_ON;
@@ -449,14 +483,14 @@ function shouldFallback(attempt, provider) {
 /**
  * @param {string} value
  */
-function sanitizeFilename(value) {
+function sanitizeFilename(value: string): string {
   return value.replace(/[^a-z0-9._-]/gi, "_");
 }
 
 /**
  * @param {AgentRunResult & { agent?: AgentKind, fallbackAllowed?: boolean, fallbackReason?: string }} attempt
  */
-function formatAttempt(attempt) {
+function formatAttempt(attempt: AgentRunResult & { agent?: AgentKind }): string {
   const header = attempt.agent ? `Agent "${attempt.agent}" exited with code ${attempt.exitCode}.` : `Agent exited with code ${attempt.exitCode}.`;
   const details = [
     attempt.failureClass ? `Failure class: ${attempt.failureClass}.` : undefined,
@@ -472,7 +506,7 @@ function formatAttempt(attempt) {
 /**
  * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string, fallbackAllowed?: boolean, fallbackReason?: string }>} attempts
  */
-function formatAttempts(attempts) {
+function formatAttempts(attempts: Array<AgentRunResult & { agent?: AgentKind }>): string {
   return attempts.map(formatAttempt).join("\n\n");
 }
 
@@ -480,7 +514,7 @@ function formatAttempts(attempts) {
  * @param {KaizenLoopPayload} payload
  * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string, fallbackAllowed?: boolean, fallbackReason?: string }>} attempts
  */
-function appendProviderEvidence(payload, attempts) {
+function appendProviderEvidence(payload: KaizenLoopPayload, attempts: AgentAttempt[]): KaizenLoopPayload {
   const evidence = formatProviderEvidence(attempts);
   return {
     ...payload,
@@ -491,7 +525,7 @@ function appendProviderEvidence(payload, attempts) {
 /**
  * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string, fallbackAllowed?: boolean, fallbackReason?: string }>} attempts
  */
-function formatProviderEvidence(attempts) {
+function formatProviderEvidence(attempts: AgentAttempt[]): string {
   const selected = attempts.find((attempt) => attempt.payload);
   const lines = attempts.map((attempt) => {
     const status = selected === attempt ? "selected" : attempt.fallbackAllowed ? "fallback" : "stopped";
@@ -507,7 +541,7 @@ function formatProviderEvidence(attempts) {
 /**
  * @param {{ exitCode: number, raw: string, error?: unknown }} input
  */
-function classifyFailure({ exitCode, raw, error }) {
+function classifyFailure({ exitCode, raw, error }: { exitCode: number, raw: string, error?: unknown }): AgentFailureClass {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
   const text = `${code}\n${raw}`.toLowerCase();
 
@@ -533,7 +567,7 @@ function classifyFailure({ exitCode, raw, error }) {
  * @param {string} raw
  * @returns {{ payload?: KaizenLoopPayload, error?: Error }}
  */
-function parseBuilderPayload(raw) {
+function parseBuilderPayload(raw: string): { payload?: KaizenLoopPayload, error?: Error } {
   const topLevel = parseMaybeJson(raw);
   const finalText =
     topLevel && typeof topLevel === "object" && "result" in topLevel
@@ -557,7 +591,7 @@ function parseBuilderPayload(raw) {
  * @param {string[]} args
  * @param {{ cwd: string, env: NodeJS.ProcessEnv, timeoutMs?: number }} options
  */
-function runCommand(command, args, options) {
+function runCommand(command: string, args: string[], options: { cwd: string, env: NodeJS.ProcessEnv, timeoutMs?: number }): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     const timeoutMs = options.timeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS;
     const controller = new AbortController();
@@ -610,7 +644,7 @@ function runCommand(command, args, options) {
 /**
  * @param {string} text
  */
-function extractLastJsonObject(text) {
+function extractLastJsonObject(text: string): string {
   const stripped = text.replace(/```(?:json)?/gi, "```");
   let depth = 0;
   let start = -1;
@@ -652,7 +686,7 @@ function extractLastJsonObject(text) {
 /**
  * @param {string} text
  */
-function parseMaybeJson(text) {
+function parseMaybeJson(text: string | undefined): unknown {
   if (!text) return undefined;
   try {
     return JSON.parse(text);
