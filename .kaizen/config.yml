@@ -43,7 +43,7 @@ scheduler:
         skipIfRunning: true
 
 commands:
-  setup: "npm ci"
+  setup: "npm install"
   verify:
     - "npm test"
     - "npm run validate:json"
