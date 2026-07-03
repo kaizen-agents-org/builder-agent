@@ -59,10 +59,16 @@ function blockedPayload(result: AgentRunResult): KaizenLoopPayload {
   return {
     status: "blocked",
     summary: reason,
-    notes: tail(result.raw, 2000),
+    notes: blockedNotes(result),
     blockedReason: reason,
     discoveredIssues: []
   };
+}
+
+function blockedNotes(result: AgentRunResult): string {
+  const rawTail = tail(result.raw, 2000);
+  if (!result.providerEvidence) return rawTail;
+  return rawTail ? `${result.providerEvidence}\n\nRaw output tail:\n${rawTail}` : result.providerEvidence;
 }
 
 async function readStream(stream: AsyncIterable<Buffer | string>): Promise<string> {
