@@ -167,6 +167,7 @@ export interface AgentRunResult {
     fallbackReason?: AgentFailureClass;
     fallbackAllowed?: boolean;
     payloadSource?: "stdout" | "last-message" | "none";
+    providerEvidence?: string;
 }
 export interface KaizenLoopBuilderIO {
     stdin: Readable;
