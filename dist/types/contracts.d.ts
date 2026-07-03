@@ -116,6 +116,8 @@ export interface BuilderAdapter {
 export interface IterationArtifact {
     iteration: number;
     implementationSummary: string;
+    changedFiles: string[];
+    discoveredIssues: DiscoveredIssue[];
     review: SelfReviewResult;
     improvementInstructions: string[];
     residualNotes: string[];
@@ -126,6 +128,8 @@ export interface BuildArtifactPaths {
     iterationArtifactPaths: Array<{
         iteration: number;
         implementationSummaryPath: string;
+        changedFilesPath: string;
+        discoveredIssuesPath: string;
         selfReviewPath: string;
         improvementInstructionsPath: string;
         residualNotesPath: string;
