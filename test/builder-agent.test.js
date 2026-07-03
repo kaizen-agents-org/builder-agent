@@ -673,6 +673,10 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     assert.equal(output.status, "fixed");
     assert.equal(result.status, "fixed");
     assert.equal(result.summary, "implemented with codex");
+    assert.match(result.notes, /checked/);
+    assert.match(result.notes, /codex: exitCode=0, status=selected, failureClass=none, fallbackReason=none, payloadSource=last-message/);
+    assert.match(result.notes, /Selected backend: codex/);
+    assert.match(result.notes, /Final payload source: last-message/);
     assert.deepEqual(args.slice(0, 5), ["exec", "--json", "--sandbox", "workspace-write", "-C"]);
     assert.equal(args.includes("--ask-for-approval"), false);
   });
