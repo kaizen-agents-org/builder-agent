@@ -87,10 +87,7 @@ export function uniqueStrings(value: unknown, label: string): string[] {
 
 export function normalizeTaskUnderstanding(value: unknown): TaskUnderstanding {
   if (value === undefined) {
-    return {
-      summary: "Task understanding was not recorded by this build result.",
-      constraints: []
-    };
+    throw new Error("Build result taskUnderstanding is required.");
   }
 
   if (!value || typeof value !== "object" || Array.isArray(value)) {

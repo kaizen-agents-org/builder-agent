@@ -64,10 +64,7 @@ export function uniqueStrings(value, label) {
 }
 export function normalizeTaskUnderstanding(value) {
     if (value === undefined) {
-        return {
-            summary: "Task understanding was not recorded by this build result.",
-            constraints: []
-        };
+        throw new Error("Build result taskUnderstanding is required.");
     }
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         throw new Error("Build result taskUnderstanding must be an object.");

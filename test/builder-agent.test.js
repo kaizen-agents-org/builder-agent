@@ -237,6 +237,17 @@ describe("validation", () => {
     );
     assert.throws(
       () => normalizeBuildResult({
+        status: "ready",
+        iterations: 1,
+        planSummary: "Implement the requested change.",
+        changedFiles: ["src/feature.js"],
+        review: passingReview,
+        residualNotes: []
+      }),
+      /taskUnderstanding is required/
+    );
+    assert.throws(
+      () => normalizeBuildResult({
         ...result,
         taskUnderstanding: {
           summary: "Understand the requested behavior before implementation."
@@ -270,6 +281,10 @@ describe("validation", () => {
     const result = normalizeBuildResult({
       status: "ready",
       iterations: 1,
+      taskUnderstanding: {
+        summary: "Understand the requested behavior before implementation.",
+        constraints: ["Keep the change focused."]
+      },
       planSummary: "Implement the requested change.",
       changedFiles: ["src/feature.js"],
       review: passingReview,
@@ -302,7 +317,7 @@ describe("validation", () => {
     const schema = JSON.parse(await readFile("schemas/build-result.schema.json", "utf8"));
 
     assert.equal(schema.properties.taskUnderstanding.type, "object");
-    assert.equal(schema.required.includes("taskUnderstanding"), false);
+    assert.equal(schema.required.includes("taskUnderstanding"), true);
     assert.equal(schema.properties.discoveredIssues.type, "array");
     assert.equal(schema.required.includes("discoveredIssues"), false);
   });
