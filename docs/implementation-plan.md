@@ -115,6 +115,11 @@ mustFix.length === 0
 confidence >= 0.7
 ```
 
+Settled MVP defaults:
+
+- `threshold` defaults to `85` when omitted from the build request.
+- `shouldFix` findings are retained for improvement instructions and reviewer context, but they do not block readiness by themselves.
+
 ## Phase 3: Prompt Hardening
 
 Refine the prompts against real implementation tasks.
@@ -195,8 +200,6 @@ Current migration step:
 
 ## Open Questions
 
-- Should `threshold` default to `80` or `85`?
-- Should `shouldFix` items ever block readiness?
 - How much test execution should the builder perform before handing off to mechanical verification?
 - What adapter should `kaizen-loop` use for Codex execution in the first integration?
 
