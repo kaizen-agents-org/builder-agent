@@ -20,12 +20,16 @@ export async function writeBuildArtifacts(outDir: string, result: BuildResult): 
 
     const paths = {
       implementationSummaryPath: join(iterationDir, "implementation-summary.json"),
+      changedFilesPath: join(iterationDir, "changed-files.json"),
+      discoveredIssuesPath: join(iterationDir, "discovered-issues.json"),
       selfReviewPath: join(iterationDir, "self-review.json"),
       improvementInstructionsPath: join(iterationDir, "improvement-instructions.json"),
       residualNotesPath: join(iterationDir, "residual-notes.json")
     };
 
     await writeJson(paths.implementationSummaryPath, { summary: artifact.implementationSummary });
+    await writeJson(paths.changedFilesPath, artifact.changedFiles);
+    await writeJson(paths.discoveredIssuesPath, artifact.discoveredIssues);
     await writeJson(paths.selfReviewPath, artifact.review);
     await writeJson(paths.improvementInstructionsPath, artifact.improvementInstructions);
     await writeJson(paths.residualNotesPath, artifact.residualNotes);
