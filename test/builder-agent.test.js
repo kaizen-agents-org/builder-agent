@@ -802,7 +802,7 @@ console.log(JSON.stringify({
     await writeFile(
       fakeCodexPath,
       `#!/usr/bin/env node
-console.error("codex failed");
+console.error("codex failed " + "x".repeat(2500));
 process.exit(1);
 `,
       "utf8"
@@ -835,8 +835,10 @@ process.exit(1);
 
     assert.equal(result.status, "blocked");
     assert.equal(result.summary, "Builder agent exited with code 1.");
-    assert.match(result.notes, /Agent "codex" exited with code 1/);
-    assert.match(result.notes, /codex failed/);
+    assert.match(result.notes, /Provider evidence:/);
+    assert.match(result.notes, /codex: exitCode=1, status=fallback, failureClass=invalid_payload, fallbackReason=invalid_payload, payloadSource=none/);
+    assert.match(result.notes, /claude: exitCode=1, status=fallback, failureClass=invalid_payload, fallbackReason=invalid_payload, payloadSource=none/);
+    assert.match(result.notes, /Raw output tail:/);
     assert.match(result.notes, /Agent "claude" exited with code 1/);
     assert.match(result.notes, /claude failed/);
   });

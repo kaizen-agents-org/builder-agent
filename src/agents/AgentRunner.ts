@@ -96,6 +96,7 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
         return {
           exitCode: result.exitCode,
           raw: formatAttempts(attempts),
+          providerEvidence: formatProviderEvidence(attempts),
           payload: undefined
         };
       }
@@ -105,6 +106,7 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
     return {
       exitCode: lastAttempt?.exitCode ?? 1,
       raw: formatAttempts(attempts),
+      providerEvidence: attempts.length > 0 ? formatProviderEvidence(attempts) : undefined,
       payload: undefined
     };
   } catch (error) {
