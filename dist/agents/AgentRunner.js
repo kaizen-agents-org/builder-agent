@@ -42,7 +42,7 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
                 return {
                     ...result,
                     raw: formatAttempts(allAttempts),
-                    payload: attempts.length > 0 ? appendProviderEvidence(result.payload, allAttempts) : result.payload
+                    payload: shouldAppendProviderEvidence(result.payload) ? appendProviderEvidence(result.payload, allAttempts) : result.payload
                 };
             }
             const fallbackReason = result.failureClass ?? "invalid_payload";
@@ -439,6 +439,9 @@ function appendProviderEvidence(payload, attempts) {
         ...payload,
         notes: payload.notes ? `${payload.notes}\n\n${evidence}` : evidence
     };
+}
+function shouldAppendProviderEvidence(payload) {
+    return payload.status === "fixed" || payload.status === "partial";
 }
 /**
  * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string, fallbackAllowed?: boolean, fallbackReason?: string }>} attempts

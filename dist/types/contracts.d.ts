@@ -62,7 +62,7 @@ export interface BuildResult {
 export interface BuildResultInput {
     status: BuildStatus;
     iterations: number;
-    taskUnderstanding?: TaskUnderstanding;
+    taskUnderstanding: TaskUnderstanding;
     planSummary: string;
     changedFiles: string[];
     review: SelfReviewResult;

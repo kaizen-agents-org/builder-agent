@@ -84,7 +84,7 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
         return {
           ...result,
           raw: formatAttempts(allAttempts),
-          payload: attempts.length > 0 ? appendProviderEvidence(result.payload, allAttempts) : result.payload
+          payload: shouldAppendProviderEvidence(result.payload) ? appendProviderEvidence(result.payload, allAttempts) : result.payload
         };
       }
 
@@ -526,6 +526,10 @@ function appendProviderEvidence(payload: KaizenLoopPayload, attempts: AgentAttem
     ...payload,
     notes: payload.notes ? `${payload.notes}\n\n${evidence}` : evidence
   };
+}
+
+function shouldAppendProviderEvidence(payload: KaizenLoopPayload): boolean {
+  return payload.status === "fixed" || payload.status === "partial";
 }
 
 /**
