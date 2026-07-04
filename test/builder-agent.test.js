@@ -518,7 +518,8 @@ export default {
     return {
       summary: "Implemented the first version.",
       changedFiles: ["src/feature.js"],
-      residualNotes: ["Tests still need to be added."]
+      residualNotes: ["Tests still need to be added."],
+      discoveredIssues: [{ title: "Verifier warning needs follow-up", repo: "verifier" }]
     };
   },
   async selfReview() {
@@ -529,7 +530,8 @@ export default {
     return {
       summary: "Added targeted regression coverage.",
       changedFiles: [...implementation.changedFiles, "test/feature.test.js"],
-      residualNotes: []
+      residualNotes: [],
+      discoveredIssues: [{ title: "Builder docs need a note", repo: "builder-agent" }]
     };
   }
 };
@@ -552,10 +554,14 @@ export default {
     const result = JSON.parse(resultText);
     const latestReview = JSON.parse(await readFile(join(outDir, "self-review.json"), "utf8"));
     const iteration1Summary = JSON.parse(await readFile(join(outDir, "iterations", "1", "implementation-summary.json"), "utf8"));
+    const iteration1ChangedFiles = JSON.parse(await readFile(join(outDir, "iterations", "1", "changed-files.json"), "utf8"));
+    const iteration1DiscoveredIssues = JSON.parse(await readFile(join(outDir, "iterations", "1", "discovered-issues.json"), "utf8"));
     const iteration1Review = JSON.parse(await readFile(join(outDir, "iterations", "1", "self-review.json"), "utf8"));
     const iteration1Instructions = JSON.parse(await readFile(join(outDir, "iterations", "1", "improvement-instructions.json"), "utf8"));
     const iteration1ResidualNotes = JSON.parse(await readFile(join(outDir, "iterations", "1", "residual-notes.json"), "utf8"));
     const iteration2Summary = JSON.parse(await readFile(join(outDir, "iterations", "2", "implementation-summary.json"), "utf8"));
+    const iteration2ChangedFiles = JSON.parse(await readFile(join(outDir, "iterations", "2", "changed-files.json"), "utf8"));
+    const iteration2DiscoveredIssues = JSON.parse(await readFile(join(outDir, "iterations", "2", "discovered-issues.json"), "utf8"));
     const iteration2Review = JSON.parse(await readFile(join(outDir, "iterations", "2", "self-review.json"), "utf8"));
 
     assert.equal(output.status, "ready");
@@ -563,10 +569,14 @@ export default {
     assert.equal(result.iterations, 2);
     assert.equal(latestReview.passed, true);
     assert.equal(iteration1Summary.summary, "Implemented the first version.");
+    assert.deepEqual(iteration1ChangedFiles, ["src/feature.js"]);
+    assert.deepEqual(iteration1DiscoveredIssues, [{ title: "Verifier warning needs follow-up", repo: "verifier" }]);
     assert.equal(iteration1Review.passed, false);
     assert.deepEqual(iteration1Instructions, ["Add targeted tests for the requested behavior."]);
     assert.deepEqual(iteration1ResidualNotes, ["Tests still need to be added."]);
     assert.equal(iteration2Summary.summary, "Added targeted regression coverage.");
+    assert.deepEqual(iteration2ChangedFiles, ["src/feature.js", "test/feature.test.js"]);
+    assert.deepEqual(iteration2DiscoveredIssues, [{ title: "Builder docs need a note", repo: "builder-agent" }]);
     assert.equal(iteration2Review.passed, true);
     assert.equal(Object.hasOwn(result, "iterationArtifacts"), false);
     await assert.rejects(readFile(join(outDir, "iterations", "3", "stale.json"), "utf8"));
