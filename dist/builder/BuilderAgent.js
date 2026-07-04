@@ -210,6 +210,8 @@ function createIterationArtifact({ iteration, implementation, review, improvemen
     return {
         iteration,
         implementationSummary: summarizeImplementation(implementation),
+        changedFiles: extractChangedFiles(implementation),
+        discoveredIssues: extractDiscoveredIssues(implementation),
         review: cloneJsonValue(review),
         improvementInstructions: cloneJsonValue(improvementInstructions),
         residualNotes: extractResidualNotes(implementation)
