@@ -1071,11 +1071,12 @@ console.log(JSON.stringify({
 
   it("falls back for command-missing, timeout, and rate-limited failures when fallbackOn opts in", async () => {
     for (const failureCase of failureClassificationCases) {
-      const { result } = await runFailureClassificationFixture({
+      const { result, error } = await runFailureClassificationFixture({
         failureCase,
         fallbackOn: [failureCase.failureClass]
       });
 
+      assert.equal(error, undefined, failureCase.name);
       assert.equal(result.status, "fixed", failureCase.name);
       assert.equal(result.summary, "implemented after classified fallback", failureCase.name);
       assert.match(result.notes, failureCase.expectedEvidence, failureCase.name);
