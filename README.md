@@ -263,6 +263,8 @@ The file may be either the provider object itself or `{ "providers": { ... } }`.
 - `healthCheck`: optional `{ "command", "args", "timeoutMs" }` check run before execution. Omitted `command` uses the provider command.
 - `fallbackOn`: failure classes that should try the next provider.
 
+Unknown provider or `healthCheck` fields are rejected. Invalid `output` values are rejected instead of falling back to `stdout`; omit `output` to use the default.
+
 Provider evidence is included in blocked run notes and appended to successful payload notes, including first-attempt success and fallback success. It records attempted providers, failure classes, fallback reasons, selected backend, and final payload source.
 
 See [provider-fallback-architecture.md](docs/provider-fallback-architecture.md) for the Hermes-style research notes, design decisions, and example registries for opencode-go, z.ai, Copilot-like wrappers, Antigravity-like wrappers, Grok-like wrappers, and Hermes-style agents.

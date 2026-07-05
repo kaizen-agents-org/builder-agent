@@ -19,6 +19,7 @@ Issue #24 asked for a Hermes-style comparison of provider registry, fallback, he
 - Keep `KAIZEN_PREFERRED_AGENT` and `KAIZEN_AGENT_PROVIDERS` unchanged for compatibility.
 - Add `KAIZEN_AGENT_PROVIDERS_FILE` for a JSON provider registry. It accepts either the same provider object shape as `KAIZEN_AGENT_PROVIDERS` or `{ "providers": { ... } }`.
 - Add optional per-provider `healthCheck`, `timeoutMs`, `promptTemplate`, and `fallbackOn`.
+- Reject unknown provider or `healthCheck` fields, and reject `output` values other than `stdout` or `last-message`.
 - Classify unstructured provider failures as `command_missing`, `auth_failed`, `rate_limited`, `invalid_payload`, `timeout`, or `provider_blocked`.
 - Default fallback applies to `command_missing`, `auth_failed`, `rate_limited`, `invalid_payload`, and `timeout`. `provider_blocked` stops fallback unless the provider explicitly includes it in `fallbackOn`.
 - Preserve structured provider payloads, including intentional `blocked` payloads, instead of retrying them as availability failures.

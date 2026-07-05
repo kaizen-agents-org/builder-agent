@@ -6,6 +6,8 @@ import { normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
+const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
+const HEALTH_CHECK_FIELDS = new Set(["command", "args", "timeoutMs"]);
 const AGENT_PROVIDERS = {
     codex: {
         command: "codex",
@@ -215,7 +217,9 @@ function createCustomProvider(name, value) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         throw new Error(`Provider "${name}" must be an object.`);
     }
-    const config = value;
+    const configRecord = value;
+    assertKnownFields(configRecord, CUSTOM_PROVIDER_FIELDS, `Provider "${name}"`);
+    const config = configRecord;
     if (typeof config.command !== "string" || !config.command.trim()) {
         throw new Error(`Provider "${name}" must define a command.`);
     }
@@ -226,7 +230,7 @@ function createCustomProvider(name, value) {
     const promptTemplate = typeof config.promptTemplate === "string" && config.promptTemplate.trim()
         ? config.promptTemplate
         : "{{prompt}}";
-    const output = config.output === "last-message" ? "last-message" : "stdout";
+    const output = normalizeProviderOutput(config.output, name);
     const fallbackOn = normalizeFallbackOn(config.fallbackOn, name);
     const timeoutMs = normalizeTimeoutMs(config.timeoutMs, `Provider "${name}" timeoutMs`);
     return {
@@ -240,6 +244,19 @@ function createCustomProvider(name, value) {
             return renderArgs(args, { ...input, prompt: renderedPrompt });
         }
     };
+}
+function assertKnownFields(value, allowedFields, label) {
+    const unsupportedFields = Object.keys(value).filter((key) => !allowedFields.has(key));
+    if (unsupportedFields.length) {
+        throw new Error(`${label} has unsupported field${unsupportedFields.length === 1 ? "" : "s"}: ${unsupportedFields.join(", ")}. Supported fields: ${[...allowedFields].join(", ")}.`);
+    }
+}
+function normalizeProviderOutput(value, name) {
+    if (value === undefined)
+        return "stdout";
+    if (value === "stdout" || value === "last-message")
+        return value;
+    throw new Error(`Provider "${name}" output must be "stdout" or "last-message".`);
 }
 /**
  * @param {unknown} value
@@ -283,7 +300,9 @@ function createHealthCheck(value, providerCommand, name) {
     if (!value || typeof value !== "object" || Array.isArray(value)) {
         throw new Error(`Provider "${name}" healthCheck must be an object.`);
     }
-    const healthCheck = value;
+    const healthCheckRecord = value;
+    assertKnownFields(healthCheckRecord, HEALTH_CHECK_FIELDS, `Provider "${name}" healthCheck`);
+    const healthCheck = healthCheckRecord;
     const command = typeof healthCheck.command === "string" && healthCheck.command.trim()
         ? healthCheck.command
         : providerCommand;

@@ -43,6 +43,8 @@ type CommandResult = {
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const DEFAULT_FALLBACK_ON: AgentFailureClass[] = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
+const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
+const HEALTH_CHECK_FIELDS = new Set(["command", "args", "timeoutMs"]);
 
 const AGENT_PROVIDERS: Record<string, AgentProvider> = {
   codex: {
@@ -284,7 +286,9 @@ function createCustomProvider(name: string, value: unknown): AgentProvider {
     throw new Error(`Provider "${name}" must be an object.`);
   }
 
-  const config = value as AgentProviderConfig;
+  const configRecord = value as Record<string, unknown>;
+  assertKnownFields(configRecord, CUSTOM_PROVIDER_FIELDS, `Provider "${name}"`);
+  const config = configRecord as unknown as AgentProviderConfig;
   if (typeof config.command !== "string" || !config.command.trim()) {
     throw new Error(`Provider "${name}" must define a command.`);
   }
@@ -297,7 +301,7 @@ function createCustomProvider(name: string, value: unknown): AgentProvider {
   const promptTemplate = typeof config.promptTemplate === "string" && config.promptTemplate.trim()
     ? config.promptTemplate
     : "{{prompt}}";
-  const output = config.output === "last-message" ? "last-message" : "stdout";
+  const output = normalizeProviderOutput(config.output, name);
   const fallbackOn = normalizeFallbackOn(config.fallbackOn, name);
   const timeoutMs = normalizeTimeoutMs(config.timeoutMs, `Provider "${name}" timeoutMs`);
   return {
@@ -311,6 +315,19 @@ function createCustomProvider(name: string, value: unknown): AgentProvider {
       return renderArgs(args, { ...input, prompt: renderedPrompt });
     }
   };
+}
+
+function assertKnownFields(value: Record<string, unknown>, allowedFields: Set<string>, label: string): void {
+  const unsupportedFields = Object.keys(value).filter((key) => !allowedFields.has(key));
+  if (unsupportedFields.length) {
+    throw new Error(`${label} has unsupported field${unsupportedFields.length === 1 ? "" : "s"}: ${unsupportedFields.join(", ")}. Supported fields: ${[...allowedFields].join(", ")}.`);
+  }
+}
+
+function normalizeProviderOutput(value: unknown, name: string): AgentProvider["output"] {
+  if (value === undefined) return "stdout";
+  if (value === "stdout" || value === "last-message") return value;
+  throw new Error(`Provider "${name}" output must be "stdout" or "last-message".`);
 }
 
 /**
@@ -356,7 +373,9 @@ function createHealthCheck(value: unknown, providerCommand: string, name: string
     throw new Error(`Provider "${name}" healthCheck must be an object.`);
   }
 
-  const healthCheck = value as { command?: unknown, args?: unknown, timeoutMs?: unknown };
+  const healthCheckRecord = value as Record<string, unknown>;
+  assertKnownFields(healthCheckRecord, HEALTH_CHECK_FIELDS, `Provider "${name}" healthCheck`);
+  const healthCheck = healthCheckRecord as { command?: unknown, args?: unknown, timeoutMs?: unknown };
   const command = typeof healthCheck.command === "string" && healthCheck.command.trim()
     ? healthCheck.command
     : providerCommand;
