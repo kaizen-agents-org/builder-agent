@@ -13,6 +13,10 @@ export function normalizeKaizenLoopPayload(input) {
     if (typeof payload.summary !== "string") {
         throw new Error("Kaizen Loop payload summary must be a string.");
     }
+    const summary = payload.summary.trim();
+    if (summary.length === 0) {
+        throw new Error("Kaizen Loop payload summary must be a non-empty string.");
+    }
     if (typeof payload.notes !== "string") {
         throw new Error("Kaizen Loop payload notes must be a string.");
     }
@@ -21,7 +25,7 @@ export function normalizeKaizenLoopPayload(input) {
     }
     return {
         status: payload.status,
-        summary: payload.summary,
+        summary,
         notes: payload.notes,
         discoveredIssues: normalizeDiscoveredIssues(payload.discoveredIssues),
         ...(typeof payload.blockedReason === "string" ? { blockedReason: payload.blockedReason } : {})
