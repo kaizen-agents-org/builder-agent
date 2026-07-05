@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -407,8 +407,7 @@ console.log(JSON.stringify({
       assert.equal(result.exitCode, 0, failureCase.name);
       assert.equal(result.payload.status, "fixed", failureCase.name);
       assert.equal(result.payload.summary, "implemented after classified fallback", failureCase.name);
-      assert.match(result.payload.notes, failureCase.expectedEvidence, failureCase.name);
-      assert.match(result.payload.notes, /hermes-agent: exitCode=1, status=fallback/, failureCase.name);
+      assertClassifiedProviderEvidence(result.payload.notes, failureCase, "fallback");
       assert.match(result.payload.notes, /claude: exitCode=0, status=selected, failureClass=none/, failureCase.name);
       assert.match(result.payload.notes, /Selected backend: claude/, failureCase.name);
     }
@@ -422,8 +421,7 @@ console.log(JSON.stringify({
       });
 
       assert.equal(result.payload, undefined, failureCase.name);
-      assert.match(result.providerEvidence, failureCase.expectedEvidence, failureCase.name);
-      assert.match(result.providerEvidence, /hermes-agent: exitCode=1, status=stopped/, failureCase.name);
+      assertClassifiedProviderEvidence(result.providerEvidence, failureCase, "stopped");
       assert.doesNotMatch(result.raw, /implemented after classified fallback/, failureCase.name);
     }
   });
@@ -668,49 +666,58 @@ const failureClassificationCases = [
 async function runFailureClassificationFixture({ failureCase, fallbackOn }) {
   const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
   const binDir = join(dir, "bin");
-  await mkdir(binDir);
+  try {
+    await mkdir(binDir);
 
-  const providerCommand = failureCase.missingCommand ? "missing-builder-agent-command" : "hermes-agent";
-  if (!failureCase.missingCommand) {
-    const fakeHermesPath = join(binDir, "hermes-agent");
-    await writeFile(
-      fakeHermesPath,
-      `#!/usr/bin/env node
+    const providerCommand = failureCase.missingCommand ? "missing-builder-agent-command" : "hermes-agent";
+    if (!failureCase.missingCommand) {
+      const fakeHermesPath = join(binDir, "hermes-agent");
+      await writeFile(
+        fakeHermesPath,
+        `#!/usr/bin/env node
 console.error(${JSON.stringify(failureCase.stderr)});
 process.exit(1);
 `,
-      "utf8"
-    );
-    await chmod(fakeHermesPath, 0o755);
-  }
+        "utf8"
+      );
+      await chmod(fakeHermesPath, 0o755);
+    }
 
-  const fakeClaudePath = join(binDir, "claude");
-  await writeFile(
-    fakeClaudePath,
-    `#!/usr/bin/env node
+    const fakeClaudePath = join(binDir, "claude");
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
 console.log(JSON.stringify({
   result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after classified fallback\",\"notes\":\"checked\"}\n```")}
 }));
 `,
-    "utf8"
-  );
-  await chmod(fakeClaudePath, 0o755);
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
 
-  return runImplementationAgent({
-    agent: "hermes-agent,claude",
-    prompt: "Fix issue #1",
-    workspaceDir: dir,
-    env: {
-      ...process.env,
-      PATH: `${binDir}:${process.env.PATH}`,
-      KAIZEN_AGENT_PROVIDERS: JSON.stringify({
-        "hermes-agent": {
-          command: providerCommand,
-          args: ["run", "{{prompt}}"],
-          fallbackOn,
-          output: "stdout"
-        }
-      })
-    }
-  });
+    return await runImplementationAgent({
+      agent: "hermes-agent,claude",
+      prompt: "Fix issue #1",
+      workspaceDir: dir,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+          "hermes-agent": {
+            command: providerCommand,
+            args: ["run", "{{prompt}}"],
+            fallbackOn,
+            output: "stdout"
+          }
+        })
+      }
+    });
+  } finally {
+    await rm(dir, { force: true, recursive: true });
+  }
+}
+
+function assertClassifiedProviderEvidence(evidence, failureCase, status) {
+  assert.match(evidence, failureCase.expectedEvidence, failureCase.name);
+  assert.match(evidence, new RegExp(`hermes-agent: exitCode=1, status=${status}`), failureCase.name);
 }
