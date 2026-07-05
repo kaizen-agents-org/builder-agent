@@ -1069,6 +1069,37 @@ console.log(JSON.stringify({
     assert.match(result.notes, /Selected backend: claude/);
   });
 
+  it("falls back for command-missing, timeout, and rate-limited failures when fallbackOn opts in", async () => {
+    for (const failureCase of failureClassificationCases) {
+      const { result } = await runFailureClassificationFixture({
+        failureCase,
+        fallbackOn: [failureCase.failureClass]
+      });
+
+      assert.equal(result.status, "fixed", failureCase.name);
+      assert.equal(result.summary, "implemented after classified fallback", failureCase.name);
+      assert.match(result.notes, failureCase.expectedEvidence, failureCase.name);
+      assert.match(result.notes, /hermes-agent: exitCode=1, status=fallback/, failureCase.name);
+      assert.match(result.notes, /claude: exitCode=0, status=selected, failureClass=none/, failureCase.name);
+      assert.match(result.notes, /Selected backend: claude/, failureCase.name);
+    }
+  });
+
+  it("stops fallback for command-missing, timeout, and rate-limited failures when fallbackOn opts out", async () => {
+    for (const failureCase of failureClassificationCases) {
+      const { result, error } = await runFailureClassificationFixture({
+        failureCase,
+        fallbackOn: []
+      });
+
+      assert.match(error.message, /Command exited with 2/, failureCase.name);
+      assert.equal(result.status, "blocked", failureCase.name);
+      assert.match(result.notes, failureCase.expectedEvidence, failureCase.name);
+      assert.match(result.notes, /hermes-agent: exitCode=1, status=stopped/, failureCase.name);
+      assert.doesNotMatch(result.notes, /implemented after classified fallback/, failureCase.name);
+    }
+  });
+
   it("stops fallback for provider-blocked failures unless the provider opts in", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
@@ -1304,6 +1335,57 @@ console.log(JSON.stringify({
   });
 });
 
+const failureClassificationCases = [
+  {
+    name: "ENOENT error code",
+    failureClass: "command_missing",
+    missingCommand: true,
+    expectedEvidence: /hermes-agent: exitCode=1, status=(fallback|stopped), failureClass=command_missing/
+  },
+  {
+    name: "command not found raw output",
+    failureClass: "command_missing",
+    stderr: "shell: command not found: missing-provider",
+    expectedEvidence: /hermes-agent: exitCode=1, status=(fallback|stopped), failureClass=command_missing/
+  },
+  {
+    name: "timed out raw output",
+    failureClass: "timeout",
+    stderr: "agent timed out while waiting for a response",
+    expectedEvidence: /hermes-agent: exitCode=1, status=(fallback|stopped), failureClass=timeout/
+  },
+  {
+    name: "timeout raw output",
+    failureClass: "timeout",
+    stderr: "agent timeout exceeded",
+    expectedEvidence: /hermes-agent: exitCode=1, status=(fallback|stopped), failureClass=timeout/
+  },
+  {
+    name: "429 raw output",
+    failureClass: "rate_limited",
+    stderr: "provider returned HTTP 429",
+    expectedEvidence: /hermes-agent: exitCode=1, status=(fallback|stopped), failureClass=rate_limited/
+  },
+  {
+    name: "rate limit raw output",
+    failureClass: "rate_limited",
+    stderr: "provider rate limit reached",
+    expectedEvidence: /hermes-agent: exitCode=1, status=(fallback|stopped), failureClass=rate_limited/
+  },
+  {
+    name: "too many requests raw output",
+    failureClass: "rate_limited",
+    stderr: "too many requests for this account",
+    expectedEvidence: /hermes-agent: exitCode=1, status=(fallback|stopped), failureClass=rate_limited/
+  },
+  {
+    name: "quota exceeded raw output",
+    failureClass: "rate_limited",
+    stderr: "quota exceeded for this project",
+    expectedEvidence: /hermes-agent: exitCode=1, status=(fallback|stopped), failureClass=rate_limited/
+  }
+];
+
 function createAdapter({ reviews }) {
   const calls = {
     improve: 0
@@ -1339,6 +1421,67 @@ function createAdapter({ reviews }) {
       };
     }
   };
+}
+
+async function runFailureClassificationFixture({ failureCase, fallbackOn }) {
+  const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+  const binDir = join(dir, "bin");
+  const resultPath = join(dir, "build-result.json");
+  await mkdir(binDir);
+
+  const providerCommand = failureCase.missingCommand ? "missing-builder-agent-command" : "hermes-agent";
+  if (!failureCase.missingCommand) {
+    const fakeHermesPath = join(binDir, "hermes-agent");
+    await writeFile(
+      fakeHermesPath,
+      `#!/usr/bin/env node
+console.error(${JSON.stringify(failureCase.stderr)});
+process.exit(1);
+`,
+      "utf8"
+    );
+    await chmod(fakeHermesPath, 0o755);
+  }
+
+  const fakeClaudePath = join(binDir, "claude");
+  await writeFile(
+    fakeClaudePath,
+    `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after classified fallback\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+    "utf8"
+  );
+  await chmod(fakeClaudePath, 0o755);
+
+  let stdout = "";
+  let error;
+  try {
+    const output = await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "hermes-agent,claude",
+        KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+          "hermes-agent": {
+            command: providerCommand,
+            args: ["run", "{{prompt}}"],
+            fallbackOn,
+            output: "stdout"
+          }
+        })
+      }
+    });
+    stdout = output.stdout;
+  } catch (caught) {
+    error = caught;
+  }
+
+  const result = JSON.parse(await readFile(resultPath, "utf8"));
+  return { stdout, result, error };
 }
 
 function spawnWithInput(command, args, input, options) {
