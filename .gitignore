@@ -3,3 +3,4 @@
 .serena/
 coverage/
 node_modules/
+.test-build/
