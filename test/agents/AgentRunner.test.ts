@@ -297,6 +297,103 @@ console.log(JSON.stringify({
     assert.equal(result.payload.summary, "implemented by hermes-style provider");
     assert.deepEqual(args, ["run", "--input", "Hermes task:\nFix issue #1"]);
   });
+
+  it("rejects unsupported custom provider fields from KAIZEN_AGENT_PROVIDERS", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    try {
+      const result = await runImplementationAgent({
+        agent: "hermes-agent",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "hermes-agent": {
+              command: process.execPath,
+              args: ["-e", "console.log('should not run')"],
+              output: "stdout",
+              extraSetting: true
+            }
+          })
+        }
+      });
+
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.payload, undefined);
+      assert.match(result.raw, /Provider "hermes-agent" has unsupported field: extraSetting/);
+      assert.match(result.raw, /Supported fields: command, args, promptTemplate, output, timeoutMs, fallbackOn, healthCheck/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects invalid custom provider output values from KAIZEN_AGENT_PROVIDERS", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    try {
+      const result = await runImplementationAgent({
+        agent: "hermes-agent",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "hermes-agent": {
+              command: process.execPath,
+              args: ["-e", "console.log('should not run')"],
+              output: "last_message"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.payload, undefined);
+      assert.match(result.raw, /Provider "hermes-agent" output must be "stdout" or "last-message"/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects unsupported health check fields from KAIZEN_AGENT_PROVIDERS_FILE", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const providerConfigPath = join(dir, "providers.json");
+    try {
+      await writeFile(
+        providerConfigPath,
+        JSON.stringify({
+          providers: {
+            "hermes-agent": {
+              command: process.execPath,
+              args: ["-e", "console.log('should not run')"],
+              output: "stdout",
+              healthCheck: {
+                args: ["--version"],
+                retries: 2
+              }
+            }
+          }
+        }),
+        "utf8"
+      );
+
+      const result = await runImplementationAgent({
+        agent: "hermes-agent",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS_FILE: providerConfigPath
+        }
+      });
+
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.payload, undefined);
+      assert.match(result.raw, /Provider "hermes-agent" healthCheck has unsupported field: retries/);
+      assert.match(result.raw, /Supported fields: command, args, timeoutMs/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
 });
 
 describe("AgentRunner fallback classification", () => {
