@@ -17,6 +17,8 @@
     },
     "summary": {
       "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
       "description": "Short implementation summary for the source issue or task."
     },
     "notes": {

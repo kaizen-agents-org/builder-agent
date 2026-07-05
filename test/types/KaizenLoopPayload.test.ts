@@ -20,7 +20,7 @@ describe("KaizenLoopPayload", () => {
 
     assert.deepEqual(payload, {
       status: "partial",
-      summary: "  Implemented most of the change.  ",
+      summary: "Implemented most of the change.",
       notes: "Ran targeted checks.",
       discoveredIssues: [
         {
@@ -30,6 +30,25 @@ describe("KaizenLoopPayload", () => {
         }
       ]
     });
+  });
+
+  it("rejects empty kaizen-loop payload summaries", () => {
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "fixed",
+        summary: "",
+        notes: ""
+      }),
+      /summary must be a non-empty string/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "fixed",
+        summary: "   \n\t  ",
+        notes: ""
+      }),
+      /summary must be a non-empty string/
+    );
   });
 
   it("rejects malformed kaizen-loop discovered issues explicitly", () => {
@@ -66,6 +85,8 @@ describe("KaizenLoopPayload", () => {
     const schema = JSON.parse(await readFile("schemas/kaizen-loop-payload.schema.json", "utf8"));
 
     assert.deepEqual(schema.properties.status.enum, ["fixed", "partial", "blocked"]);
+    assert.equal(schema.properties.summary.minLength, 1);
+    assert.equal(schema.properties.summary.pattern, "\\S");
     assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
     assert.equal(schema.required.includes("discoveredIssues"), false);
   });
