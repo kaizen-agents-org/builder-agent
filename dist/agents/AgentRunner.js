@@ -84,12 +84,7 @@ export function normalizeAgent(value) {
 }
 export function normalizeAgents(value) {
     const requested = Array.isArray(value) ? value : splitAgentList(value);
-    const normalized = unique(requested.length ? requested : ["codex"]);
-    for (const fallback of fallbackAgents(normalized)) {
-        if (!normalized.includes(fallback))
-            normalized.push(fallback);
-    }
-    return normalized;
+    return unique(requested.length ? requested : ["codex", "claude"]);
 }
 /**
  * @param {{
@@ -407,9 +402,6 @@ function unique(values) {
 /**
  * @param {AgentKind[]} requested
  */
-function fallbackAgents(requested) {
-    return ["codex", "claude"];
-}
 /**
  * @param {AgentRunResult & { failureClass?: string }} attempt
  * @param {{ fallbackOn?: string[] } | undefined} provider
@@ -460,7 +452,7 @@ function appendProviderEvidence(payload, attempts) {
     };
 }
 function shouldAppendProviderEvidence(payload) {
-    return payload.status === "fixed" || payload.status === "partial";
+    return payload.status === "fixed" || payload.status === "partial" || payload.status === "blocked";
 }
 /**
  * @param {Array<AgentRunResult & { agent?: AgentKind, failureClass?: string, payloadSource?: string, fallbackAllowed?: boolean, fallbackReason?: string }>} attempts

@@ -128,13 +128,7 @@ export function normalizeAgent(value: string | undefined): AgentKind {
 
 export function normalizeAgents(value: string | string[] | undefined): AgentKind[] {
   const requested = Array.isArray(value) ? value : splitAgentList(value);
-  const normalized = unique(requested.length ? requested : ["codex"]) as AgentKind[];
-
-  for (const fallback of fallbackAgents(normalized)) {
-    if (!normalized.includes(fallback)) normalized.push(fallback);
-  }
-
-  return normalized;
+  return unique(requested.length ? requested : ["codex", "claude"]) as AgentKind[];
 }
 
 /**
@@ -490,10 +484,6 @@ function unique(values: string[]): string[] {
 /**
  * @param {AgentKind[]} requested
  */
-function fallbackAgents(requested: AgentKind[]): AgentKind[] {
-  return ["codex", "claude"];
-}
-
 /**
  * @param {AgentRunResult & { failureClass?: string }} attempt
  * @param {{ fallbackOn?: string[] } | undefined} provider
@@ -548,7 +538,7 @@ function appendProviderEvidence(payload: KaizenLoopPayload, attempts: AgentAttem
 }
 
 function shouldAppendProviderEvidence(payload: KaizenLoopPayload): boolean {
-  return payload.status === "fixed" || payload.status === "partial";
+  return payload.status === "fixed" || payload.status === "partial" || payload.status === "blocked";
 }
 
 /**
