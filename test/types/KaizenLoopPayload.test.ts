@@ -81,13 +81,65 @@ describe("KaizenLoopPayload", () => {
     );
   });
 
+  it("requires blockedReason only for blocked kaizen-loop payloads", () => {
+    assert.equal(
+      normalizeKaizenLoopPayload({
+        status: "blocked",
+        summary: "Blocked by missing credentials.",
+        notes: "Provider could not run.",
+        blockedReason: "  Missing ANTHROPIC_API_KEY.  "
+      }).blockedReason,
+      "Missing ANTHROPIC_API_KEY."
+    );
+
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "blocked",
+        summary: "Blocked.",
+        notes: ""
+      }),
+      /blockedReason must be a non-empty string when status is blocked/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "blocked",
+        summary: "Blocked.",
+        notes: "",
+        blockedReason: "   "
+      }),
+      /blockedReason must be a non-empty string when status is blocked/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "fixed",
+        summary: "Fixed.",
+        notes: "",
+        blockedReason: "No longer blocked."
+      }),
+      /blockedReason is only valid when status is blocked/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Partially fixed.",
+        notes: "",
+        blockedReason: "No longer blocked."
+      }),
+      /blockedReason is only valid when status is blocked/
+    );
+  });
+
   it("publishes the kaizen-loop payload schema", async () => {
     const schema = JSON.parse(await readFile("schemas/kaizen-loop-payload.schema.json", "utf8"));
 
     assert.deepEqual(schema.properties.status.enum, ["fixed", "partial", "blocked"]);
     assert.equal(schema.properties.summary.minLength, 1);
     assert.equal(schema.properties.summary.pattern, "\\S");
+    assert.equal(schema.properties.blockedReason.minLength, 1);
+    assert.equal(schema.properties.blockedReason.pattern, "\\S");
+    assert.equal(schema.allOf.length, 2);
     assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
     assert.equal(schema.required.includes("discoveredIssues"), false);
+    assert.equal(schema.required.includes("blockedReason"), false);
   });
 });
