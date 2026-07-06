@@ -30,13 +30,21 @@ export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
   if (payload.blockedReason !== undefined && typeof payload.blockedReason !== "string") {
     throw new Error("Kaizen Loop payload blockedReason must be a string.");
   }
+  const blockedReason = typeof payload.blockedReason === "string" ? payload.blockedReason.trim() : undefined;
+  if (payload.status === "blocked") {
+    if (!blockedReason) {
+      throw new Error("Kaizen Loop payload blockedReason must be a non-empty string when status is blocked.");
+    }
+  } else if (blockedReason !== undefined) {
+    throw new Error("Kaizen Loop payload blockedReason is only valid when status is blocked.");
+  }
 
   return {
     status: payload.status,
     summary,
     notes: payload.notes,
     discoveredIssues: normalizeDiscoveredIssues(payload.discoveredIssues),
-    ...(typeof payload.blockedReason === "string" ? { blockedReason: payload.blockedReason } : {})
+    ...(blockedReason ? { blockedReason } : {})
   };
 }
 
