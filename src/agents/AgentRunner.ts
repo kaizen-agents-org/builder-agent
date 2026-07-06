@@ -128,7 +128,8 @@ export function normalizeAgent(value: string | undefined): AgentKind {
 
 export function normalizeAgents(value: string | string[] | undefined): AgentKind[] {
   const requested = Array.isArray(value) ? value : splitAgentList(value);
-  return unique(requested.length ? requested : ["codex", "claude"]) as AgentKind[];
+  const normalized = unique(requested);
+  return (normalized.length ? normalized : ["codex", "claude"]) as AgentKind[];
 }
 
 /**

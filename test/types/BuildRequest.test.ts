@@ -14,6 +14,7 @@ describe("BuildRequest", () => {
 
   it("normalizes agent defaults to codex first", () => {
     assert.deepEqual(normalizeAgents(undefined), ["codex", "claude"]);
+    assert.deepEqual(normalizeAgents(" , \n\t "), ["codex", "claude"]);
     assert.equal(normalizeAgent(undefined), "codex");
   });
 

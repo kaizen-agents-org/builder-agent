@@ -84,7 +84,8 @@ export function normalizeAgent(value) {
 }
 export function normalizeAgents(value) {
     const requested = Array.isArray(value) ? value : splitAgentList(value);
-    return unique(requested.length ? requested : ["codex", "claude"]);
+    const normalized = unique(requested);
+    return (normalized.length ? normalized : ["codex", "claude"]);
 }
 /**
  * @param {{
