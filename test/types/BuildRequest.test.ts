@@ -14,11 +14,13 @@ describe("BuildRequest", () => {
 
   it("normalizes agent defaults to codex first", () => {
     assert.deepEqual(normalizeAgents(undefined), ["codex", "claude"]);
+    assert.deepEqual(normalizeAgents(" , \n\t "), ["codex", "claude"]);
     assert.equal(normalizeAgent(undefined), "codex");
   });
 
-  it("normalizes custom provider fallbacks to codex first", () => {
-    assert.deepEqual(normalizeAgents("opencode-go"), ["opencode-go", "codex", "claude"]);
+  it("honors explicit custom provider fallback order exactly", () => {
+    assert.deepEqual(normalizeAgents("opencode-go"), ["opencode-go"]);
+    assert.deepEqual(normalizeAgents("opencode-go,codex,claude"), ["opencode-go", "codex", "claude"]);
   });
 
   it("rejects unknown build request fields", () => {

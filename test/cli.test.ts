@@ -229,7 +229,7 @@ console.log(JSON.stringify({
     const result = JSON.parse(await readFile(resultPath, "utf8"));
 
     assert.equal(result.status, "blocked");
-    assert.equal(result.summary, "Builder agent exited with code 1.");
+    assert.equal(result.summary, "Builder agent did not return the required Kaizen Loop JSON payload.");
     assert.match(result.notes, /Agent "claude" exited with code 0/);
     assert.match(result.notes, /Failure class: invalid_payload/);
     assert.deepEqual(result.discoveredIssues, []);

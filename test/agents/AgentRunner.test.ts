@@ -193,6 +193,58 @@ console.log(JSON.stringify({
     assert.deepEqual(args, ["run", "--cwd", dir, "--model", "zai-coder", "Fix issue #1"]);
   });
 
+  it("does not append built-in providers to an explicit custom-only list", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const codexMarkerPath = join(dir, "codex-called");
+    await mkdir(binDir);
+    await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
+    const fakeCustomPath = join(binDir, "opencode-go");
+    const fakeCodexPath = join(binDir, "codex");
+
+    await writeFile(
+      fakeCustomPath,
+      `#!/usr/bin/env node
+console.error("custom provider returned no payload");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+(async () => {
+const { writeFileSync } = await import("node:fs");
+writeFileSync(${JSON.stringify(codexMarkerPath)}, "called");
+})();
+`,
+      "utf8"
+    );
+    await chmod(fakeCustomPath, 0o755);
+    await chmod(fakeCodexPath, 0o755);
+
+    const result = await runImplementationAgent({
+      agent: "opencode-go",
+      prompt: "Fix issue #1",
+      workspaceDir: dir,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+          "opencode-go": {
+            command: "opencode-go",
+            output: "stdout"
+          }
+        })
+      }
+    });
+
+    assert.equal(result.exitCode, 1);
+    assert.equal(result.payload, undefined);
+    assert.match(result.providerEvidence, /opencode-go: exitCode=1, status=fallback, failureClass=invalid_payload/);
+    await assert.rejects(readFile(codexMarkerPath, "utf8"));
+  });
+
   it("omits custom provider flag-value pairs when a placeholder value is empty", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
@@ -703,7 +755,11 @@ process.exit(2);
     assert.equal(result.exitCode, 2);
     assert.equal(result.payload.status, "blocked");
     assert.equal(result.payload.summary, "provider reported a structured block");
-    assert.equal(result.payload.notes, "captured provider detail");
+    assert.match(result.payload.notes, /captured provider detail/);
+    assert.match(result.payload.notes, /Provider evidence:/);
+    assert.match(result.payload.notes, /codex: exitCode=2, status=selected, failureClass=none, fallbackReason=none, payloadSource=last-message/);
+    assert.match(result.payload.notes, /Selected backend: codex/);
+    assert.match(result.payload.notes, /Final payload source: last-message/);
     assert.equal(result.payload.blockedReason, "provider limit reached");
     assert.deepEqual(result.payload.discoveredIssues, [{ title: "Provider limit", severity: "medium" }]);
   });
