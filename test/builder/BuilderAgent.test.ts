@@ -89,6 +89,11 @@ describe("BuilderAgent", () => {
 
   it("preserves completed iteration artifacts when a later adapter step fails", async () => {
     const adapter = createAdapter({ reviews: [failingReview] });
+    adapter.implement = async () => ({
+      changedFiles: ["src/feature.js"],
+      residualNotes: ["Implemented initial path; verification not rerun."],
+      discoveredIssues: [{ title: "Follow-up verifier diagnostic", repo: "verifier" }]
+    });
     adapter.improve = async () => {
       throw new Error("adapter improve failed");
     };
@@ -99,6 +104,13 @@ describe("BuilderAgent", () => {
     });
 
     assert.equal(result.status, "failed");
+    assert.equal(result.iterations, 1);
+    assert.deepEqual(result.changedFiles, ["src/feature.js"]);
+    assert.deepEqual(result.discoveredIssues, [{ title: "Follow-up verifier diagnostic", repo: "verifier" }]);
+    assert.deepEqual(result.residualNotes, [
+      "Implemented initial path; verification not rerun.",
+      "adapter improve failed"
+    ]);
     assert.equal(result.iterationArtifacts.length, 1);
     assert.equal(result.iterationArtifacts[0].implementationSummary, "Changed files: src/feature.js");
   });
