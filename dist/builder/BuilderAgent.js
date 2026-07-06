@@ -11,21 +11,27 @@ export class BuilderAgent {
     async build(input) {
         const iterationArtifacts = [];
         let request;
+        let taskUnderstanding;
+        let planSummary;
+        let changedFiles = [];
+        let discoveredIssues = [];
+        let residualNotes = [];
         try {
             request = normalizeBuildRequest(input);
             assertAdapter(this.adapter);
             const analysis = await this.adapter.analyzeTask({ request });
-            const taskUnderstanding = createTaskUnderstanding({ request, analysis });
+            taskUnderstanding = createTaskUnderstanding({ request, analysis });
             const plan = await this.adapter.createPlan({ request, analysis });
-            const planSummary = summarizePlan(plan);
+            planSummary = summarizePlan(plan);
             let implementation = await this.adapter.implement({
                 request,
                 analysis,
                 plan,
                 iteration: 1
             });
-            let changedFiles = extractChangedFiles(implementation);
-            let discoveredIssues = extractDiscoveredIssues(implementation);
+            changedFiles = extractChangedFiles(implementation);
+            discoveredIssues = extractDiscoveredIssues(implementation);
+            residualNotes = extractResidualNotes(implementation);
             let latestReview;
             for (let iteration = 1; iteration <= request.maxIterations; iteration += 1) {
                 latestReview = normalizeSelfReview(await this.adapter.selfReview({
@@ -46,7 +52,7 @@ export class BuilderAgent {
                         planSummary,
                         changedFiles,
                         review: latestReview,
-                        residualNotes: extractResidualNotes(implementation),
+                        residualNotes,
                         discoveredIssues,
                         threshold: request.threshold
                     }), iterationArtifacts);
@@ -61,7 +67,7 @@ export class BuilderAgent {
                         review: latestReview,
                         residualNotes: [
                             `Self-review did not pass within ${request.maxIterations} iteration(s).`,
-                            ...extractResidualNotes(implementation)
+                            ...residualNotes
                         ],
                         discoveredIssues,
                         threshold: request.threshold
@@ -78,6 +84,7 @@ export class BuilderAgent {
                 });
                 changedFiles = uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles");
                 discoveredIssues = dedupeDiscoveredIssues([...discoveredIssues, ...extractDiscoveredIssues(implementation)]);
+                residualNotes = uniqueStrings([...residualNotes, ...extractResidualNotes(implementation)], "residualNotes");
             }
             return attachIterationArtifacts(createBuildResult({
                 status: "blocked",
@@ -93,7 +100,18 @@ export class BuilderAgent {
         }
         catch (error) {
             const message = error instanceof Error ? error.message : String(error);
-            return attachIterationArtifacts(createFailedBuildResult(message), iterationArtifacts);
+            const fallback = createFailedBuildResult(message);
+            return attachIterationArtifacts(createBuildResult({
+                status: "failed",
+                iterations: iterationArtifacts.length,
+                taskUnderstanding: taskUnderstanding ?? fallback.taskUnderstanding,
+                planSummary: planSummary ?? fallback.planSummary,
+                changedFiles,
+                review: fallback.review,
+                residualNotes: uniqueStrings([...residualNotes, message], "residualNotes"),
+                discoveredIssues,
+                threshold: request?.threshold
+            }), iterationArtifacts);
         }
     }
 }
