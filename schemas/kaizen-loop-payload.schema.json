@@ -9,6 +9,36 @@
     "summary",
     "notes"
   ],
+  "allOf": [
+    {
+      "if": {
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "const": "blocked"
+          }
+        }
+      },
+      "then": {
+        "required": ["blockedReason"]
+      }
+    },
+    {
+      "if": {
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "enum": ["fixed", "partial"]
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": ["blockedReason"]
+        }
+      }
+    }
+  ],
   "properties": {
     "status": {
       "type": "string",
@@ -27,6 +57,8 @@
     },
     "blockedReason": {
       "type": "string",
+      "minLength": 1,
+      "pattern": "\\S",
       "description": "Reason the builder could not complete the task when status is blocked."
     },
     "discoveredIssues": {
