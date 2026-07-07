@@ -57,7 +57,7 @@
     },
     "changedFiles": {
       "type": "array",
-      "description": "Files changed by the builder.",
+      "description": "Files reported by the builder adapter and reconciled with workspace changes when git metadata is available.",
       "items": {
         "type": "string",
         "minLength": 1

@@ -1,6 +1,10 @@
-import { spawn } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { execFile, spawn } from "node:child_process";
+import { mkdir, mkdtemp, readdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { promisify } from "node:util";
+
+const execFileAsync = promisify(execFile);
 
 export const passingReview = {
   score: 90,
@@ -116,4 +120,24 @@ export async function listFiles(root) {
   }
 
   return files;
+}
+
+export async function createGitWorkspace() {
+  const dir = await mkdtemp(join(tmpdir(), "builder-agent-workspace-"));
+  await execGit(["init"], dir);
+  await execGit(["config", "user.email", "builder-agent-test@example.com"], dir);
+  await execGit(["config", "user.name", "Builder Agent Test"], dir);
+  await writeFile(join(dir, "README.md"), "initial\n", "utf8");
+  await execGit(["add", "README.md"], dir);
+  await execGit(["commit", "-m", "initial"], dir);
+  await mkdir(join(dir, "src"), { recursive: true });
+  await writeFile(join(dir, "src", "feature.js"), "export const value = 1;\n", "utf8");
+  await execGit(["add", "src/feature.js"], dir);
+  await execGit(["commit", "-m", "add feature"], dir);
+  return dir;
+}
+
+export async function execGit(args, cwd) {
+  const { stdout } = await execFileAsync("git", args, { cwd, encoding: "utf8" });
+  return stdout;
 }

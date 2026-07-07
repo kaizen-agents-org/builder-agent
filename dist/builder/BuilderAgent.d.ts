@@ -1,7 +1,11 @@
 import type { BuildRequestInput, BuildResult, BuilderAdapter } from "../types/contracts.js";
+export interface BuilderAgentOptions {
+    workspaceDir?: string;
+}
 export declare class BuilderAgent {
     adapter: BuilderAdapter;
-    constructor(adapter: BuilderAdapter);
+    workspaceDir: string;
+    constructor(adapter: BuilderAdapter, options?: BuilderAgentOptions);
     build(input: BuildRequestInput): Promise<BuildResult>;
 }
 /**
