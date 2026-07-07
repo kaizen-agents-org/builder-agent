@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { createHash } from "node:crypto";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { normalizeSelfReview } from "../review/SelfReview.js";
 import { normalizeBuildRequest } from "../types/BuildRequest.js";
@@ -201,14 +204,14 @@ async function createWorkspaceChangeTracker(workspaceDir) {
     if (!snapshot.ok) {
         return {
             workspaceDir,
-            baseline: new Set(),
+            baseline: new Map(),
             disabled: true,
             residualNotes: [WORKSPACE_RECONCILIATION_NOTE]
         };
     }
     return {
         workspaceDir,
-        baseline: new Set(snapshot.changedFiles),
+        baseline: snapshot.fingerprints,
         disabled: false,
         residualNotes: []
     };
@@ -223,7 +226,7 @@ async function reconcileChangedFiles(reportedChangedFiles, tracker) {
         tracker.residualNotes = uniqueStrings([...tracker.residualNotes, WORKSPACE_RECONCILIATION_NOTE], "residualNotes");
         return reportedChangedFiles;
     }
-    const actualChangedFiles = snapshot.changedFiles.filter((file) => !tracker.baseline.has(file));
+    const actualChangedFiles = snapshot.changedFiles.filter((file) => tracker.baseline.get(file) !== snapshot.fingerprints.get(file));
     return uniqueStrings([...reportedChangedFiles, ...actualChangedFiles], "changedFiles");
 }
 async function captureWorkspaceChangedFiles(workspaceDir) {
@@ -236,14 +239,29 @@ async function captureWorkspaceChangedFiles(workspaceDir) {
             runGit(["diff", "--name-only", "HEAD", "--"], workspaceDir),
             runGit(["ls-files", "--others", "--exclude-standard"], workspaceDir)
         ]);
+        const changedFiles = uniqueStrings([...lines(trackedChanges), ...lines(untrackedChanges)], "changedFiles");
         return {
             ok: true,
-            changedFiles: uniqueStrings([...lines(trackedChanges), ...lines(untrackedChanges)], "changedFiles")
+            changedFiles,
+            fingerprints: await fingerprintWorkspaceFiles(workspaceDir, changedFiles)
         };
     }
     catch {
         return { ok: false };
     }
+}
+async function fingerprintWorkspaceFiles(workspaceDir, files) {
+    const fingerprints = new Map();
+    await Promise.all(files.map(async (file) => {
+        try {
+            const content = await readFile(join(workspaceDir, file));
+            fingerprints.set(file, createHash("sha256").update(content).digest("hex"));
+        }
+        catch {
+            fingerprints.set(file, "missing");
+        }
+    }));
+    return fingerprints;
 }
 async function runGit(args, cwd) {
     const { stdout } = await execFileAsync("git", args, { cwd, encoding: "utf8" });

@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import { BuilderAgent } from "../../dist/index.js";
-import { createAdapter, createGitWorkspace, failingReview, passingReview } from "../helpers.ts";
+import { createAdapter, createGitWorkspace, execGit, failingReview, passingReview } from "../helpers.ts";
 
 describe("BuilderAgent", () => {
   it("returns ready when the first self-review passes", async () => {
@@ -73,6 +73,40 @@ describe("BuilderAgent", () => {
       await writeFile(join(workspaceDir, "src", "feature.js"), "export const value = 2;\n", "utf8");
       return {
         summary: "Updated feature implementation.",
+        residualNotes: []
+      };
+    };
+
+    const result = await new BuilderAgent(adapter, { workspaceDir }).build({ task: "Implement a small feature." });
+
+    assert.deepEqual(result.changedFiles, ["src/feature.js"]);
+    assert.deepEqual(result.iterationArtifacts[0].changedFiles, ["src/feature.js"]);
+  });
+
+  it("does not report dirty files that predate the build", async () => {
+    const workspaceDir = await createGitWorkspace();
+    await writeFile(join(workspaceDir, "src", "feature.js"), "export const value = 2;\n", "utf8");
+    const adapter = createAdapter({ reviews: [passingReview] });
+    adapter.implement = async () => ({
+      changedFiles: [],
+      residualNotes: []
+    });
+
+    const result = await new BuilderAgent(adapter, { workspaceDir }).build({ task: "Implement a small feature." });
+
+    assert.deepEqual(result.changedFiles, []);
+    assert.deepEqual(await execGit(["diff", "--name-only", "HEAD", "--"], workspaceDir), "src/feature.js\n");
+  });
+
+  it("reports dirty files that are edited during the build", async () => {
+    const workspaceDir = await createGitWorkspace();
+    const featurePath = join(workspaceDir, "src", "feature.js");
+    await writeFile(featurePath, "export const value = 2;\n", "utf8");
+    const adapter = createAdapter({ reviews: [passingReview] });
+    adapter.implement = async () => {
+      await writeFile(featurePath, "export const value = 3;\n", "utf8");
+      return {
+        changedFiles: [],
         residualNotes: []
       };
     };
