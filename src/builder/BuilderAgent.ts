@@ -1,3 +1,5 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { normalizeSelfReview } from "../review/SelfReview.js";
 import { normalizeBuildRequest } from "../types/BuildRequest.js";
 import { createBuildResult, createFailedBuildResult, normalizeDiscoveredIssues, uniqueStrings } from "../types/BuildResult.js";
@@ -5,12 +7,20 @@ import type { BuildRequest, BuildRequestInput, BuildResult, BuilderAdapter, Disc
 
 const REQUIRED_ADAPTER_METHODS = ["analyzeTask", "createPlan", "implement", "selfReview", "improve"];
 const ITERATION_ARTIFACTS_PROPERTY = "iterationArtifacts";
+const WORKSPACE_RECONCILIATION_NOTE = "Workspace changed-files reconciliation could not run because git metadata was unavailable or unreadable.";
+const execFileAsync = promisify(execFile);
+
+export interface BuilderAgentOptions {
+  workspaceDir?: string;
+}
 
 export class BuilderAgent {
   adapter: BuilderAdapter;
+  workspaceDir: string;
 
-  constructor(adapter: BuilderAdapter) {
+  constructor(adapter: BuilderAdapter, options: BuilderAgentOptions = {}) {
     this.adapter = adapter;
+    this.workspaceDir = options.workspaceDir ?? process.cwd();
   }
 
   async build(input: BuildRequestInput): Promise<BuildResult> {
@@ -25,6 +35,8 @@ export class BuilderAgent {
     try {
       request = normalizeBuildRequest(input);
       assertAdapter(this.adapter);
+      const workspaceTracker = await createWorkspaceChangeTracker(this.workspaceDir);
+      residualNotes = uniqueStrings([...residualNotes, ...workspaceTracker.residualNotes], "residualNotes");
 
       const analysis = await this.adapter.analyzeTask({ request });
       taskUnderstanding = createTaskUnderstanding({ request, analysis });
@@ -36,9 +48,9 @@ export class BuilderAgent {
         plan,
         iteration: 1
       });
-      changedFiles = extractChangedFiles(implementation);
+      changedFiles = await reconcileChangedFiles(extractChangedFiles(implementation), workspaceTracker);
       discoveredIssues = extractDiscoveredIssues(implementation);
-      residualNotes = extractResidualNotes(implementation);
+      residualNotes = uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
       let latestReview;
 
       for (let iteration = 1; iteration <= request.maxIterations; iteration += 1) {
@@ -54,7 +66,14 @@ export class BuilderAgent {
           request.threshold
         );
         const improvementInstructions = improvementInstructionsFor(latestReview);
-        iterationArtifacts.push(createIterationArtifact({ iteration, implementation, review: latestReview, improvementInstructions }));
+        iterationArtifacts.push(createIterationArtifact({
+          iteration,
+          implementation,
+          changedFiles,
+          residualNotes: uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes"),
+          review: latestReview,
+          improvementInstructions
+        }));
 
         if (latestReview.passed) {
           return attachIterationArtifacts(createBuildResult({
@@ -96,9 +115,9 @@ export class BuilderAgent {
           instructions: improvementInstructions,
           iteration: iteration + 1
         });
-        changedFiles = uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles");
+        changedFiles = await reconcileChangedFiles(uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles"), workspaceTracker);
         discoveredIssues = dedupeDiscoveredIssues([...discoveredIssues, ...extractDiscoveredIssues(implementation)]);
-        residualNotes = uniqueStrings([...residualNotes, ...extractResidualNotes(implementation)], "residualNotes");
+        residualNotes = uniqueStrings([...residualNotes, ...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
       }
 
       return attachIterationArtifacts(createBuildResult({
@@ -137,6 +156,13 @@ export class BuilderAgent {
  */
 export async function runBuild(request: BuildRequestInput, adapter: BuilderAdapter): Promise<BuildResult> {
   return new BuilderAgent(adapter).build(request);
+}
+
+interface WorkspaceChangeTracker {
+  workspaceDir: string;
+  baseline: Set<string>;
+  disabled: boolean;
+  residualNotes: string[];
 }
 
 function assertAdapter(adapter: unknown): asserts adapter is BuilderAdapter {
@@ -214,6 +240,75 @@ function extractChangedFiles(implementation: ImplementationOutput): string[] {
   return uniqueStrings(implementation.changedFiles, "changedFiles");
 }
 
+async function createWorkspaceChangeTracker(workspaceDir: string): Promise<WorkspaceChangeTracker> {
+  const snapshot = await captureWorkspaceChangedFiles(workspaceDir);
+  if (!snapshot.ok) {
+    return {
+      workspaceDir,
+      baseline: new Set(),
+      disabled: true,
+      residualNotes: [WORKSPACE_RECONCILIATION_NOTE]
+    };
+  }
+
+  return {
+    workspaceDir,
+    baseline: new Set(snapshot.changedFiles),
+    disabled: false,
+    residualNotes: []
+  };
+}
+
+async function reconcileChangedFiles(reportedChangedFiles: string[], tracker: WorkspaceChangeTracker): Promise<string[]> {
+  if (tracker.disabled) {
+    return reportedChangedFiles;
+  }
+
+  const snapshot = await captureWorkspaceChangedFiles(tracker.workspaceDir);
+  if (!snapshot.ok) {
+    tracker.disabled = true;
+    tracker.residualNotes = uniqueStrings([...tracker.residualNotes, WORKSPACE_RECONCILIATION_NOTE], "residualNotes");
+    return reportedChangedFiles;
+  }
+
+  const actualChangedFiles = snapshot.changedFiles.filter((file) => !tracker.baseline.has(file));
+  return uniqueStrings([...reportedChangedFiles, ...actualChangedFiles], "changedFiles");
+}
+
+type WorkspaceChangedFilesSnapshot =
+  | { ok: true; changedFiles: string[] }
+  | { ok: false };
+
+async function captureWorkspaceChangedFiles(workspaceDir: string): Promise<WorkspaceChangedFilesSnapshot> {
+  try {
+    const insideWorkTree = (await runGit(["rev-parse", "--is-inside-work-tree"], workspaceDir)).trim();
+    if (insideWorkTree !== "true") {
+      return { ok: false };
+    }
+
+    const [trackedChanges, untrackedChanges] = await Promise.all([
+      runGit(["diff", "--name-only", "HEAD", "--"], workspaceDir),
+      runGit(["ls-files", "--others", "--exclude-standard"], workspaceDir)
+    ]);
+
+    return {
+      ok: true,
+      changedFiles: uniqueStrings([...lines(trackedChanges), ...lines(untrackedChanges)], "changedFiles")
+    };
+  } catch {
+    return { ok: false };
+  }
+}
+
+async function runGit(args: string[], cwd: string): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd, encoding: "utf8" });
+  return stdout;
+}
+
+function lines(value: string): string[] {
+  return value.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+}
+
 function extractResidualNotes(implementation: ImplementationOutput): string[] {
   if (!implementation || typeof implementation === "string" || implementation.residualNotes === undefined) {
     return [];
@@ -269,15 +364,15 @@ function improvementInstructionsFor(review: SelfReviewResult): string[] {
   return [...review.mustFix, ...review.shouldFix];
 }
 
-function createIterationArtifact({ iteration, implementation, review, improvementInstructions }: { iteration: number, implementation: ImplementationOutput, review: SelfReviewResult, improvementInstructions: string[] }): IterationArtifact {
+function createIterationArtifact({ iteration, implementation, changedFiles, residualNotes, review, improvementInstructions }: { iteration: number, implementation: ImplementationOutput, changedFiles: string[], residualNotes: string[], review: SelfReviewResult, improvementInstructions: string[] }): IterationArtifact {
   return {
     iteration,
     implementationSummary: summarizeImplementation(implementation),
-    changedFiles: extractChangedFiles(implementation),
+    changedFiles,
     discoveredIssues: extractDiscoveredIssues(implementation),
     review: cloneJsonValue(review),
     improvementInstructions: cloneJsonValue(improvementInstructions),
-    residualNotes: extractResidualNotes(implementation)
+    residualNotes
   };
 }
 

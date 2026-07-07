@@ -1,12 +1,18 @@
+import { execFile } from "node:child_process";
+import { promisify } from "node:util";
 import { normalizeSelfReview } from "../review/SelfReview.js";
 import { normalizeBuildRequest } from "../types/BuildRequest.js";
 import { createBuildResult, createFailedBuildResult, normalizeDiscoveredIssues, uniqueStrings } from "../types/BuildResult.js";
 const REQUIRED_ADAPTER_METHODS = ["analyzeTask", "createPlan", "implement", "selfReview", "improve"];
 const ITERATION_ARTIFACTS_PROPERTY = "iterationArtifacts";
+const WORKSPACE_RECONCILIATION_NOTE = "Workspace changed-files reconciliation could not run because git metadata was unavailable or unreadable.";
+const execFileAsync = promisify(execFile);
 export class BuilderAgent {
     adapter;
-    constructor(adapter) {
+    workspaceDir;
+    constructor(adapter, options = {}) {
         this.adapter = adapter;
+        this.workspaceDir = options.workspaceDir ?? process.cwd();
     }
     async build(input) {
         const iterationArtifacts = [];
@@ -19,6 +25,8 @@ export class BuilderAgent {
         try {
             request = normalizeBuildRequest(input);
             assertAdapter(this.adapter);
+            const workspaceTracker = await createWorkspaceChangeTracker(this.workspaceDir);
+            residualNotes = uniqueStrings([...residualNotes, ...workspaceTracker.residualNotes], "residualNotes");
             const analysis = await this.adapter.analyzeTask({ request });
             taskUnderstanding = createTaskUnderstanding({ request, analysis });
             const plan = await this.adapter.createPlan({ request, analysis });
@@ -29,9 +37,9 @@ export class BuilderAgent {
                 plan,
                 iteration: 1
             });
-            changedFiles = extractChangedFiles(implementation);
+            changedFiles = await reconcileChangedFiles(extractChangedFiles(implementation), workspaceTracker);
             discoveredIssues = extractDiscoveredIssues(implementation);
-            residualNotes = extractResidualNotes(implementation);
+            residualNotes = uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
             let latestReview;
             for (let iteration = 1; iteration <= request.maxIterations; iteration += 1) {
                 latestReview = normalizeSelfReview(await this.adapter.selfReview({
@@ -43,7 +51,14 @@ export class BuilderAgent {
                     threshold: request.threshold
                 }), request.threshold);
                 const improvementInstructions = improvementInstructionsFor(latestReview);
-                iterationArtifacts.push(createIterationArtifact({ iteration, implementation, review: latestReview, improvementInstructions }));
+                iterationArtifacts.push(createIterationArtifact({
+                    iteration,
+                    implementation,
+                    changedFiles,
+                    residualNotes: uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes"),
+                    review: latestReview,
+                    improvementInstructions
+                }));
                 if (latestReview.passed) {
                     return attachIterationArtifacts(createBuildResult({
                         status: "ready",
@@ -82,9 +97,9 @@ export class BuilderAgent {
                     instructions: improvementInstructions,
                     iteration: iteration + 1
                 });
-                changedFiles = uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles");
+                changedFiles = await reconcileChangedFiles(uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles"), workspaceTracker);
                 discoveredIssues = dedupeDiscoveredIssues([...discoveredIssues, ...extractDiscoveredIssues(implementation)]);
-                residualNotes = uniqueStrings([...residualNotes, ...extractResidualNotes(implementation)], "residualNotes");
+                residualNotes = uniqueStrings([...residualNotes, ...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
             }
             return attachIterationArtifacts(createBuildResult({
                 status: "blocked",
@@ -181,6 +196,62 @@ function extractChangedFiles(implementation) {
     }
     return uniqueStrings(implementation.changedFiles, "changedFiles");
 }
+async function createWorkspaceChangeTracker(workspaceDir) {
+    const snapshot = await captureWorkspaceChangedFiles(workspaceDir);
+    if (!snapshot.ok) {
+        return {
+            workspaceDir,
+            baseline: new Set(),
+            disabled: true,
+            residualNotes: [WORKSPACE_RECONCILIATION_NOTE]
+        };
+    }
+    return {
+        workspaceDir,
+        baseline: new Set(snapshot.changedFiles),
+        disabled: false,
+        residualNotes: []
+    };
+}
+async function reconcileChangedFiles(reportedChangedFiles, tracker) {
+    if (tracker.disabled) {
+        return reportedChangedFiles;
+    }
+    const snapshot = await captureWorkspaceChangedFiles(tracker.workspaceDir);
+    if (!snapshot.ok) {
+        tracker.disabled = true;
+        tracker.residualNotes = uniqueStrings([...tracker.residualNotes, WORKSPACE_RECONCILIATION_NOTE], "residualNotes");
+        return reportedChangedFiles;
+    }
+    const actualChangedFiles = snapshot.changedFiles.filter((file) => !tracker.baseline.has(file));
+    return uniqueStrings([...reportedChangedFiles, ...actualChangedFiles], "changedFiles");
+}
+async function captureWorkspaceChangedFiles(workspaceDir) {
+    try {
+        const insideWorkTree = (await runGit(["rev-parse", "--is-inside-work-tree"], workspaceDir)).trim();
+        if (insideWorkTree !== "true") {
+            return { ok: false };
+        }
+        const [trackedChanges, untrackedChanges] = await Promise.all([
+            runGit(["diff", "--name-only", "HEAD", "--"], workspaceDir),
+            runGit(["ls-files", "--others", "--exclude-standard"], workspaceDir)
+        ]);
+        return {
+            ok: true,
+            changedFiles: uniqueStrings([...lines(trackedChanges), ...lines(untrackedChanges)], "changedFiles")
+        };
+    }
+    catch {
+        return { ok: false };
+    }
+}
+async function runGit(args, cwd) {
+    const { stdout } = await execFileAsync("git", args, { cwd, encoding: "utf8" });
+    return stdout;
+}
+function lines(value) {
+    return value.split(/\r?\n/).map((line) => line.trim()).filter((line) => line.length > 0);
+}
 function extractResidualNotes(implementation) {
     if (!implementation || typeof implementation === "string" || implementation.residualNotes === undefined) {
         return [];
@@ -224,15 +295,15 @@ function improvementInstructionsFor(review) {
     }
     return [...review.mustFix, ...review.shouldFix];
 }
-function createIterationArtifact({ iteration, implementation, review, improvementInstructions }) {
+function createIterationArtifact({ iteration, implementation, changedFiles, residualNotes, review, improvementInstructions }) {
     return {
         iteration,
         implementationSummary: summarizeImplementation(implementation),
-        changedFiles: extractChangedFiles(implementation),
+        changedFiles,
         discoveredIssues: extractDiscoveredIssues(implementation),
         review: cloneJsonValue(review),
         improvementInstructions: cloneJsonValue(improvementInstructions),
-        residualNotes: extractResidualNotes(implementation)
+        residualNotes
     };
 }
 function attachIterationArtifacts(result, iterationArtifacts) {

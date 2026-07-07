@@ -1,7 +1,10 @@
 import assert from "node:assert/strict";
+import { mkdtemp, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import { BuilderAgent } from "../../dist/index.js";
-import { createAdapter, failingReview, passingReview } from "../helpers.ts";
+import { createAdapter, createGitWorkspace, failingReview, passingReview } from "../helpers.ts";
 
 describe("BuilderAgent", () => {
   it("returns ready when the first self-review passes", async () => {
@@ -61,6 +64,38 @@ describe("BuilderAgent", () => {
     assert.equal(result.iterations, 2);
     assert.equal(adapter.calls.improve, 1);
     assert.deepEqual(result.changedFiles, ["src/feature.js", "test/feature.test.js"]);
+  });
+
+  it("reconciles adapter changed files with workspace changes", async () => {
+    const workspaceDir = await createGitWorkspace();
+    const adapter = createAdapter({ reviews: [passingReview] });
+    adapter.implement = async () => {
+      await writeFile(join(workspaceDir, "src", "feature.js"), "export const value = 2;\n", "utf8");
+      return {
+        summary: "Updated feature implementation.",
+        residualNotes: []
+      };
+    };
+
+    const result = await new BuilderAgent(adapter, { workspaceDir }).build({ task: "Implement a small feature." });
+
+    assert.deepEqual(result.changedFiles, ["src/feature.js"]);
+    assert.deepEqual(result.iterationArtifacts[0].changedFiles, ["src/feature.js"]);
+  });
+
+  it("does not fail when workspace change reconciliation cannot run", async () => {
+    const workspaceDir = await mkdtemp(join(tmpdir(), "builder-agent-no-git-"));
+    const adapter = createAdapter({ reviews: [passingReview] });
+    adapter.implement = async () => ({
+      changedFiles: [],
+      residualNotes: []
+    });
+
+    const result = await new BuilderAgent(adapter, { workspaceDir }).build({ task: "Implement a small feature." });
+
+    assert.equal(result.status, "ready");
+    assert.deepEqual(result.changedFiles, []);
+    assert.match(result.residualNotes[0], /Workspace changed-files reconciliation could not run/);
   });
 
   it("stores immutable snapshots for completed iteration artifacts", async () => {

@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { writeBuildArtifacts } from "../dist/artifacts.js";
 import { BuilderAgent } from "../dist/index.js";
-import { createAdapter, failingReview, passingReview } from "./helpers.ts";
+import { createAdapter, createGitWorkspace, failingReview, passingReview } from "./helpers.ts";
 
 describe("artifacts", () => {
   it("preserves artifacts for each implementation iteration", async () => {
@@ -63,5 +63,28 @@ describe("artifacts", () => {
     assert.equal(iteration2Review.passed, true);
     assert.equal(Object.hasOwn(writtenResult, "iterationArtifacts"), false);
     await assert.rejects(readFile(join(outDir, "iterations", "3", "stale.json"), "utf8"));
+  });
+
+  it("writes reconciled changed files to final and iteration artifacts", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const workspaceDir = await createGitWorkspace();
+    const outDir = join(dir, "out");
+    const adapter = createAdapter({ reviews: [passingReview] });
+    adapter.implement = async () => {
+      await writeFile(join(workspaceDir, "src", "feature.js"), "export const value = 2;\n", "utf8");
+      return {
+        summary: "Updated feature implementation.",
+        residualNotes: []
+      };
+    };
+
+    const result = await new BuilderAgent(adapter, { workspaceDir }).build({ task: "Implement a small feature." });
+    await writeBuildArtifacts(outDir, result);
+
+    const writtenResult = JSON.parse(await readFile(join(outDir, "build-result.json"), "utf8"));
+    const iterationChangedFiles = JSON.parse(await readFile(join(outDir, "iterations", "1", "changed-files.json"), "utf8"));
+
+    assert.deepEqual(writtenResult.changedFiles, ["src/feature.js"]);
+    assert.deepEqual(iterationChangedFiles, ["src/feature.js"]);
   });
 });
