@@ -87,12 +87,32 @@ describe("BuildResult", () => {
     ]);
   });
 
+  it("rejects title-only discovered issues in build results", () => {
+    assert.throws(
+      () => normalizeBuildResult({
+        status: "ready",
+        iterations: 1,
+        taskUnderstanding: {
+          summary: "Understand the requested behavior before implementation.",
+          constraints: ["Keep the change focused."]
+        },
+        planSummary: "Implement the requested change.",
+        changedFiles: ["src/feature.js"],
+        review: passingReview,
+        residualNotes: [],
+        discoveredIssues: [{ title: "Title-only follow-up" }]
+      }),
+      /Build result discoveredIssues\[0\]\.expected must be a non-empty string/
+    );
+  });
+
   it("keeps discovered issues optional in the published build result schema", async () => {
     const schema = JSON.parse(await readFile("schemas/build-result.schema.json", "utf8"));
 
     assert.equal(schema.properties.taskUnderstanding.type, "object");
     assert.equal(schema.required.includes("taskUnderstanding"), true);
     assert.equal(schema.properties.discoveredIssues.type, "array");
+    assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
     assert.equal(schema.required.includes("discoveredIssues"), false);
   });
 });

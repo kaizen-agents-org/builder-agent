@@ -93,7 +93,7 @@ const { writeFileSync } = await import("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"evidence\":\"log excerpt\"}]}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"expected\":\"Verifier should pass valid runs.\",\"evidence\":\"log excerpt\"}]}\n```")}
 }));
 })();
 `,
@@ -134,6 +134,7 @@ console.log(JSON.stringify({
       {
         title: "Verifier false positive",
         repo: "verifier",
+        expected: "Verifier should pass valid runs.",
         evidence: "log excerpt"
       }
     ]);

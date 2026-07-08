@@ -733,7 +733,12 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
   summary: "provider reported a structured block",
   notes: "captured provider detail",
   blockedReason: "provider limit reached",
-  discoveredIssues: [{ title: "Provider limit", severity: "medium" }]
+  discoveredIssues: [{
+    title: "Provider limit",
+    severity: "medium",
+    expected: "Provider fallback should avoid hard blocks when an alternate backend is available.",
+    evidence: "codex exited with code 2 after reporting provider limit reached."
+  }]
 }));
 process.exit(2);
 })();
@@ -761,7 +766,12 @@ process.exit(2);
     assert.match(result.payload.notes, /Selected backend: codex/);
     assert.match(result.payload.notes, /Final payload source: last-message/);
     assert.equal(result.payload.blockedReason, "provider limit reached");
-    assert.deepEqual(result.payload.discoveredIssues, [{ title: "Provider limit", severity: "medium" }]);
+    assert.deepEqual(result.payload.discoveredIssues, [{
+      title: "Provider limit",
+      severity: "medium",
+      expected: "Provider fallback should avoid hard blocks when an alternate backend is available.",
+      evidence: "codex exited with code 2 after reporting provider limit reached."
+    }]);
   });
 });
 

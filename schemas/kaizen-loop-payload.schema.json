@@ -67,7 +67,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["title"],
+        "required": ["title", "expected", "evidence"],
         "properties": {
           "title": {
             "type": "string",
