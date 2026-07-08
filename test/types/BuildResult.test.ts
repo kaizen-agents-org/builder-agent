@@ -113,6 +113,8 @@ describe("BuildResult", () => {
     assert.equal(schema.required.includes("taskUnderstanding"), true);
     assert.equal(schema.properties.discoveredIssues.type, "array");
     assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
+    assert.equal(schema.properties.discoveredIssues.items.properties.expected.pattern, "\\S");
+    assert.equal(schema.properties.discoveredIssues.items.properties.evidence.pattern, "\\S");
     assert.equal(schema.required.includes("discoveredIssues"), false);
   });
 });

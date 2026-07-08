@@ -153,6 +153,8 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.allOf.length, 2);
     assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
     assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
+    assert.equal(schema.properties.discoveredIssues.items.properties.expected.pattern, "\\S");
+    assert.equal(schema.properties.discoveredIssues.items.properties.evidence.pattern, "\\S");
     assert.equal(schema.required.includes("discoveredIssues"), false);
     assert.equal(schema.required.includes("blockedReason"), false);
   });
