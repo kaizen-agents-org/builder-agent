@@ -35,8 +35,23 @@ describe("DiscoveredIssue", () => {
 
   it("requires each discovered issue title to be present", () => {
     assert.throws(
-      () => normalizeDiscoveredIssues([{ repo: "verifier" }], { label: "discoveredIssues" }),
+      () => normalizeDiscoveredIssues([{ repo: "verifier", expected: "Expected behavior.", evidence: "Observed log." }], { label: "discoveredIssues" }),
       /discoveredIssues\[0\]\.title/
+    );
+  });
+
+  it("requires actionable expected behavior and evidence", () => {
+    assert.throws(
+      () => normalizeDiscoveredIssues([{ title: "Missing evidence", evidence: "Observed log." }], { label: "discoveredIssues" }),
+      /discoveredIssues\[0\]\.expected must be a non-empty string/
+    );
+    assert.throws(
+      () => normalizeDiscoveredIssues([{ title: "Missing evidence", expected: "Expected behavior." }], { label: "discoveredIssues" }),
+      /discoveredIssues\[0\]\.evidence must be a non-empty string/
+    );
+    assert.throws(
+      () => normalizeDiscoveredIssues([{ title: "Title only follow-up" }], { label: "discoveredIssues" }),
+      /discoveredIssues\[0\]\.expected must be a non-empty string/
     );
   });
 });

@@ -19,13 +19,23 @@ describe("artifacts", () => {
       summary: "Implemented the first version.",
       changedFiles: ["src/feature.js"],
       residualNotes: ["Tests still need to be added."],
-      discoveredIssues: [{ title: "Verifier warning needs follow-up", repo: "verifier" }]
+      discoveredIssues: [{
+        title: "Verifier warning needs follow-up",
+        repo: "verifier",
+        expected: "Verifier warnings should include actionable remediation.",
+        evidence: "First iteration verifier warning."
+      }]
     });
     adapter.improve = async ({ implementation }) => ({
       summary: "Added targeted regression coverage.",
       changedFiles: [...implementation.changedFiles, "test/feature.test.js"],
       residualNotes: [],
-      discoveredIssues: [{ title: "Builder docs need a note", repo: "builder-agent" }]
+      discoveredIssues: [{
+        title: "Builder docs need a note",
+        repo: "builder-agent",
+        expected: "Builder docs should describe the new behavior.",
+        evidence: "Second iteration follow-up note."
+      }]
     });
 
     const result = await new BuilderAgent(adapter).build({
@@ -53,13 +63,23 @@ describe("artifacts", () => {
     assert.equal(latestReview.passed, true);
     assert.equal(iteration1Summary.summary, "Implemented the first version.");
     assert.deepEqual(iteration1ChangedFiles, ["src/feature.js"]);
-    assert.deepEqual(iteration1DiscoveredIssues, [{ title: "Verifier warning needs follow-up", repo: "verifier" }]);
+    assert.deepEqual(iteration1DiscoveredIssues, [{
+      title: "Verifier warning needs follow-up",
+      repo: "verifier",
+      expected: "Verifier warnings should include actionable remediation.",
+      evidence: "First iteration verifier warning."
+    }]);
     assert.equal(iteration1Review.passed, false);
     assert.deepEqual(iteration1Instructions, ["Add targeted tests for the requested behavior."]);
     assert.deepEqual(iteration1ResidualNotes, ["Tests still need to be added."]);
     assert.equal(iteration2Summary.summary, "Added targeted regression coverage.");
     assert.deepEqual(iteration2ChangedFiles, ["src/feature.js", "test/feature.test.js"]);
-    assert.deepEqual(iteration2DiscoveredIssues, [{ title: "Builder docs need a note", repo: "builder-agent" }]);
+    assert.deepEqual(iteration2DiscoveredIssues, [{
+      title: "Builder docs need a note",
+      repo: "builder-agent",
+      expected: "Builder docs should describe the new behavior.",
+      evidence: "Second iteration follow-up note."
+    }]);
     assert.equal(iteration2Review.passed, true);
     assert.equal(Object.hasOwn(writtenResult, "iterationArtifacts"), false);
     await assert.rejects(readFile(join(outDir, "iterations", "3", "stale.json"), "utf8"));

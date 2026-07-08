@@ -13,6 +13,8 @@ describe("KaizenLoopPayload", () => {
         {
           title: "  Missing verifier diagnostic  ",
           repo: " verifier ",
+          expected: "  The verifier should include the diagnostic.  ",
+          evidence: "  verifier.log  ",
           labels: ["kaizen", "kaizen"]
         }
       ]
@@ -26,6 +28,8 @@ describe("KaizenLoopPayload", () => {
         {
           title: "Missing verifier diagnostic",
           repo: "verifier",
+          expected: "The verifier should include the diagnostic.",
+          evidence: "verifier.log",
           labels: ["kaizen"]
         }
       ]
@@ -66,9 +70,18 @@ describe("KaizenLoopPayload", () => {
         status: "fixed",
         summary: "Implemented.",
         notes: "",
-        discoveredIssues: [{ title: "Bad routing", repo: 123 }]
+        discoveredIssues: [{ title: "Bad routing", expected: "Route to verifier.", evidence: "payload.json", repo: 123 }]
       }),
       /discoveredIssues\[0\]\.repo must be a string/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "fixed",
+        summary: "Implemented.",
+        notes: "",
+        discoveredIssues: [{ title: "Title-only follow-up" }]
+      }),
+      /discoveredIssues\[0\]\.expected must be a non-empty string/
     );
     assert.throws(
       () => normalizeKaizenLoopPayload({
@@ -139,6 +152,9 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.properties.blockedReason.pattern, "\\S");
     assert.equal(schema.allOf.length, 2);
     assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
+    assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
+    assert.equal(schema.properties.discoveredIssues.items.properties.expected.pattern, "\\S");
+    assert.equal(schema.properties.discoveredIssues.items.properties.evidence.pattern, "\\S");
     assert.equal(schema.required.includes("discoveredIssues"), false);
     assert.equal(schema.required.includes("blockedReason"), false);
   });

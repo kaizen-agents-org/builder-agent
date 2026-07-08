@@ -25,13 +25,21 @@ function normalizeDiscoveredIssue(item: unknown, index: number, label: string): 
 
   return {
     title: input.title.trim(),
+    expected: requiredStringField(input, "expected", itemLabel),
+    evidence: requiredStringField(input, "evidence", itemLabel),
     ...optionalStringField(input, "body", itemLabel),
-    ...optionalStringField(input, "expected", itemLabel),
-    ...optionalStringField(input, "evidence", itemLabel),
     ...optionalStringField(input, "repo", itemLabel),
     ...optionalStringField(input, "severity", itemLabel),
     ...optionalLabels(input, itemLabel)
   };
+}
+
+function requiredStringField(item: Record<string, unknown>, key: "expected" | "evidence", itemLabel: string): string {
+  const value = item[key];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${itemLabel}.${key} must be a non-empty string.`);
+  }
+  return value.trim();
 }
 
 function optionalStringField(item: Record<string, unknown>, key: keyof DiscoveredIssue, itemLabel: string): Partial<DiscoveredIssue> {

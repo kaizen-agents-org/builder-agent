@@ -37,8 +37,8 @@ export interface SelfReviewResult {
 export interface DiscoveredIssue {
     title: string;
     body?: string;
-    expected?: string;
-    evidence?: string;
+    expected: string;
+    evidence: string;
     repo?: string;
     severity?: string;
     labels?: string[];
