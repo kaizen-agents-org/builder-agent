@@ -288,7 +288,15 @@ The integration payload is intentionally smaller than the standalone build artif
 }
 ```
 
-`status` is one of `fixed`, `partial`, or `blocked`. The `summary` should state what changed and why; Builder Agent trims surrounding whitespace and rejects empty summaries. The `notes` field should capture verification run or skipped, residual risk, and reviewer notes when relevant. `discoveredIssues` is optional and defaults to an empty array. The published contract is [kaizen-loop-payload.schema.json](schemas/kaizen-loop-payload.schema.json), and Builder Agent validates provider payloads with the same runtime normalizer before writing `KAIZEN_BUILD_RESULT_PATH`. `builder-agent` does not create pull requests, push branches, or file GitHub issues; those remain `kaizen-loop` responsibility.
+`status` is one of `fixed`, `partial`, or `blocked`:
+
+- `fixed`: the scoped issue or task is implemented and the builder does not know of remaining task scope.
+- `partial`: the builder produced reviewable, PR-worthy code for part of the scoped task, but known non-blocking work remains. Use this when downstream verification and human review can still evaluate the change, for example when a low-risk sub-scope is complete and a clearly described caveat remains.
+- `blocked`: the builder cannot produce PR-worthy changes without more information, missing credentials, explicit human approval, a safety decision, or an upstream fix. Do not use `partial` for unclear requirements, unapproved secrets or infrastructure changes, provider refusal, or work that should not proceed to verification.
+
+`partial` exits successfully so `kaizen-loop` can continue into mechanical checks, independent verifier review, and PR policy gates. It is not an approval to merge or a promise that the task is complete. A `partial` payload must include non-empty `notes` that identify completed scope, incomplete scope, verification run or skipped, and residual risk so the verifier and reviewer can decide whether to stop, ask for follow-up, or allow a narrowly scoped PR.
+
+The `summary` should state what changed and why; Builder Agent trims surrounding whitespace and rejects empty summaries. The `notes` field should capture verification run or skipped, residual risk, and reviewer notes when relevant. `discoveredIssues` is optional and defaults to an empty array. The published contract is [kaizen-loop-payload.schema.json](schemas/kaizen-loop-payload.schema.json), and Builder Agent validates provider payloads with the same runtime normalizer before writing `KAIZEN_BUILD_RESULT_PATH`. `builder-agent` does not create pull requests, push branches, or file GitHub issues; those remain `kaizen-loop` responsibility.
 
 ## Adapter Contract
 

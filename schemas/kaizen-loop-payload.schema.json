@@ -37,13 +37,31 @@
           "required": ["blockedReason"]
         }
       }
+    },
+    {
+      "if": {
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "const": "partial"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "notes": {
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
+      }
     }
   ],
   "properties": {
     "status": {
       "type": "string",
       "enum": ["fixed", "partial", "blocked"],
-      "description": "Result status consumed by kaizen-loop."
+      "description": "Result status consumed by kaizen-loop. Use fixed when the scoped implementation is complete, partial when reviewable code was produced but known non-blocking work remains for verifier or human review, and blocked when the builder cannot produce PR-worthy changes without more information, credentials, approval, or an upstream fix."
     },
     "summary": {
       "type": "string",
@@ -53,7 +71,7 @@
     },
     "notes": {
       "type": "string",
-      "description": "Verification run or skipped, residual risk, reviewer notes, and fallback evidence when relevant."
+      "description": "Verification run or skipped, residual risk, reviewer notes, and fallback evidence when relevant. For partial results this must be non-empty and identify completed scope, incomplete scope, verification status, and residual risk."
     },
     "blockedReason": {
       "type": "string",

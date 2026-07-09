@@ -8,7 +8,7 @@ describe("KaizenLoopPayload", () => {
     const payload = normalizeKaizenLoopPayload({
       status: "partial",
       summary: "  Implemented most of the change.  ",
-      notes: "Ran targeted checks.",
+      notes: "Completed scope: schema docs. Incomplete scope: provider rollout. Verification: ran targeted checks. Residual risk: downstream verifier may still block.",
       discoveredIssues: [
         {
           title: "  Missing verifier diagnostic  ",
@@ -23,7 +23,7 @@ describe("KaizenLoopPayload", () => {
     assert.deepEqual(payload, {
       status: "partial",
       summary: "Implemented most of the change.",
-      notes: "Ran targeted checks.",
+      notes: "Completed scope: schema docs. Incomplete scope: provider rollout. Verification: ran targeted checks. Residual risk: downstream verifier may still block.",
       discoveredIssues: [
         {
           title: "Missing verifier diagnostic",
@@ -52,6 +52,25 @@ describe("KaizenLoopPayload", () => {
         notes: ""
       }),
       /summary must be a non-empty string/
+    );
+  });
+
+  it("requires partial payload notes to document the completion caveat", () => {
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Some reviewable code was produced.",
+        notes: ""
+      }),
+      /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Some reviewable code was produced.",
+        notes: "  \n\t  "
+      }),
+      /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
     );
   });
 
@@ -135,7 +154,7 @@ describe("KaizenLoopPayload", () => {
       () => normalizeKaizenLoopPayload({
         status: "partial",
         summary: "Partially fixed.",
-        notes: "",
+        notes: "Completed scope: docs. Incomplete scope: provider rollout. Verification: skipped. Residual risk: verifier may block.",
         blockedReason: "No longer blocked."
       }),
       /blockedReason is only valid when status is blocked/
@@ -150,7 +169,10 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.properties.summary.pattern, "\\S");
     assert.equal(schema.properties.blockedReason.minLength, 1);
     assert.equal(schema.properties.blockedReason.pattern, "\\S");
-    assert.equal(schema.allOf.length, 2);
+    assert.equal(schema.allOf.length, 3);
+    assert.equal(schema.allOf[2].if.properties.status.const, "partial");
+    assert.equal(schema.allOf[2].then.properties.notes.minLength, 1);
+    assert.equal(schema.allOf[2].then.properties.notes.pattern, "\\S");
     assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
     assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
     assert.equal(schema.properties.discoveredIssues.items.properties.expected.pattern, "\\S");
