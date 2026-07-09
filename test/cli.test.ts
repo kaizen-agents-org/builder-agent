@@ -140,6 +140,50 @@ console.log(JSON.stringify({
     ]);
   });
 
+  it("returns exit code 0 for partial kaizen-loop payloads so verifier gates PR readiness", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeClaudePath = join(binDir, "claude");
+    const partialNotes = "Completed scope: updated docs. Incomplete scope: provider rollout remains. Verification: npm test ran. Residual risk: verifier may reject the caveat.";
+    const partialPayload = JSON.stringify({
+      status: "partial",
+      summary: "implemented reviewable subset",
+      notes: partialNotes
+    });
+
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify(`\`\`\`json\n${partialPayload}\n\`\`\``)}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    const { stdout } = await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: dir,
+        KAIZEN_PREFERRED_AGENT: "claude"
+      }
+    });
+
+    const output = JSON.parse(stdout);
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(output.status, "partial");
+    assert.equal(result.status, "partial");
+    assert.equal(result.summary, "implemented reviewable subset");
+    assert.match(result.notes, /Completed scope: updated docs/);
+    assert.match(result.notes, /Provider evidence:/);
+  });
+
   it("returns exit code 2 for blocked build results", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const requestPath = join(dir, "request.json");

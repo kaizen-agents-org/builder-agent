@@ -20,6 +20,9 @@ export function normalizeKaizenLoopPayload(input) {
     if (typeof payload.notes !== "string") {
         throw new Error("Kaizen Loop payload notes must be a string.");
     }
+    if (payload.status === "partial" && payload.notes.trim().length === 0) {
+        throw new Error("Kaizen Loop payload notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial.");
+    }
     if (payload.blockedReason !== undefined && typeof payload.blockedReason !== "string") {
         throw new Error("Kaizen Loop payload blockedReason must be a string.");
     }
