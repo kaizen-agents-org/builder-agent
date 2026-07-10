@@ -17,9 +17,18 @@ describe("SelfReview", () => {
     assert.equal(review.passed, true);
   });
 
+  it("allows adapters to omit passed and still computes it on the final artifact", () => {
+    const { passed, ...reviewWithoutPassed } = passingReview;
+
+    const review = normalizeSelfReview(reviewWithoutPassed, 85);
+
+    assert.equal(review.passed, true);
+    assert.equal(typeof review.passed, "boolean");
+  });
+
   it("requires self-review input to match the published schema shape", () => {
     assert.throws(
-      () => normalizeSelfReview({ ...passingReview, passed: undefined }, 85),
+      () => normalizeSelfReview({ ...passingReview, passed: "true" }, 85),
       /passed must be a boolean/
     );
     assert.throws(

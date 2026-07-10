@@ -28,9 +28,9 @@ Flag any residual risk, skipped verification, assumptions, or reviewer notes tha
 
 ## Output
 
-Return JSON compatible with `schemas/self-review.schema.json`.
+Return JSON compatible with `schemas/self-review.schema.json`, except that `passed` may be omitted.
 
-Set `passed` to `true` only when all default passing conditions are met:
+The controller always recomputes `passed` from the default passing conditions and ignores any adapter-supplied value:
 
 - `score >= threshold`
 - `mustFix.length === 0`
