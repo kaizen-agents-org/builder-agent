@@ -40,6 +40,16 @@ export interface SelfReviewResult {
   passed: boolean;
 }
 
+/**
+ * Shape returned by adapter `selfReview()` implementations. `passed` may be
+ * omitted because the controller always recomputes it from score,
+ * confidence, and mustFix; the final normalized `SelfReviewResult` artifact
+ * still carries a computed `passed` boolean.
+ */
+export type SelfReviewInput = Omit<SelfReviewResult, "passed"> & {
+  passed?: boolean;
+};
+
 export interface DiscoveredIssue {
   title: string;
   body?: string;
@@ -111,7 +121,7 @@ export interface BuilderAdapter {
     implementation: ImplementationOutput;
     iteration: number;
     threshold: number;
-  }): Promise<SelfReviewResult>;
+  }): Promise<SelfReviewInput>;
   improve(input: {
     request: BuildRequest;
     analysis: unknown;

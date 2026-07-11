@@ -162,7 +162,7 @@ node dist/cli.js validate-request --request examples/build-request.example.json
 `npm run validate:json` parses the published schemas and validates the checked-in examples against the same runtime contract used by the CLI. The schemas in `schemas/` are the MVP contract for orchestration boundaries:
 
 - [build-request.schema.json](schemas/build-request.schema.json): input accepted by Builder Agent.
-- [self-review.schema.json](schemas/self-review.schema.json): adapter self-review output before controller recomputes `passed`.
+- [self-review.schema.json](schemas/self-review.schema.json): the final, normalized self-review artifact, including the computed `passed` boolean. Adapter `selfReview()` output may omit `passed`; the controller always recomputes it before this shape is published.
 - [build-result.schema.json](schemas/build-result.schema.json): final artifact written for external verification handoff, including task understanding, changed files, review findings, and residual notes.
 - [kaizen-loop-payload.schema.json](schemas/kaizen-loop-payload.schema.json): compact `fixed` / `partial` / `blocked` integration payload written through `KAIZEN_BUILD_RESULT_PATH`.
 
@@ -314,7 +314,7 @@ export function createAdapter() {
 }
 ```
 
-`selfReview()` must return an object compatible with [self-review.schema.json](schemas/self-review.schema.json). The controller recomputes `passed` from the default passing conditions, so adapters cannot blindly approve themselves by setting `passed: true`.
+`selfReview()` must return an object compatible with [self-review.schema.json](schemas/self-review.schema.json), except that `passed` may be omitted. The controller always recomputes `passed` from the default passing conditions, so adapters cannot blindly approve themselves by setting `passed: true`, and do not need to compute it at all. The final normalized self-review artifact (written to disk and included in the build result) always includes the computed `passed` boolean.
 
 ## Repository Shape
 

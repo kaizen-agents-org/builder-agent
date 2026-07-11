@@ -51,6 +51,25 @@ describe("BuildResult", () => {
     );
   });
 
+  it("computes passed on the final review artifact even when the adapter omits it", () => {
+    const { passed, ...reviewWithoutPassed } = passingReview;
+
+    const result = normalizeBuildResult({
+      status: "ready",
+      iterations: 1,
+      taskUnderstanding: {
+        summary: "Understand the requested behavior before implementation.",
+        constraints: ["Keep the change focused."]
+      },
+      planSummary: "Implement the requested change.",
+      changedFiles: ["src/feature.js"],
+      review: reviewWithoutPassed,
+      residualNotes: []
+    });
+
+    assert.equal(result.review.passed, true);
+  });
+
   it("normalizes discovered issues in build results", () => {
     const result = normalizeBuildResult({
       status: "ready",

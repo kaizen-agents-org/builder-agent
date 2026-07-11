@@ -26,7 +26,7 @@ export function normalizeSelfReview(input, threshold) {
     }
     assertAllowedKeys(input, REVIEW_KEYS, "Self-review");
     const reviewInput = input;
-    if (typeof reviewInput.passed !== "boolean") {
+    if (reviewInput.passed !== undefined && typeof reviewInput.passed !== "boolean") {
         throw new Error("Self-review passed must be a boolean.");
     }
     const review = {

@@ -38,8 +38,8 @@ export function createAdapter() {
         mustFix: reviewCount === 1 ? ["Add focused test coverage before marking ready."] : [],
         shouldFix: [],
         niceToHave: [],
-        improvementInstructions: reviewCount === 1 ? ["Add or update a targeted test for the implemented behavior."] : [],
-        passed: false
+        improvementInstructions: reviewCount === 1 ? ["Add or update a targeted test for the implemented behavior."] : []
+        // `passed` is intentionally omitted: the controller always recomputes it.
       };
     },
 

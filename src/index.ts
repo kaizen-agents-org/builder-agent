@@ -9,6 +9,7 @@ export type {
   BuilderAdapter,
   DiscoveredIssue,
   KaizenLoopPayload,
+  SelfReviewInput,
   SelfReviewResult
 } from "./types/contracts.js";
 
