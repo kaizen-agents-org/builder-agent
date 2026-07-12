@@ -55,6 +55,41 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     assert.equal(args.includes("--ask-for-approval"), false);
   });
 
+  it("discovers the Desktop code-mode host without overriding an explicit host", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const desktopDir = join(dir, ".codex", "plugins", ".plugin-appserver");
+    const envPath = join(dir, "host-path.txt");
+    await mkdir(binDir);
+    await mkdir(desktopDir, { recursive: true });
+    await writeFile(join(desktopDir, "codex-code-mode-host"), "#!/bin/sh\n", "utf8");
+    await chmod(join(desktopDir, "codex-code-mode-host"), 0o755);
+    await writeFile(join(binDir, "codex"), `#!/usr/bin/env node
+const { writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+writeFileSync(${JSON.stringify(envPath)}, process.env.CODEX_CODE_MODE_HOST_PATH || "");
+const outputIndex = args.indexOf("--output-last-message");
+writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: "ok", notes: "" }));
+`, "utf8");
+    await chmod(join(binDir, "codex"), 0o755);
+
+    await runImplementationAgent({
+      agent: "codex",
+      prompt: "Fix issue #1",
+      workspaceDir: dir,
+      env: { ...process.env, HOME: dir, PATH: `${binDir}:${process.env.PATH}` }
+    });
+    assert.equal(await readFile(envPath, "utf8"), join(desktopDir, "codex-code-mode-host"));
+
+    await runImplementationAgent({
+      agent: "codex",
+      prompt: "Fix issue #1",
+      workspaceDir: dir,
+      env: { ...process.env, HOME: dir, PATH: `${binDir}:${process.env.PATH}`, CODEX_CODE_MODE_HOST_PATH: "/explicit/host" }
+    });
+    assert.equal(await readFile(envPath, "utf8"), "/explicit/host");
+  });
+
   it("falls back to the next preferred backend when an agent fails without a payload", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
