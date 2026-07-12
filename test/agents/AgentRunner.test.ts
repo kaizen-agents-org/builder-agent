@@ -57,9 +57,11 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
 
   it("discovers the Desktop code-mode host without overriding an explicit host", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const emptyBinDir = join(dir, "empty-bin");
     const binDir = join(dir, "bin");
     const desktopDir = join(dir, ".codex", "plugins", ".plugin-appserver");
     const envPath = join(dir, "host-path.txt");
+    await mkdir(emptyBinDir);
     await mkdir(binDir);
     await mkdir(desktopDir, { recursive: true });
     await writeFile(join(desktopDir, "codex-code-mode-host"), "#!/bin/sh\n", "utf8");
@@ -77,7 +79,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: 
       agent: "codex",
       prompt: "Fix issue #1",
       workspaceDir: dir,
-      env: { ...process.env, HOME: dir, PATH: `${binDir}:${process.env.PATH}` }
+      env: { ...process.env, HOME: dir, PATH: `${emptyBinDir}:${binDir}:${process.env.PATH}` }
     });
     assert.equal(await readFile(envPath, "utf8"), join(desktopDir, "codex-code-mode-host"));
 
@@ -85,7 +87,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: 
       agent: "codex",
       prompt: "Fix issue #1",
       workspaceDir: dir,
-      env: { ...process.env, HOME: dir, PATH: `${binDir}:${process.env.PATH}`, CODEX_CODE_MODE_HOST_PATH: "/explicit/host" }
+      env: { ...process.env, HOME: dir, PATH: `${emptyBinDir}:${binDir}:${process.env.PATH}`, CODEX_CODE_MODE_HOST_PATH: "/explicit/host" }
     });
     assert.equal(await readFile(envPath, "utf8"), "/explicit/host");
   });

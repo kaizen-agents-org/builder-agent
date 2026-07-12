@@ -219,7 +219,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
 async function withCodexCodeModeHost(env: NodeJS.ProcessEnv, command: string): Promise<NodeJS.ProcessEnv> {
   if (env.CODEX_CODE_MODE_HOST_PATH) return env;
 
-  const commandPath = resolveCommand(command, env.PATH);
+  const commandPath = await resolveCommand(command, env.PATH);
   const candidates: string[] = [];
   if (commandPath) {
     candidates.push(join(dirname(commandPath), "codex-code-mode-host"));
@@ -238,10 +238,12 @@ async function withCodexCodeModeHost(env: NodeJS.ProcessEnv, command: string): P
   return env;
 }
 
-function resolveCommand(command: string, pathValue: string | undefined): string | undefined {
+async function resolveCommand(command: string, pathValue: string | undefined): Promise<string | undefined> {
   if (isAbsolute(command)) return command;
   for (const directory of pathValue?.split(delimiter) ?? []) {
-    if (directory) return join(directory, command);
+    if (!directory) continue;
+    const candidate = join(directory, command);
+    if (await access(candidate, constants.X_OK).then(() => true, () => false)) return candidate;
   }
   return undefined;
 }
