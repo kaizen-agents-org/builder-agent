@@ -191,8 +191,9 @@ describe("KaizenLoopPayload", () => {
     assert.deepEqual(schema.properties.status.enum, ["fixed", "partial", "blocked"]);
     assert.equal(schema.properties.summary.minLength, 1);
     assert.equal(schema.properties.summary.pattern, "\\S");
-    assert.equal(schema.properties.blockedReason.minLength, 1);
-    assert.equal(schema.properties.blockedReason.pattern, "\\S");
+    assert.equal(schema.allOf[0].then.properties.blockedReason.minLength, 1);
+    assert.equal(schema.allOf[0].then.properties.blockedReason.pattern, "\\S");
+    assert.equal(schema.allOf[1].then.properties.blockedReason.not.pattern, "\\S");
     assert.equal(schema.allOf.length, 3);
     assert.equal(schema.allOf[2].if.properties.status.const, "partial");
     assert.equal(schema.allOf[2].then.properties.notes.minLength, 1);
