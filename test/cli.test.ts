@@ -70,8 +70,10 @@ export default {
 
   it("supports the kaizen-loop stdin/result-file contract", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const launchDir = await mkdtemp(join(tmpdir(), "builder-agent-launch-"));
     const binDir = join(dir, "bin");
-    const resultPath = join(dir, "build-result.json");
+    const relativeResultPath = join(".kaizen", "builder", "build-result.json");
+    const resultPath = join(dir, relativeResultPath);
     const argsPath = join(dir, "claude-args.json");
     await mkdir(binDir);
     const fakeCodexPath = join(binDir, "codex");
@@ -102,11 +104,12 @@ console.log(JSON.stringify({
     await chmod(fakeCodexPath, 0o755);
     await chmod(fakeClaudePath, 0o755);
 
-    const { stdout } = await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+    const { stdout } = await spawnWithInput(process.execPath, [join(process.cwd(), "dist", "cli.js")], "Fix issue #1", {
+      cwd: launchDir,
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
-        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_BUILD_RESULT_PATH: relativeResultPath,
         KAIZEN_WORKSPACE_DIR: dir,
         KAIZEN_PREFERRED_AGENT: "claude"
       }
