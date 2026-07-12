@@ -46,6 +46,7 @@ describe("artifacts", () => {
 
     const resultText = await readFile(join(outDir, "build-result.json"), "utf8");
     const writtenResult = JSON.parse(resultText);
+    const discoveredIssues = JSON.parse(await readFile(join(outDir, "discovered-issues.json"), "utf8"));
     const latestReview = JSON.parse(await readFile(join(outDir, "self-review.json"), "utf8"));
     const iteration1Summary = JSON.parse(await readFile(join(outDir, "iterations", "1", "implementation-summary.json"), "utf8"));
     const iteration1ChangedFiles = JSON.parse(await readFile(join(outDir, "iterations", "1", "changed-files.json"), "utf8"));
@@ -60,6 +61,20 @@ describe("artifacts", () => {
 
     assert.equal(writtenResult.status, "ready");
     assert.equal(writtenResult.iterations, 2);
+    assert.deepEqual(discoveredIssues, [
+      {
+        title: "Verifier warning needs follow-up",
+        repo: "verifier",
+        expected: "Verifier warnings should include actionable remediation.",
+        evidence: "First iteration verifier warning."
+      },
+      {
+        title: "Builder docs need a note",
+        repo: "builder-agent",
+        expected: "Builder docs should describe the new behavior.",
+        evidence: "Second iteration follow-up note."
+      }
+    ]);
     assert.equal(latestReview.passed, true);
     assert.equal(iteration1Summary.summary, "Implemented the first version.");
     assert.deepEqual(iteration1ChangedFiles, ["src/feature.js"]);

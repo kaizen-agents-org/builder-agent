@@ -1,7 +1,8 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readFile, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { constants } from "node:fs";
 import { tmpdir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
@@ -127,7 +128,8 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
             }
         }
         const args = provider.createArgs({ prompt, workspaceDir, model, outputPath });
-        const result = await runCommand(provider.command, args, { cwd: workspaceDir, env, timeoutMs: provider.timeoutMs });
+        const attemptEnv = agent === "codex" ? await withCodexCodeModeHost(env, provider.command) : env;
+        const result = await runCommand(provider.command, args, { cwd: workspaceDir, env: attemptEnv, timeoutMs: provider.timeoutMs });
         const lastMessage = provider.output === "last-message" ? await readFile(outputPath, "utf8").catch(() => "") : "";
         const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
         const payloadSource = lastMessage ? "last-message" : "stdout";
@@ -153,6 +155,39 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
             payload: undefined
         };
     }
+}
+async function withCodexCodeModeHost(env, command) {
+    if (env.CODEX_CODE_MODE_HOST_PATH)
+        return env;
+    const commandPath = await resolveCommand(command, env.PATH);
+    const candidates = [];
+    if (commandPath) {
+        candidates.push(join(dirname(commandPath), "codex-code-mode-host"));
+        const resolvedCommand = await realpath(commandPath).catch(() => undefined);
+        if (resolvedCommand)
+            candidates.push(join(dirname(resolvedCommand), "codex-code-mode-host"));
+    }
+    if (env.HOME) {
+        candidates.push(join(env.HOME, ".codex", "plugins", ".plugin-appserver", "codex-code-mode-host"));
+    }
+    for (const candidate of [...new Set(candidates)]) {
+        if (await access(candidate, constants.X_OK).then(() => true, () => false)) {
+            return { ...env, CODEX_CODE_MODE_HOST_PATH: candidate };
+        }
+    }
+    return env;
+}
+async function resolveCommand(command, pathValue) {
+    if (isAbsolute(command))
+        return command;
+    for (const directory of pathValue?.split(delimiter) ?? []) {
+        if (!directory)
+            continue;
+        const candidate = join(directory, command);
+        if (await access(candidate, constants.X_OK).then(() => true, () => false))
+            return candidate;
+    }
+    return undefined;
 }
 /**
  * @param {NodeJS.ProcessEnv} env

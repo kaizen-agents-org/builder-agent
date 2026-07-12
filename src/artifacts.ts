@@ -7,12 +7,14 @@ export async function writeBuildArtifacts(outDir: string, result: BuildResult): 
 
   const selfReviewPath = join(outDir, "self-review.json");
   const buildResultPath = join(outDir, "build-result.json");
+  const discoveredIssuesPath = join(outDir, "discovered-issues.json");
   const iterationArtifacts: IterationArtifact[] = Array.isArray(result.iterationArtifacts) ? result.iterationArtifacts : [];
   const iterationArtifactPaths: BuildArtifactPaths["iterationArtifactPaths"] = [];
   const iterationsDir = join(outDir, "iterations");
 
   await writeJson(selfReviewPath, result.review);
   await writeJson(buildResultPath, result);
+  await writeJson(discoveredIssuesPath, result.discoveredIssues);
   await rm(iterationsDir, { recursive: true, force: true });
   for (const artifact of iterationArtifacts) {
     const iterationDir = join(iterationsDir, String(artifact.iteration));
@@ -39,6 +41,7 @@ export async function writeBuildArtifacts(outDir: string, result: BuildResult): 
   return {
     selfReviewPath,
     buildResultPath,
+    discoveredIssuesPath,
     iterationArtifactPaths
   };
 }
