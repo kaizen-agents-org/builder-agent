@@ -207,7 +207,7 @@ builder-agent < prompt.txt
 
 Required environment:
 
-- `KAIZEN_BUILD_RESULT_PATH`: file path where Builder Agent writes the orchestration result.
+- `KAIZEN_BUILD_RESULT_PATH`: file path where Builder Agent writes the orchestration result. Relative paths are resolved from `KAIZEN_WORKSPACE_DIR`.
 
 Optional environment:
 
