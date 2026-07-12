@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { access, mkdtemp, readFile, realpath, rm } from "node:fs/promises";
+import { access, mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
@@ -157,7 +157,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
     }
 }
 async function withCodexCodeModeHost(env, command) {
-    if (env.CODEX_CODE_MODE_HOST_PATH)
+    if (env.CODEX_CODE_MODE_HOST_PATH && await isExecutableFile(env.CODEX_CODE_MODE_HOST_PATH))
         return env;
     const commandPath = await resolveCommand(command, env.PATH);
     const candidates = [];
@@ -171,11 +171,15 @@ async function withCodexCodeModeHost(env, command) {
         candidates.push(join(env.HOME, ".codex", "plugins", ".plugin-appserver", "codex-code-mode-host"));
     }
     for (const candidate of [...new Set(candidates)]) {
-        if (await access(candidate, constants.X_OK).then(() => true, () => false)) {
+        if (await isExecutableFile(candidate)) {
             return { ...env, CODEX_CODE_MODE_HOST_PATH: candidate };
         }
     }
     return env;
+}
+async function isExecutableFile(path) {
+    return Promise.all([access(path, constants.X_OK), stat(path)])
+        .then(([, metadata]) => metadata.isFile(), () => false);
 }
 async function resolveCommand(command, pathValue) {
     if (isAbsolute(command))
