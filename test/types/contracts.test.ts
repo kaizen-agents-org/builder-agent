@@ -64,4 +64,18 @@ describe("builder handoff contract", () => {
     assert.match(handoffGuidance, /reviewer notes/i);
     assert.match(handoffGuidance, /not approval/i);
   });
+
+  it("keeps discovered issues in a schema-valid Kaizen Loop handoff", async () => {
+    const [skill, implementationPrompt] = await Promise.all([
+      readFile("SKILL.md", "utf8"),
+      readFile("prompts/implement.md", "utf8")
+    ]);
+
+    for (const content of [skill, implementationPrompt]) {
+      assert.match(content, /blockedReason.*only when.*status.*blocked/is);
+      assert.match(content, /omit.*fixed.*partial/is);
+      assert.match(content, /empty string|`""`/i);
+      assert.match(content, /\.kaizen\/builder\/discovered-issues\.json/);
+    }
+  });
 });

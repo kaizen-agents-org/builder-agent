@@ -32,6 +32,13 @@ Builder Agent does not:
 
 When a separate bug is discovered, do not broaden the current implementation or run GitHub commands. Add a concise entry to `discoveredIssues`; the orchestrator owns routing and issue creation.
 
+Treat `discoveredIssues` as durable handoff data. Before returning the final Kaizen Loop JSON, validate the complete payload against `schemas/kaizen-loop-payload.schema.json`; an invalid sibling field can prevent the orchestrator from receiving and filing every discovered issue. In particular:
+
+- Include `blockedReason` only when `status` is `blocked`, and make it non-empty.
+- Omit `blockedReason` entirely for `fixed` and `partial`; do not emit it as `""` or `null`.
+- Keep every discovered issue in the final payload even when the main task is `partial` or `blocked`.
+- If the final payload cannot be made schema-valid, preserve the discovered issues in `.kaizen/builder/discovered-issues.json` and report the validation failure rather than silently dropping them.
+
 ## Inputs
 
 Accept a normalized build request when provided:
@@ -71,6 +78,7 @@ When the caller asks for structured artifacts or the work is run by an orchestra
 
 - `.kaizen/builder/self-review.json`
 - `.kaizen/builder/build-result.json`
+- `.kaizen/builder/discovered-issues.json`
 - `.kaizen/builder/iterations/<n>/implementation-summary.json`
 - `.kaizen/builder/iterations/<n>/changed-files.json`
 - `.kaizen/builder/iterations/<n>/discovered-issues.json`
@@ -102,6 +110,19 @@ Use `discoveredIssues` for unrelated bugs found while building:
   }
 ]
 ```
+
+For Kaizen Loop handoff, this is valid for a completed task:
+
+```json
+{
+  "status": "fixed",
+  "summary": "Implemented and verified the requested change.",
+  "notes": "Tests passed.",
+  "discoveredIssues": []
+}
+```
+
+Do not add `"blockedReason": ""` to that payload. `blockedReason` is a conditional field, not a field that should always be present.
 
 ## Review Posture
 

@@ -32,6 +32,8 @@ Run targeted checks when practical. If checks cannot run, record why in the fina
 
 If you discover a separate bug or Kaizen Agents workflow problem while implementing the task, do not fix it unless it is required for the current task. Record it in `discoveredIssues` with a title, evidence, expected behavior, and target repo or component when known. Optionally include a detailed body, severity, and labels. The orchestrator owns GitHub issue creation.
 
+Before returning Kaizen Loop JSON, validate the complete payload against `schemas/kaizen-loop-payload.schema.json`. Include a non-empty `blockedReason` only when `status` is `blocked`; omit the field entirely for `fixed` and `partial` instead of emitting an empty string or `null`. Keep discovered issues in the final payload for every status. If a valid final payload cannot be produced, also preserve them in `.kaizen/builder/discovered-issues.json` and report the validation failure.
+
 Do not perform GitHub operations, commits, pushes, PR creation, or final approval work as part of Builder Agent.
 
 ## Final Handoff

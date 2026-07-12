@@ -1,5 +1,5 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname } from "node:path";
+import { dirname, resolve } from "node:path";
 import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
 import { normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
 import type { AgentRunResult, KaizenLoopBuilderIO, KaizenLoopPayload } from "./types/contracts.js";
@@ -9,11 +9,13 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }: Kaize
   const workspaceDir = env.KAIZEN_WORKSPACE_DIR || process.cwd();
   const preferredAgents = normalizeAgents(env.KAIZEN_PREFERRED_AGENT);
   const model = env.KAIZEN_AGENT_MODEL || undefined;
-  const resultPath = env.KAIZEN_BUILD_RESULT_PATH;
+  const configuredResultPath = env.KAIZEN_BUILD_RESULT_PATH;
 
-  if (!resultPath) {
+  if (!configuredResultPath) {
     throw new Error("KAIZEN_BUILD_RESULT_PATH is required for Kaizen Loop integration.");
   }
+
+  const resultPath = resolve(workspaceDir, configuredResultPath);
 
   const result = await runImplementationAgent({
     agent: preferredAgents,

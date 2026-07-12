@@ -20,7 +20,13 @@
         }
       },
       "then": {
-        "required": ["blockedReason"]
+        "required": ["blockedReason"],
+        "properties": {
+          "blockedReason": {
+            "minLength": 1,
+            "pattern": "\\S"
+          }
+        }
       }
     },
     {
@@ -33,8 +39,12 @@
         }
       },
       "then": {
-        "not": {
-          "required": ["blockedReason"]
+        "properties": {
+          "blockedReason": {
+            "not": {
+              "pattern": "\\S"
+            }
+          }
         }
       }
     },
@@ -75,8 +85,6 @@
     },
     "blockedReason": {
       "type": "string",
-      "minLength": 1,
-      "pattern": "\\S",
       "description": "Reason the builder could not complete the task when status is blocked."
     },
     "discoveredIssues": {

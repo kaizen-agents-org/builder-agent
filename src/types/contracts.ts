@@ -146,6 +146,7 @@ export interface IterationArtifact {
 export interface BuildArtifactPaths {
   selfReviewPath: string;
   buildResultPath: string;
+  discoveredIssuesPath: string;
   iterationArtifactPaths: Array<{
     iteration: number;
     implementationSummaryPath: string;
