@@ -10,6 +10,7 @@
   "types": "./dist/index.d.ts",
   "scripts": {
     "build": "tsc -p tsconfig.json && node -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
+    "check:dist": "npm run build && node scripts/check-dist.js",
     "test": "npm run build && node scripts/run-tests.js",
     "validate:json": "npm run build && node scripts/validate-json.js"
   },
