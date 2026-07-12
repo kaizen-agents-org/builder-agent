@@ -25,7 +25,13 @@ const outputIndex = args.indexOf("--output-last-message");
 writeFileSync(args[outputIndex + 1], JSON.stringify({
   status: "fixed",
   summary: "implemented with codex",
-  notes: "checked"
+  notes: "checked",
+  blockedReason: "",
+  discoveredIssues: [{
+    title: "Follow-up issue",
+    expected: "Keep the issue in the handoff.",
+    evidence: "codex output"
+  }]
 }));
 })();
 `,
@@ -47,6 +53,12 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     assert.equal(result.exitCode, 0);
     assert.equal(result.payload.status, "fixed");
     assert.equal(result.payload.summary, "implemented with codex");
+    assert.equal(result.payload.blockedReason, undefined);
+    assert.deepEqual(result.payload.discoveredIssues, [{
+      title: "Follow-up issue",
+      expected: "Keep the issue in the handoff.",
+      evidence: "codex output"
+    }]);
     assert.match(result.payload.notes, /checked/);
     assert.match(result.payload.notes, /codex: exitCode=0, status=selected, failureClass=none, fallbackReason=none, payloadSource=last-message/);
     assert.match(result.payload.notes, /Selected backend: codex/);

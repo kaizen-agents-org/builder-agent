@@ -32,7 +32,7 @@ export function normalizeKaizenLoopPayload(input) {
             throw new Error("Kaizen Loop payload blockedReason must be a non-empty string when status is blocked.");
         }
     }
-    else if (blockedReason !== undefined) {
+    else if (blockedReason) {
         throw new Error("Kaizen Loop payload blockedReason is only valid when status is blocked.");
     }
     return {
