@@ -61,11 +61,14 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     const binDir = join(dir, "bin");
     const desktopDir = join(dir, ".codex", "plugins", ".plugin-appserver");
     const envPath = join(dir, "host-path.txt");
+    const explicitHostPath = join(dir, "explicit-host");
     await mkdir(emptyBinDir);
     await mkdir(binDir);
     await mkdir(desktopDir, { recursive: true });
     await writeFile(join(desktopDir, "codex-code-mode-host"), "#!/bin/sh\n", "utf8");
     await chmod(join(desktopDir, "codex-code-mode-host"), 0o755);
+    await writeFile(explicitHostPath, "#!/bin/sh\n", "utf8");
+    await chmod(explicitHostPath, 0o755);
     await writeFile(join(binDir, "codex"), `#!/usr/bin/env node
 const { writeFileSync } = require("node:fs");
 const args = process.argv.slice(2);
@@ -79,7 +82,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: 
       agent: "codex",
       prompt: "Fix issue #1",
       workspaceDir: dir,
-      env: { ...process.env, HOME: dir, PATH: `${emptyBinDir}:${binDir}:${process.env.PATH}` }
+      env: { ...process.env, HOME: dir, PATH: `${emptyBinDir}:${binDir}:${process.env.PATH}`, CODEX_CODE_MODE_HOST_PATH: undefined }
     });
     assert.equal(await readFile(envPath, "utf8"), join(desktopDir, "codex-code-mode-host"));
 
@@ -87,9 +90,17 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: 
       agent: "codex",
       prompt: "Fix issue #1",
       workspaceDir: dir,
-      env: { ...process.env, HOME: dir, PATH: `${emptyBinDir}:${binDir}:${process.env.PATH}`, CODEX_CODE_MODE_HOST_PATH: "/explicit/host" }
+      env: { ...process.env, HOME: dir, PATH: `${emptyBinDir}:${binDir}:${process.env.PATH}`, CODEX_CODE_MODE_HOST_PATH: explicitHostPath }
     });
-    assert.equal(await readFile(envPath, "utf8"), "/explicit/host");
+    assert.equal(await readFile(envPath, "utf8"), explicitHostPath);
+
+    await runImplementationAgent({
+      agent: "codex",
+      prompt: "Fix issue #1",
+      workspaceDir: dir,
+      env: { ...process.env, HOME: dir, PATH: `${emptyBinDir}:${binDir}:${process.env.PATH}`, CODEX_CODE_MODE_HOST_PATH: join(dir, "missing-host") }
+    });
+    assert.equal(await readFile(envPath, "utf8"), join(desktopDir, "codex-code-mode-host"));
   });
 
   it("falls back to the next preferred backend when an agent fails without a payload", async () => {
