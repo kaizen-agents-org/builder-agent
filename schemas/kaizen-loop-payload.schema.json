@@ -65,6 +65,21 @@
           }
         }
       }
+    },
+    {
+      "if": {
+        "required": ["status"],
+        "properties": {
+          "status": {
+            "enum": ["fixed", "partial"]
+          }
+        }
+      },
+      "then": {
+        "not": {
+          "required": ["humanRequest"]
+        }
+      }
     }
   ],
   "properties": {
@@ -86,6 +101,37 @@
     "blockedReason": {
       "type": "string",
       "description": "Reason the builder could not complete the task when status is blocked."
+    },
+    "humanRequest": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["reasonCode", "requestKey", "question"],
+      "description": "A concrete unanswered human question. Include only when status is blocked and work cannot continue without the answer or approval.",
+      "properties": {
+        "reasonCode": {
+          "type": "string",
+          "enum": [
+            "missing_information",
+            "credentials",
+            "billing",
+            "destructive_action",
+            "production_change",
+            "policy_exception",
+            "external_repository_action",
+            "other_approval"
+          ]
+        },
+        "requestKey": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._:-]*$",
+          "description": "Stable semantic identity for the requested decision. Keep it unchanged when only question wording changes."
+        },
+        "question": {
+          "type": "string",
+          "minLength": 1,
+          "pattern": "\\S"
+        }
+      }
     },
     "discoveredIssues": {
       "type": "array",

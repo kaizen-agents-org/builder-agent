@@ -74,6 +74,7 @@ describe("builder handoff contract", () => {
     for (const content of [skill, implementationPrompt]) {
       assert.match(content, /blockedReason.*only when.*status.*blocked/is);
       assert.match(content, /omit.*fixed.*partial/is);
+      assert.match(content, /humanRequest.*concrete.*human.*question|humanRequest.*concrete unanswered human/is);
       assert.match(content, /empty string|`""`/i);
       assert.match(content, /\.kaizen\/builder\/discovered-issues\.json/);
     }

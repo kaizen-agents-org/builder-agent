@@ -1,7 +1,23 @@
-import type { DiscoveredIssue, KaizenLoopPayload, KaizenLoopStatus } from "./contracts.js";
+import type {
+  DiscoveredIssue,
+  HumanRequest,
+  HumanRequestReasonCode,
+  KaizenLoopPayload,
+  KaizenLoopStatus
+} from "./contracts.js";
 
 const STATUS_VALUES = new Set(["fixed", "partial", "blocked"]);
-const PAYLOAD_KEYS = new Set(["status", "summary", "notes", "blockedReason", "discoveredIssues"]);
+const PAYLOAD_KEYS = new Set(["status", "summary", "notes", "blockedReason", "humanRequest", "discoveredIssues"]);
+const HUMAN_REQUEST_REASON_CODES = new Set<HumanRequestReasonCode>([
+  "missing_information",
+  "credentials",
+  "billing",
+  "destructive_action",
+  "production_change",
+  "policy_exception",
+  "external_repository_action",
+  "other_approval"
+]);
 import { normalizeDiscoveredIssues as normalizeSharedDiscoveredIssues } from "./DiscoveredIssue.js";
 
 export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
@@ -42,12 +58,41 @@ export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
     throw new Error("Kaizen Loop payload blockedReason is only valid when status is blocked.");
   }
 
+  const humanRequest = normalizeHumanRequest(payload.humanRequest);
+  if (humanRequest && payload.status !== "blocked") {
+    throw new Error("Kaizen Loop payload humanRequest is only valid when status is blocked.");
+  }
+
   return {
     status: payload.status,
     summary,
     notes: payload.notes,
     discoveredIssues: normalizeDiscoveredIssues(payload.discoveredIssues),
-    ...(blockedReason ? { blockedReason } : {})
+    ...(blockedReason ? { blockedReason } : {}),
+    ...(humanRequest ? { humanRequest } : {})
+  };
+}
+
+function normalizeHumanRequest(value: unknown): HumanRequest | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== "object" || Array.isArray(value)) {
+    throw new Error("Kaizen Loop payload humanRequest must be an object.");
+  }
+  assertAllowedKeys(value, new Set(["reasonCode", "requestKey", "question"]), "Kaizen Loop payload humanRequest");
+  const request = value as Record<string, unknown>;
+  if (typeof request.reasonCode !== "string" || !HUMAN_REQUEST_REASON_CODES.has(request.reasonCode as HumanRequestReasonCode)) {
+    throw new Error(`Invalid Kaizen Loop payload humanRequest reasonCode: ${String(request.reasonCode)}`);
+  }
+  if (typeof request.question !== "string" || request.question.trim().length === 0) {
+    throw new Error("Kaizen Loop payload humanRequest question must be a non-empty string.");
+  }
+  if (typeof request.requestKey !== "string" || !/^[a-z0-9][a-z0-9._:-]*$/.test(request.requestKey)) {
+    throw new Error("Kaizen Loop payload humanRequest requestKey must be a stable lowercase semantic key.");
+  }
+  return {
+    reasonCode: request.reasonCode as HumanRequestReasonCode,
+    requestKey: request.requestKey,
+    question: request.question.trim()
   };
 }
 

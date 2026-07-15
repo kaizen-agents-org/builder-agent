@@ -36,6 +36,7 @@ Treat `discoveredIssues` as durable handoff data. Before returning the final Kai
 
 - Include `blockedReason` only when `status` is `blocked`, and make it non-empty.
 - Omit `blockedReason` entirely for `fixed` and `partial`; do not emit it as `""` or `null`.
+- Include `humanRequest` only for a concrete unanswered human question or approval. Use a schema-defined `reasonCode`, a stable lowercase `requestKey` for the semantic decision, and the exact `question`; never use it for generic automation failures, upstream work, retry exhaustion, or provider failures.
 - Keep every discovered issue in the final payload even when the main task is `partial` or `blocked`.
 - If the final payload cannot be made schema-valid, preserve the discovered issues in `.kaizen/builder/discovered-issues.json` and report the validation failure rather than silently dropping them.
 
