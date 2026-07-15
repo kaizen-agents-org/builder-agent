@@ -8,6 +8,8 @@ export type {
   BuildResult,
   BuilderAdapter,
   DiscoveredIssue,
+  HumanRequest,
+  HumanRequestReasonCode,
   KaizenLoopPayload,
   SelfReviewInput,
   SelfReviewResult

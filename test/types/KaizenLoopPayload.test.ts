@@ -161,6 +161,86 @@ describe("KaizenLoopPayload", () => {
     );
   });
 
+  it("normalizes a structured human request only for blocked payloads", () => {
+    assert.deepEqual(
+      normalizeKaizenLoopPayload({
+        status: "blocked",
+        summary: "Production access requires approval.",
+        notes: "No production action was attempted.",
+        blockedReason: "A maintainer must approve the production rollout.",
+        humanRequest: {
+          reasonCode: "production_change",
+          requestKey: "production-deployment",
+          question: "  Approve deploying this change to production?  "
+        }
+      }).humanRequest,
+      {
+        reasonCode: "production_change",
+        requestKey: "production-deployment",
+        question: "Approve deploying this change to production?"
+      }
+    );
+
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "fixed",
+        summary: "Fixed.",
+        notes: "",
+        humanRequest: {
+          reasonCode: "production_change",
+          requestKey: "production-deployment",
+          question: "Approve deployment?"
+        }
+      }),
+      /humanRequest is only valid when status is blocked/
+    );
+  });
+
+  it("rejects malformed or unsupported human requests", () => {
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "blocked",
+        summary: "Blocked.",
+        notes: "",
+        blockedReason: "Approval required.",
+        humanRequest: {
+          reasonCode: "unknown_reason",
+          requestKey: "approval",
+          question: "Approve?"
+        }
+      }),
+      /humanRequest reasonCode/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "blocked",
+        summary: "Blocked.",
+        notes: "",
+        blockedReason: "Approval required.",
+        humanRequest: {
+          reasonCode: "credentials",
+          requestKey: "billing-credentials",
+          question: "   "
+        }
+      }),
+      /humanRequest question must be a non-empty string/
+    );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "blocked",
+        summary: "Blocked.",
+        notes: "",
+        blockedReason: "Approval required.",
+        humanRequest: {
+          reasonCode: "credentials",
+          requestKey: "Question wording that changes",
+          question: "Approve?"
+        }
+      }),
+      /requestKey must be a stable lowercase semantic key/
+    );
+  });
+
   it("treats an empty blockedReason on completed payloads as absent", () => {
     const discoveredIssues = [{
       title: "Follow-up issue",
@@ -194,7 +274,7 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.allOf[0].then.properties.blockedReason.minLength, 1);
     assert.equal(schema.allOf[0].then.properties.blockedReason.pattern, "\\S");
     assert.equal(schema.allOf[1].then.properties.blockedReason.not.pattern, "\\S");
-    assert.equal(schema.allOf.length, 3);
+    assert.equal(schema.allOf.length, 4);
     assert.equal(schema.allOf[2].if.properties.status.const, "partial");
     assert.equal(schema.allOf[2].then.properties.notes.minLength, 1);
     assert.equal(schema.allOf[2].then.properties.notes.pattern, "\\S");
@@ -204,5 +284,17 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.properties.discoveredIssues.items.properties.evidence.pattern, "\\S");
     assert.equal(schema.required.includes("discoveredIssues"), false);
     assert.equal(schema.required.includes("blockedReason"), false);
+    assert.equal(schema.required.includes("humanRequest"), false);
+    assert.deepEqual(schema.properties.humanRequest.required, ["reasonCode", "requestKey", "question"]);
+    assert.deepEqual(schema.properties.humanRequest.properties.reasonCode.enum, [
+      "missing_information",
+      "credentials",
+      "billing",
+      "destructive_action",
+      "production_change",
+      "policy_exception",
+      "external_repository_action",
+      "other_approval"
+    ]);
   });
 });

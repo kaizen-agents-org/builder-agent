@@ -150,7 +150,14 @@ export interface KaizenLoopPayload {
     summary: string;
     notes: string;
     blockedReason?: string;
+    humanRequest?: HumanRequest;
     discoveredIssues: DiscoveredIssue[];
+}
+export type HumanRequestReasonCode = "missing_information" | "credentials" | "billing" | "destructive_action" | "production_change" | "policy_exception" | "external_repository_action" | "other_approval";
+export interface HumanRequest {
+    reasonCode: HumanRequestReasonCode;
+    requestKey: string;
+    question: string;
 }
 export interface AgentRunInput {
     agent: AgentKind | AgentKind[];
