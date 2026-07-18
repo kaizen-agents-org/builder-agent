@@ -105,9 +105,9 @@ report:
 issues:
   label: "kaizen"
   selection:
-    # Public issue forms add only `kaizen`; a maintainer must queue execution.
+    # Public issue forms add only `kaizen`; dogfood automation adds this authorization label.
     mode: opt-in
-    includeLabel: "kaizen:ready"
+    includeLabel: "kaizen:authorized"
     excludeLabels:
       - "kaizen:needs-human"
   priorityOrder:
