@@ -437,6 +437,8 @@ function codexArgs({ prompt, workspaceDir, model, outputPath }: AgentCommandInpu
     "--json",
     "--sandbox",
     "workspace-write",
+    "--config",
+    'approval_policy="never"',
     "-C",
     workspaceDir,
     "--output-last-message",
