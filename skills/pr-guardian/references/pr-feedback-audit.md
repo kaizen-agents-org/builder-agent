@@ -14,7 +14,7 @@ gh pr checks <pr> --repo <owner/repo>
 
 Run this loop. It feeds each `pageInfo.endCursor` into the next request and stops only when `hasNextPage` is false:
 
-```sh
+```bash
 cursor=
 while :; do
   args=(
@@ -83,7 +83,7 @@ done
 
 For every thread whose nested `comments.pageInfo.hasNextPage` is true, run the corresponding comment loop with that thread's GraphQL `id`:
 
-```sh
+```bash
 thread_id='<review-thread-id>'
 cursor=
 while :; do
@@ -130,14 +130,20 @@ query($threadId:ID!, $cursor:String) {
 done
 ```
 
-Exhaust each REST endpoint with `--paginate`; summaries and first pages are incomplete evidence:
+Exhaust each REST endpoint with `--paginate`; summaries and first pages are incomplete evidence. Capture every check-run ID returned for the head, then exhaust the annotations endpoint for each ID rather than sampling one run:
 
 ```sh
 gh api --paginate 'repos/<owner>/<repo>/pulls/<pr>/reviews?per_page=100'
 gh api --paginate 'repos/<owner>/<repo>/pulls/<pr>/comments?per_page=100'
 gh api --paginate 'repos/<owner>/<repo>/issues/<pr>/comments?per_page=100'
-gh api --paginate 'repos/<owner>/<repo>/commits/<head-sha>/check-runs?per_page=100'
-gh api --paginate 'repos/<owner>/<repo>/check-runs/<check-run-id>/annotations?per_page=100'
+check_run_ids="$(gh api --paginate \
+  'repos/<owner>/<repo>/commits/<head-sha>/check-runs?per_page=100' \
+  --jq '.check_runs[].id')" || exit 1
+while IFS= read -r check_run_id; do
+  [[ -n "${check_run_id}" ]] || continue
+  gh api --paginate \
+    "repos/<owner>/<repo>/check-runs/${check_run_id}/annotations?per_page=100" || exit 1
+done <<<"${check_run_ids}"
 ```
 
 ## Reply, then resolve
