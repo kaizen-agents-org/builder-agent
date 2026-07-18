@@ -63,8 +63,15 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     assert.match(result.payload.notes, /codex: exitCode=0, status=selected, failureClass=none, fallbackReason=none, payloadSource=last-message/);
     assert.match(result.payload.notes, /Selected backend: codex/);
     assert.match(result.payload.notes, /Final payload source: last-message/);
-    assert.deepEqual(args.slice(0, 5), ["exec", "--json", "--sandbox", "workspace-write", "-C"]);
-    assert.equal(args.includes("--ask-for-approval"), false);
+    assert.deepEqual(args.slice(0, 7), [
+      "exec",
+      "--json",
+      "--sandbox",
+      "workspace-write",
+      "--config",
+      'approval_policy="never"',
+      "-C"
+    ]);
   });
 
   it("discovers the Desktop code-mode host without overriding an explicit host", async () => {
