@@ -25,7 +25,7 @@ Address all `mustFix` items before `shouldFix` items.
 
 After improving, run practical targeted checks and perform a new self-review.
 
-Update the final handoff evidence so it remains accurate about what changed, why, verification run or skipped, residual risk, and reviewer notes.
+Update the final handoff evidence so it remains accurate about what changed, why, residual risk, and reviewer notes. Refresh the required build-result `verification` array with one entry per check, including the command, outcome, and concise evidence or the reason it was skipped; when structured iteration artifacts are written, keep `.kaizen/builder/iterations/<n>/verification.json` in sync.
 
 ## Stopping Rule
 

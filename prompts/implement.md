@@ -38,4 +38,4 @@ Do not perform GitHub operations, commits, pushes, PR creation, or final approva
 
 ## Final Handoff
 
-Produce reviewable implementation evidence for `kaizen-loop`, the independent verifier, and human reviewers. The final result should state what changed, why it changed, verification run or skipped with the reason, residual risk, and reviewer notes when relevant. Do not present the handoff as approval.
+Produce reviewable implementation evidence for `kaizen-loop`, the independent verifier, and human reviewers. Populate the required `verification` array in the final build result with one entry per check, including the command, outcome, and concise evidence or the reason it was skipped. When writing structured iteration artifacts, write the same entries to `.kaizen/builder/iterations/<n>/verification.json`. The final result should also state what changed, why it changed, residual risk, and reviewer notes when relevant. Do not present the handoff as approval.

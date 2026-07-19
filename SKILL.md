@@ -86,6 +86,7 @@ When the caller asks for structured artifacts or the work is run by an orchestra
 - `.kaizen/builder/iterations/<n>/self-review.json`
 - `.kaizen/builder/iterations/<n>/improvement-instructions.json`
 - `.kaizen/builder/iterations/<n>/residual-notes.json`
+- `.kaizen/builder/iterations/<n>/verification.json`
 
 Keep the top-level files as the latest/final artifacts for compatibility. Preserve every completed iteration under `iterations/<n>/` so the improvement history remains reviewable.
 
@@ -96,6 +97,11 @@ Preserve enough information for the next system to review the implementation wit
 - Verification run, or why verification was skipped.
 - Residual risk or assumptions.
 - Reviewer notes when relevant.
+
+Populate the required `verification` array in `.kaizen/builder/build-result.json`
+with one entry per check, including the command, outcome, and concise evidence or
+the reason it was skipped. Write the same entries to each completed iteration's
+`verification.json` so the final result and iteration history remain consistent.
 
 Use `discoveredIssues` for unrelated bugs found while building:
 
