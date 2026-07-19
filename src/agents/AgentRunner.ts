@@ -46,6 +46,13 @@ const DEFAULT_FALLBACK_ON: AgentFailureClass[] = ["command_missing", "auth_faile
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
 const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
 const HEALTH_CHECK_FIELDS = new Set(["command", "args", "timeoutMs"]);
+const CLAUDE_VERIFICATION_TOOLS = ["npm", "pnpm", "yarn"].flatMap((command) => [
+  `Bash(${command} test:*)`,
+  `Bash(${command} run test:*)`,
+  `Bash(${command} run lint:*)`,
+  `Bash(${command} run check:*)`,
+  `Bash(${command} run validate:*)`
+]);
 
 const AGENT_PROVIDERS: Record<string, AgentProvider> = {
   codex: {
@@ -459,9 +466,9 @@ function claudeArgs({ prompt, model }: AgentCommandInput): string[] {
     "--output-format",
     "json",
     "--permission-mode",
-    "acceptEdits",
+    "dontAsk",
     "--allowedTools",
-    "Bash(npm:*) Read Write Edit Glob Grep"
+    [...CLAUDE_VERIFICATION_TOOLS, "Read", "Write", "Edit", "Glob", "Grep"].join(" ")
   ];
   if (model) args.push("--model", model);
   return args;
