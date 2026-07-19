@@ -461,7 +461,7 @@ function claudeArgs({ prompt, model }: AgentCommandInput): string[] {
     "--permission-mode",
     "acceptEdits",
     "--allowedTools",
-    "Bash(npm:*) Read Write Edit Glob Grep"
+    "Bash(npm:*) Bash(pnpm:*) Bash(yarn:*) Bash(node:*) Bash(npx:*) Read Write Edit Glob Grep"
   ];
   if (model) args.push("--model", model);
   return args;

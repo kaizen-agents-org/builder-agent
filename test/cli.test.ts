@@ -127,7 +127,13 @@ console.log(JSON.stringify({
     assert.equal(result.summary, "implemented");
     assert.doesNotMatch(allowedTools, /Bash\(git add:\*\)/);
     assert.doesNotMatch(allowedTools, /Bash\(git commit:\*\)/);
+    assert.doesNotMatch(allowedTools, /Bash\(git push:\*\)/);
+    assert.doesNotMatch(allowedTools, /Bash\(gh:\*\)/);
     assert.match(allowedTools, /Bash\(npm:\*\)/);
+    assert.match(allowedTools, /Bash\(pnpm:\*\)/);
+    assert.match(allowedTools, /Bash\(yarn:\*\)/);
+    assert.match(allowedTools, /Bash\(node:\*\)/);
+    assert.match(allowedTools, /Bash\(npx:\*\)/);
     assert.match(allowedTools, /\bRead\b/);
     assert.match(allowedTools, /\bWrite\b/);
     assert.match(allowedTools, /\bEdit\b/);

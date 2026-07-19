@@ -219,7 +219,7 @@ Optional environment:
 
 Built-in providers:
 
-- `claude`: runs `claude -p <prompt> --output-format json ...`.
+- `claude`: runs `claude -p <prompt> --output-format json ...`. Its shell allowlist is limited to verification-oriented `npm`, `pnpm`, `yarn`, `node`, and `npx` commands; Git staging, commits, pushes, and PR operations remain outside the built-in provider's allowed command scope.
 - `codex`: runs `codex exec --json --sandbox workspace-write --config 'approval_policy="never"' ...`. The workspace sandbox remains enforced, while unattended runs never wait for an unavailable approver.
 
 If a provider exits or fails without returning a valid Builder Agent payload, Builder Agent classifies the failure before deciding whether to try the next provider. Default fallback classes are `command_missing`, `auth_failed`, `rate_limited`, `invalid_payload`, and `timeout`. `provider_blocked` stops fallback unless the provider explicitly opts in. Structured payloads are preserved even when the provider exits non-zero, so an intentional `blocked` result is not retried as an availability failure.
