@@ -6,7 +6,8 @@ import { promisify } from "node:util";
 import { normalizeSelfReview } from "../review/SelfReview.js";
 import { normalizeBuildRequest } from "../types/BuildRequest.js";
 import { createBuildResult, createFailedBuildResult, normalizeDiscoveredIssues, uniqueStrings } from "../types/BuildResult.js";
-import type { BuildRequest, BuildRequestInput, BuildResult, BuilderAdapter, DiscoveredIssue, ImplementationOutput, IterationArtifact, PlanOutput, SelfReviewResult, TaskUnderstanding } from "../types/contracts.js";
+import { normalizeVerificationEvidence } from "../types/VerificationEvidence.js";
+import type { BuildRequest, BuildRequestInput, BuildResult, BuilderAdapter, DiscoveredIssue, ImplementationOutput, IterationArtifact, PlanOutput, SelfReviewResult, TaskUnderstanding, VerificationEvidence } from "../types/contracts.js";
 
 const REQUIRED_ADAPTER_METHODS = ["analyzeTask", "createPlan", "implement", "selfReview", "improve"];
 const ITERATION_ARTIFACTS_PROPERTY = "iterationArtifacts";
@@ -33,6 +34,7 @@ export class BuilderAgent {
     let planSummary: string | undefined;
     let changedFiles: string[] = [];
     let discoveredIssues: DiscoveredIssue[] = [];
+    let verification: VerificationEvidence[] = [];
     let residualNotes: string[] = [];
 
     try {
@@ -53,6 +55,7 @@ export class BuilderAgent {
       });
       changedFiles = await reconcileChangedFiles(extractChangedFiles(implementation), workspaceTracker);
       discoveredIssues = extractDiscoveredIssues(implementation);
+      verification = extractVerification(implementation);
       residualNotes = uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
       let latestReview;
 
@@ -73,6 +76,7 @@ export class BuilderAgent {
           iteration,
           implementation,
           changedFiles,
+          verification: extractVerification(implementation),
           residualNotes: uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes"),
           review: latestReview,
           improvementInstructions
@@ -86,6 +90,7 @@ export class BuilderAgent {
             planSummary,
             changedFiles,
             review: latestReview,
+            verification,
             residualNotes,
             discoveredIssues,
             threshold: request.threshold
@@ -100,6 +105,7 @@ export class BuilderAgent {
             planSummary,
             changedFiles,
             review: latestReview,
+            verification,
             residualNotes: [
               `Self-review did not pass within ${request.maxIterations} iteration(s).`,
               ...residualNotes
@@ -120,6 +126,7 @@ export class BuilderAgent {
         });
         changedFiles = await reconcileChangedFiles(uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles"), workspaceTracker);
         discoveredIssues = dedupeDiscoveredIssues([...discoveredIssues, ...extractDiscoveredIssues(implementation)]);
+        verification = normalizeVerificationEvidence([...verification, ...extractVerification(implementation)]);
         residualNotes = uniqueStrings([...residualNotes, ...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
       }
 
@@ -130,6 +137,7 @@ export class BuilderAgent {
         planSummary,
         changedFiles,
         review: latestReview,
+        verification,
         residualNotes: ["Builder loop ended without a passing self-review."],
         discoveredIssues,
         threshold: request.threshold
@@ -144,6 +152,7 @@ export class BuilderAgent {
         planSummary: planSummary ?? fallback.planSummary,
         changedFiles,
         review: fallback.review,
+        verification,
         residualNotes: uniqueStrings([...residualNotes, message], "residualNotes"),
         discoveredIssues,
         threshold: request?.threshold
@@ -337,6 +346,14 @@ function extractResidualNotes(implementation: ImplementationOutput): string[] {
   return uniqueStrings(implementation.residualNotes, "residualNotes");
 }
 
+function extractVerification(implementation: ImplementationOutput): VerificationEvidence[] {
+  if (!implementation || typeof implementation === "string" || implementation.verification === undefined) {
+    return [];
+  }
+
+  return normalizeVerificationEvidence(implementation.verification, "Implementation verification");
+}
+
 function summarizeImplementation(implementation: ImplementationOutput): string {
   if (typeof implementation === "string" && implementation.trim().length > 0) {
     return implementation.trim();
@@ -384,7 +401,7 @@ function improvementInstructionsFor(review: SelfReviewResult): string[] {
   return [...review.mustFix, ...review.shouldFix];
 }
 
-function createIterationArtifact({ iteration, implementation, changedFiles, residualNotes, review, improvementInstructions }: { iteration: number, implementation: ImplementationOutput, changedFiles: string[], residualNotes: string[], review: SelfReviewResult, improvementInstructions: string[] }): IterationArtifact {
+function createIterationArtifact({ iteration, implementation, changedFiles, verification, residualNotes, review, improvementInstructions }: { iteration: number, implementation: ImplementationOutput, changedFiles: string[], verification: VerificationEvidence[], residualNotes: string[], review: SelfReviewResult, improvementInstructions: string[] }): IterationArtifact {
   return {
     iteration,
     implementationSummary: summarizeImplementation(implementation),
@@ -392,6 +409,7 @@ function createIterationArtifact({ iteration, implementation, changedFiles, resi
     discoveredIssues: extractDiscoveredIssues(implementation),
     review: cloneJsonValue(review),
     improvementInstructions: cloneJsonValue(improvementInstructions),
+    verification: cloneJsonValue(verification),
     residualNotes
   };
 }

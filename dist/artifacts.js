@@ -21,6 +21,7 @@ export async function writeBuildArtifacts(outDir, result) {
             discoveredIssuesPath: join(iterationDir, "discovered-issues.json"),
             selfReviewPath: join(iterationDir, "self-review.json"),
             improvementInstructionsPath: join(iterationDir, "improvement-instructions.json"),
+            verificationPath: join(iterationDir, "verification.json"),
             residualNotesPath: join(iterationDir, "residual-notes.json")
         };
         await writeJson(paths.implementationSummaryPath, { summary: artifact.implementationSummary });
@@ -28,6 +29,7 @@ export async function writeBuildArtifacts(outDir, result) {
         await writeJson(paths.discoveredIssuesPath, artifact.discoveredIssues);
         await writeJson(paths.selfReviewPath, artifact.review);
         await writeJson(paths.improvementInstructionsPath, artifact.improvementInstructions);
+        await writeJson(paths.verificationPath, artifact.verification);
         await writeJson(paths.residualNotesPath, artifact.residualNotes);
         iterationArtifactPaths.push({ iteration: artifact.iteration, ...paths });
     }

@@ -16,6 +16,11 @@ describe("BuildResult", () => {
       planSummary: "Implement the requested change.",
       changedFiles: ["src/feature.js"],
       review: passingReview,
+      verification: [{
+        command: "  npm test  ",
+        status: "passed",
+        summary: "  All tests passed.  "
+      }],
       residualNotes: []
     });
 
@@ -25,6 +30,11 @@ describe("BuildResult", () => {
       constraints: ["Keep the change focused."]
     });
     assert.deepEqual(result.discoveredIssues, []);
+    assert.deepEqual(result.verification, [{
+      command: "npm test",
+      status: "passed",
+      summary: "All tests passed."
+    }]);
     assert.throws(
       () => normalizeBuildResult({ ...result, extra: true }),
       /unknown field/
@@ -36,6 +46,7 @@ describe("BuildResult", () => {
         planSummary: "Implement the requested change.",
         changedFiles: ["src/feature.js"],
         review: passingReview,
+        verification: [],
         residualNotes: []
       }),
       /taskUnderstanding is required/
@@ -64,6 +75,7 @@ describe("BuildResult", () => {
       planSummary: "Implement the requested change.",
       changedFiles: ["src/feature.js"],
       review: reviewWithoutPassed,
+      verification: [],
       residualNotes: []
     });
 
@@ -81,6 +93,7 @@ describe("BuildResult", () => {
       planSummary: "Implement the requested change.",
       changedFiles: ["src/feature.js"],
       review: passingReview,
+      verification: [],
       residualNotes: [],
       discoveredIssues: [
         {
@@ -118,10 +131,40 @@ describe("BuildResult", () => {
         planSummary: "Implement the requested change.",
         changedFiles: ["src/feature.js"],
         review: passingReview,
+        verification: [],
         residualNotes: [],
         discoveredIssues: [{ title: "Title-only follow-up" }]
       }),
       /Build result discoveredIssues\[0\]\.expected must be a non-empty string/
+    );
+  });
+
+  it("rejects malformed verification evidence", () => {
+    const base = {
+      status: "ready",
+      iterations: 1,
+      taskUnderstanding: { summary: "Implement the request.", constraints: [] },
+      planSummary: "Implement the request.",
+      changedFiles: [],
+      review: passingReview,
+      residualNotes: []
+    };
+
+    assert.throws(
+      () => normalizeBuildResult(base),
+      /verification must be an array/
+    );
+    assert.throws(
+      () => normalizeBuildResult({ ...base, verification: [{ command: "npm test", status: "unknown", summary: "Done." }] }),
+      /status must be one of: passed, failed, skipped/
+    );
+    assert.throws(
+      () => normalizeBuildResult({ ...base, verification: [{ command: "npm test", status: "skipped", summary: " " }] }),
+      /summary must be a non-empty string/
+    );
+    assert.throws(
+      () => normalizeBuildResult({ ...base, verification: [{ command: "npm test", status: "passed", summary: "Done.", extra: true }] }),
+      /contains unknown field/
     );
   });
 
@@ -130,6 +173,9 @@ describe("BuildResult", () => {
 
     assert.equal(schema.properties.taskUnderstanding.type, "object");
     assert.equal(schema.required.includes("taskUnderstanding"), true);
+    assert.equal(schema.required.includes("verification"), true);
+    assert.deepEqual(schema.properties.verification.items.required, ["command", "status", "summary"]);
+    assert.deepEqual(schema.properties.verification.items.properties.status.enum, ["passed", "failed", "skipped"]);
     assert.equal(schema.properties.discoveredIssues.type, "array");
     assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
     assert.equal(schema.properties.discoveredIssues.items.properties.expected.pattern, "\\S");

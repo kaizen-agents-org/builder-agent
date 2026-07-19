@@ -18,6 +18,11 @@ export function createAdapter() {
     async implement() {
       return {
         changedFiles: ["src/example-change.js"],
+        verification: [{
+          command: "npm test -- --test-name-pattern=example-change",
+          status: "skipped",
+          summary: "Skipped until focused coverage is added in the improvement iteration."
+        }],
         residualNotes: []
       };
     },
@@ -46,6 +51,11 @@ export function createAdapter() {
     async improve({ implementation }) {
       return {
         changedFiles: [...implementation.changedFiles, "test/example-change.test.js"],
+        verification: [{
+          command: "npm test -- --test-name-pattern=example-change",
+          status: "passed",
+          summary: "The focused regression test passed."
+        }],
         residualNotes: []
       };
     }

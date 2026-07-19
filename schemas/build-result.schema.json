@@ -11,6 +11,7 @@
     "planSummary",
     "changedFiles",
     "review",
+    "verification",
     "residualNotes"
   ],
   "properties": {
@@ -66,9 +67,36 @@
     "review": {
       "$ref": "./self-review.schema.json"
     },
+    "verification": {
+      "type": "array",
+      "description": "Structured evidence for checks that ran or were intentionally skipped during implementation.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["command", "status", "summary"],
+        "properties": {
+          "command": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "description": "Command that ran or was intended to run."
+          },
+          "status": {
+            "type": "string",
+            "enum": ["passed", "failed", "skipped"]
+          },
+          "summary": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "\\S",
+            "description": "Concise outcome, or the reason a check was skipped."
+          }
+        }
+      }
+    },
     "residualNotes": {
       "type": "array",
-      "description": "Remaining caveats, unrun checks, assumptions, or handoff notes.",
+      "description": "Remaining non-verification caveats, assumptions, risks, or reviewer notes.",
       "items": {
         "type": "string",
         "minLength": 1

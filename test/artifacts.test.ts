@@ -18,6 +18,11 @@ describe("artifacts", () => {
     adapter.implement = async () => ({
       summary: "Implemented the first version.",
       changedFiles: ["src/feature.js"],
+      verification: [{
+        command: "npm test -- --test-name-pattern=feature",
+        status: "skipped",
+        summary: "Focused coverage has not been added yet."
+      }],
       residualNotes: ["Tests still need to be added."],
       discoveredIssues: [{
         title: "Verifier warning needs follow-up",
@@ -29,6 +34,11 @@ describe("artifacts", () => {
     adapter.improve = async ({ implementation }) => ({
       summary: "Added targeted regression coverage.",
       changedFiles: [...implementation.changedFiles, "test/feature.test.js"],
+      verification: [{
+        command: "npm test -- --test-name-pattern=feature",
+        status: "passed",
+        summary: "The focused regression test passed."
+      }],
       residualNotes: [],
       discoveredIssues: [{
         title: "Builder docs need a note",
@@ -53,11 +63,13 @@ describe("artifacts", () => {
     const iteration1DiscoveredIssues = JSON.parse(await readFile(join(outDir, "iterations", "1", "discovered-issues.json"), "utf8"));
     const iteration1Review = JSON.parse(await readFile(join(outDir, "iterations", "1", "self-review.json"), "utf8"));
     const iteration1Instructions = JSON.parse(await readFile(join(outDir, "iterations", "1", "improvement-instructions.json"), "utf8"));
+    const iteration1Verification = JSON.parse(await readFile(join(outDir, "iterations", "1", "verification.json"), "utf8"));
     const iteration1ResidualNotes = JSON.parse(await readFile(join(outDir, "iterations", "1", "residual-notes.json"), "utf8"));
     const iteration2Summary = JSON.parse(await readFile(join(outDir, "iterations", "2", "implementation-summary.json"), "utf8"));
     const iteration2ChangedFiles = JSON.parse(await readFile(join(outDir, "iterations", "2", "changed-files.json"), "utf8"));
     const iteration2DiscoveredIssues = JSON.parse(await readFile(join(outDir, "iterations", "2", "discovered-issues.json"), "utf8"));
     const iteration2Review = JSON.parse(await readFile(join(outDir, "iterations", "2", "self-review.json"), "utf8"));
+    const iteration2Verification = JSON.parse(await readFile(join(outDir, "iterations", "2", "verification.json"), "utf8"));
 
     assert.equal(writtenResult.status, "ready");
     assert.equal(writtenResult.iterations, 2);
@@ -86,6 +98,11 @@ describe("artifacts", () => {
     }]);
     assert.equal(iteration1Review.passed, false);
     assert.deepEqual(iteration1Instructions, ["Add targeted tests for the requested behavior."]);
+    assert.deepEqual(iteration1Verification, [{
+      command: "npm test -- --test-name-pattern=feature",
+      status: "skipped",
+      summary: "Focused coverage has not been added yet."
+    }]);
     assert.deepEqual(iteration1ResidualNotes, ["Tests still need to be added."]);
     assert.equal(iteration2Summary.summary, "Added targeted regression coverage.");
     assert.deepEqual(iteration2ChangedFiles, ["src/feature.js", "test/feature.test.js"]);
@@ -96,6 +113,12 @@ describe("artifacts", () => {
       evidence: "Second iteration follow-up note."
     }]);
     assert.equal(iteration2Review.passed, true);
+    assert.deepEqual(iteration2Verification, [{
+      command: "npm test -- --test-name-pattern=feature",
+      status: "passed",
+      summary: "The focused regression test passed."
+    }]);
+    assert.deepEqual(writtenResult.verification, [...iteration1Verification, ...iteration2Verification]);
     assert.equal(Object.hasOwn(writtenResult, "iterationArtifacts"), false);
     await assert.rejects(readFile(join(outDir, "iterations", "3", "stale.json"), "utf8"));
   });

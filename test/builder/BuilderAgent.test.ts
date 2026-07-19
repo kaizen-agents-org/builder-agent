@@ -19,6 +19,7 @@ describe("BuilderAgent", () => {
       constraints: []
     });
     assert.deepEqual(result.changedFiles, ["src/feature.js"]);
+    assert.deepEqual(result.verification, []);
   });
 
   it("falls back to normalized request details when analysis has no summary", async () => {
@@ -64,6 +65,48 @@ describe("BuilderAgent", () => {
     assert.equal(result.iterations, 2);
     assert.equal(adapter.calls.improve, 1);
     assert.deepEqual(result.changedFiles, ["src/feature.js", "test/feature.test.js"]);
+  });
+
+  it("accumulates normalized verification evidence while preserving iteration snapshots", async () => {
+    const adapter = createAdapter({ reviews: [failingReview, passingReview] });
+    adapter.implement = async () => ({
+      changedFiles: ["src/feature.js"],
+      verification: [{
+        command: " npm test -- --test-name-pattern=feature ",
+        status: "skipped",
+        summary: " Focused coverage has not been added yet. "
+      }],
+      residualNotes: []
+    });
+    adapter.improve = async ({ implementation }) => ({
+      changedFiles: [...implementation.changedFiles, "test/feature.test.js"],
+      verification: [{
+        command: "npm test -- --test-name-pattern=feature",
+        status: "passed",
+        summary: "The focused regression test passed."
+      }],
+      residualNotes: []
+    });
+
+    const result = await new BuilderAgent(adapter).build({
+      task: "Implement a small feature.",
+      maxIterations: 2
+    });
+
+    assert.deepEqual(result.verification, [
+      {
+        command: "npm test -- --test-name-pattern=feature",
+        status: "skipped",
+        summary: "Focused coverage has not been added yet."
+      },
+      {
+        command: "npm test -- --test-name-pattern=feature",
+        status: "passed",
+        summary: "The focused regression test passed."
+      }
+    ]);
+    assert.deepEqual(result.iterationArtifacts[0].verification, [result.verification[0]]);
+    assert.deepEqual(result.iterationArtifacts[1].verification, [result.verification[1]]);
   });
 
   it("reconciles adapter changed files with workspace changes", async () => {
@@ -139,10 +182,16 @@ describe("BuilderAgent", () => {
       improvementInstructions: [...failingReview.improvementInstructions]
     };
     const adapter = createAdapter({ reviews: [mutableReview, passingReview] });
+    adapter.implement = async () => ({
+      changedFiles: ["src/feature.js"],
+      verification: [{ command: "npm test", status: "passed", summary: "Tests passed." }],
+      residualNotes: []
+    });
     const originalImprove = adapter.improve;
     adapter.improve = async (input) => {
       input.review.mustFix.push("mutated review");
       input.instructions.push("mutated instruction");
+      input.implementation.verification[0].summary = "mutated verification";
       return originalImprove(input);
     };
 
@@ -154,12 +203,19 @@ describe("BuilderAgent", () => {
     assert.equal(result.status, "ready");
     assert.deepEqual(result.iterationArtifacts[0].review.mustFix, ["Add tests for the requested behavior."]);
     assert.deepEqual(result.iterationArtifacts[0].improvementInstructions, ["Add targeted tests for the requested behavior."]);
+    assert.equal(result.iterationArtifacts[0].verification[0].summary, "Tests passed.");
+    assert.equal(result.verification[0].summary, "Tests passed.");
   });
 
   it("preserves completed iteration artifacts when a later adapter step fails", async () => {
     const adapter = createAdapter({ reviews: [failingReview] });
     adapter.implement = async () => ({
       changedFiles: ["src/feature.js"],
+      verification: [{
+        command: "npm test -- --test-name-pattern=feature",
+        status: "skipped",
+        summary: "The adapter failed before the focused check could be rerun."
+      }],
       residualNotes: ["Implemented initial path; verification not rerun."],
       discoveredIssues: [{
         title: "Follow-up verifier diagnostic",
@@ -190,7 +246,13 @@ describe("BuilderAgent", () => {
       "Implemented initial path; verification not rerun.",
       "adapter improve failed"
     ]);
+    assert.deepEqual(result.verification, [{
+      command: "npm test -- --test-name-pattern=feature",
+      status: "skipped",
+      summary: "The adapter failed before the focused check could be rerun."
+    }]);
     assert.equal(result.iterationArtifacts.length, 1);
+    assert.deepEqual(result.iterationArtifacts[0].verification, result.verification);
     assert.equal(result.iterationArtifacts[0].implementationSummary, "Changed files: src/feature.js");
   });
 

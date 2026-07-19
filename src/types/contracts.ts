@@ -66,6 +66,14 @@ export interface TaskUnderstanding {
   constraints: string[];
 }
 
+export type VerificationStatus = "passed" | "failed" | "skipped";
+
+export interface VerificationEvidence {
+  command: string;
+  status: VerificationStatus;
+  summary: string;
+}
+
 export interface BuildResult {
   status: BuildStatus;
   iterations: number;
@@ -73,6 +81,7 @@ export interface BuildResult {
   planSummary: string;
   changedFiles: string[];
   review: SelfReviewResult;
+  verification: VerificationEvidence[];
   residualNotes: string[];
   discoveredIssues: DiscoveredIssue[];
   iterationArtifacts?: IterationArtifact[];
@@ -85,6 +94,7 @@ export interface BuildResultInput {
   planSummary: string;
   changedFiles: string[];
   review: SelfReviewResult;
+  verification: VerificationEvidence[];
   residualNotes: string[];
   discoveredIssues?: DiscoveredIssue[];
   threshold?: number;
@@ -99,6 +109,7 @@ export type PlanOutput = string | PlanResult | Record<string, unknown>;
 export interface ImplementationResult {
   summary?: string;
   changedFiles?: string[];
+  verification?: VerificationEvidence[];
   residualNotes?: string[];
   discoveredIssues?: DiscoveredIssue[];
 }
@@ -140,6 +151,7 @@ export interface IterationArtifact {
   discoveredIssues: DiscoveredIssue[];
   review: SelfReviewResult;
   improvementInstructions: string[];
+  verification: VerificationEvidence[];
   residualNotes: string[];
 }
 
@@ -154,6 +166,7 @@ export interface BuildArtifactPaths {
     discoveredIssuesPath: string;
     selfReviewPath: string;
     improvementInstructionsPath: string;
+    verificationPath: string;
     residualNotesPath: string;
   }>;
 }

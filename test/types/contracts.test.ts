@@ -34,7 +34,10 @@ describe("TypeScript build boundaries", () => {
     assert.match(entrypoint, /export type \{[^}]*BuildRequest[^}]*BuilderAdapter[^}]*\} from "\.\/types\/contracts\.js"/);
     assert.match(contracts, /export interface BuilderAdapter/);
     assert.match(contracts, /export interface TaskUnderstanding/);
+    assert.match(contracts, /export interface VerificationEvidence/);
+    assert.match(contracts, /verification: VerificationEvidence\[\]/);
     assert.match(contracts, /taskUnderstanding: TaskUnderstanding/);
+    assert.match(entrypoint, /VerificationEvidence/);
     assert.match(contracts, /export interface KaizenLoopPayload/);
     assert.match(buildRequest, /normalizeBuildRequest\(input: BuildRequestInput\): BuildRequest/);
     assert.match(kaizenLoopPayload, /normalizeKaizenLoopPayload\(input: unknown\): KaizenLoopPayload/);

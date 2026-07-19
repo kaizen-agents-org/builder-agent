@@ -32,6 +32,18 @@
     "improvementInstructions": [],
     "passed": true
   },
+  "verification": [
+    {
+      "command": "npm test -- --test-name-pattern=create-project",
+      "status": "passed",
+      "summary": "The focused input-validation regression test passed."
+    },
+    {
+      "command": "npm run test:integration",
+      "status": "skipped",
+      "summary": "Skipped because the integration fixture is not available in the local environment."
+    }
+  ],
   "residualNotes": [
     "Ready means ready for mechanical verification and independent verifier review, not final approval."
   ],
