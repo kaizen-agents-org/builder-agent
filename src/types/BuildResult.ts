@@ -25,7 +25,7 @@ export function createBuildResult(input: BuildResultInput): BuildResult {
     planSummary,
     changedFiles,
     review,
-    verification,
+    verification = [],
     residualNotes,
     discoveredIssues,
     threshold

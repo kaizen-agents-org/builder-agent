@@ -150,10 +150,7 @@ describe("BuildResult", () => {
       residualNotes: []
     };
 
-    assert.throws(
-      () => normalizeBuildResult(base),
-      /verification must be an array/
-    );
+    assert.deepEqual(normalizeBuildResult(base).verification, []);
     assert.throws(
       () => normalizeBuildResult({ ...base, verification: [{ command: "npm test", status: "unknown", summary: "Done." }] }),
       /status must be one of: passed, failed, skipped/
