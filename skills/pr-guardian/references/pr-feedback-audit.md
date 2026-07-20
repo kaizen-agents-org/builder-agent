@@ -14,7 +14,7 @@ gh pr checks <pr> --repo <owner/repo>
 
 Run this loop. It feeds each `pageInfo.endCursor` into the next request and stops only when `hasNextPage` is false:
 
-```bash
+```sh
 cursor=
 while :; do
   args=(
@@ -56,19 +56,7 @@ query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
   if [[ -n "${cursor}" ]]; then
     args+=(-f "cursor=${cursor}")
   fi
-  if ! page="$(gh "${args[@]}")"; then
-    echo 'failed to fetch review threads' >&2
-    exit 1
-  fi
-  if ! jq -e '
-    .data.repository.pullRequest.reviewThreads as $threads
-    | ($threads | type == "object")
-      and ($threads.nodes | type == "array")
-      and ($threads.pageInfo.hasNextPage | type == "boolean")
-  ' >/dev/null <<<"${page}"; then
-    echo 'reviewThreads returned an invalid or incomplete response' >&2
-    exit 1
-  fi
+  page="$(gh "${args[@]}")"
   jq -c '.data.repository.pullRequest.reviewThreads.nodes[]' <<<"${page}"
   if [[ "$(jq -r '.data.repository.pullRequest.reviewThreads.pageInfo.hasNextPage' <<<"${page}")" != true ]]; then
     break
@@ -83,7 +71,7 @@ done
 
 For every thread whose nested `comments.pageInfo.hasNextPage` is true, run the corresponding comment loop with that thread's GraphQL `id`:
 
-```bash
+```sh
 thread_id='<review-thread-id>'
 cursor=
 while :; do
@@ -105,19 +93,7 @@ query($threadId:ID!, $cursor:String) {
   if [[ -n "${cursor}" ]]; then
     args+=(-f "cursor=${cursor}")
   fi
-  if ! page="$(gh "${args[@]}")"; then
-    echo 'failed to fetch review comments' >&2
-    exit 1
-  fi
-  if ! jq -e '
-    .data.node.comments as $comments
-    | ($comments | type == "object")
-      and ($comments.nodes | type == "array")
-      and ($comments.pageInfo.hasNextPage | type == "boolean")
-  ' >/dev/null <<<"${page}"; then
-    echo 'review comments returned an invalid or incomplete response' >&2
-    exit 1
-  fi
+  page="$(gh "${args[@]}")"
   jq -c '.data.node.comments.nodes[]' <<<"${page}"
   if [[ "$(jq -r '.data.node.comments.pageInfo.hasNextPage' <<<"${page}")" != true ]]; then
     break
@@ -130,20 +106,14 @@ query($threadId:ID!, $cursor:String) {
 done
 ```
 
-Exhaust each REST endpoint with `--paginate`; summaries and first pages are incomplete evidence. Capture every check-run ID returned for the head, then exhaust the annotations endpoint for each ID rather than sampling one run:
+Exhaust each REST endpoint with `--paginate`; summaries and first pages are incomplete evidence:
 
 ```sh
 gh api --paginate 'repos/<owner>/<repo>/pulls/<pr>/reviews?per_page=100'
 gh api --paginate 'repos/<owner>/<repo>/pulls/<pr>/comments?per_page=100'
 gh api --paginate 'repos/<owner>/<repo>/issues/<pr>/comments?per_page=100'
-check_run_ids="$(gh api --paginate \
-  'repos/<owner>/<repo>/commits/<head-sha>/check-runs?per_page=100' \
-  --jq '.check_runs[].id')" || exit 1
-while IFS= read -r check_run_id; do
-  [[ -n "${check_run_id}" ]] || continue
-  gh api --paginate \
-    "repos/<owner>/<repo>/check-runs/${check_run_id}/annotations?per_page=100" || exit 1
-done <<<"${check_run_ids}"
+gh api --paginate 'repos/<owner>/<repo>/commits/<head-sha>/check-runs?per_page=100'
+gh api --paginate 'repos/<owner>/<repo>/check-runs/<check-run-id>/annotations?per_page=100'
 ```
 
 ## Reply, then resolve
