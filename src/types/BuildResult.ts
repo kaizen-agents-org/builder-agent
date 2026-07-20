@@ -2,6 +2,7 @@ import { createFailedReview, normalizeSelfReview } from "../review/SelfReview.js
 import { DEFAULT_THRESHOLD } from "./BuildRequest.js";
 import { normalizeDiscoveredIssues as normalizeSharedDiscoveredIssues } from "./DiscoveredIssue.js";
 import type { BuildResult, BuildResultInput, DiscoveredIssue, TaskUnderstanding } from "./contracts.js";
+import { normalizeVerificationEvidence } from "./VerificationEvidence.js";
 
 const STATUS_VALUES = new Set(["ready", "blocked", "failed"]);
 const BUILD_RESULT_KEYS = new Set([
@@ -11,6 +12,7 @@ const BUILD_RESULT_KEYS = new Set([
   "planSummary",
   "changedFiles",
   "review",
+  "verification",
   "residualNotes",
   "discoveredIssues"
 ]);
@@ -23,6 +25,7 @@ export function createBuildResult(input: BuildResultInput): BuildResult {
     planSummary,
     changedFiles,
     review,
+    verification = [],
     residualNotes,
     discoveredIssues,
     threshold
@@ -47,6 +50,7 @@ export function createBuildResult(input: BuildResultInput): BuildResult {
     planSummary: planSummary.trim(),
     changedFiles: uniqueStrings(changedFiles, "changedFiles"),
     review: normalizeSelfReview(review, threshold ?? DEFAULT_THRESHOLD),
+    verification: normalizeVerificationEvidence(verification),
     residualNotes: uniqueStrings(residualNotes, "residualNotes"),
     discoveredIssues: normalizeDiscoveredIssues(discoveredIssues)
   };
@@ -72,6 +76,7 @@ export function createFailedBuildResult(message: string): BuildResult {
     planSummary: "Builder Agent could not complete the build loop.",
     changedFiles: [],
     review: createFailedReview(message),
+    verification: [],
     residualNotes: [message],
     discoveredIssues: []
   };

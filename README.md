@@ -72,6 +72,7 @@ It produces:
 - Code changes in the current workspace
 - A structured self-review report
 - A final structured build result
+- Structured verification evidence for checks that passed, failed, or were intentionally skipped
 - Structured discovered issues for separate bugs found during implementation
 
 The final handoff must be reviewable by `kaizen-loop`, the independent verifier, and human reviewers. It should make clear what changed, why the change was made, which verification ran or was skipped, residual risk, and reviewer notes when relevant. This is implementation evidence only; it is not approval.
@@ -163,7 +164,7 @@ node dist/cli.js validate-request --request examples/build-request.example.json
 
 - [build-request.schema.json](schemas/build-request.schema.json): input accepted by Builder Agent.
 - [self-review.schema.json](schemas/self-review.schema.json): the final, normalized self-review artifact, including the computed `passed` boolean. Adapter `selfReview()` output may omit `passed`; the controller always recomputes it before this shape is published.
-- [build-result.schema.json](schemas/build-result.schema.json): final artifact written for external verification handoff, including task understanding, changed files, review findings, and residual notes.
+- [build-result.schema.json](schemas/build-result.schema.json): final artifact written for external verification handoff, including task understanding, changed files, structured verification evidence, review findings, and residual notes.
 - [kaizen-loop-payload.schema.json](schemas/kaizen-loop-payload.schema.json): compact `fixed` / `partial` / `blocked` integration payload written through `KAIZEN_BUILD_RESULT_PATH`.
 
 Run the builder loop with an adapter:
@@ -184,9 +185,12 @@ The command writes:
 - `.kaizen/builder/iterations/<n>/discovered-issues.json`
 - `.kaizen/builder/iterations/<n>/self-review.json`
 - `.kaizen/builder/iterations/<n>/improvement-instructions.json`
+- `.kaizen/builder/iterations/<n>/verification.json`
 - `.kaizen/builder/iterations/<n>/residual-notes.json`
 
 The top-level files always contain the latest/final handoff for compatibility. Each completed implementation/self-review iteration is also retained under `iterations/<n>/` so reviewers can inspect how the loop changed, converged, or became blocked.
+
+Adapter `implement()` and `improve()` results may report `verification` entries with the command, a `passed`, `failed`, or `skipped` status, and a concise outcome or skip reason. Builder Agent normalizes and accumulates those entries in the final build result while retaining each iteration's evidence in its own `verification.json`. Use `residualNotes` for non-verification caveats, assumptions, risks, and reviewer notes.
 
 Exit codes:
 
