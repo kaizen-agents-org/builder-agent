@@ -82,7 +82,7 @@ export interface BuildResultInput {
     planSummary: string;
     changedFiles: string[];
     review: SelfReviewResult;
-    verification: VerificationEvidence[];
+    verification?: VerificationEvidence[];
     residualNotes: string[];
     discoveredIssues?: DiscoveredIssue[];
     threshold?: number;

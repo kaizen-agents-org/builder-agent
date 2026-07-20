@@ -15,7 +15,7 @@ const BUILD_RESULT_KEYS = new Set([
     "discoveredIssues"
 ]);
 export function createBuildResult(input) {
-    const { status, iterations, taskUnderstanding, planSummary, changedFiles, review, verification, residualNotes, discoveredIssues, threshold } = input;
+    const { status, iterations, taskUnderstanding, planSummary, changedFiles, review, verification = [], residualNotes, discoveredIssues, threshold } = input;
     if (!STATUS_VALUES.has(status)) {
         throw new Error(`Invalid build result status: ${status}`);
     }
