@@ -10,6 +10,8 @@ const STATUS_VALUES = new Set(["fixed", "partial", "blocked"]);
 const PAYLOAD_KEYS = new Set(["status", "summary", "notes", "blockedReason", "humanRequest", "discoveredIssues"]);
 const PARTIAL_NOTE_LABELS = ["Completed scope", "Incomplete scope", "Verification", "Residual risk"];
 const PARTIAL_NOTE_LABEL_PATTERN = PARTIAL_NOTE_LABELS.join("|");
+const PARTIAL_NOTE_PREFIX_PATTERN = "(?:^|[\\s.;])(?:[-*+]\\s+)?";
+const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])`;
 const HUMAN_REQUEST_REASON_CODES = new Set<HumanRequestReasonCode>([
   "missing_information",
   "credentials",
@@ -77,7 +79,7 @@ export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
 
 function hasStructuredPartialNotes(notes: string): boolean {
   return PARTIAL_NOTE_LABELS.every((label) => (
-    new RegExp(`(?:^|[\\s.;])${label}\\s*:\\s*(?!\\s*(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:)\\S`).test(notes)
+    new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)
   ));
 }
 

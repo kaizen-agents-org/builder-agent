@@ -64,16 +64,16 @@
             "pattern": "\\S",
             "allOf": [
               {
-                "pattern": "(?:^|[\\s.;])Completed scope\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
+                "pattern": "(?:^|[\\s.;])(?:[-*+]\\s+)?Completed scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
               },
               {
-                "pattern": "(?:^|[\\s.;])Incomplete scope\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
+                "pattern": "(?:^|[\\s.;])(?:[-*+]\\s+)?Incomplete scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
               },
               {
-                "pattern": "(?:^|[\\s.;])Verification\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
+                "pattern": "(?:^|[\\s.;])(?:[-*+]\\s+)?Verification\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
               },
               {
-                "pattern": "(?:^|[\\s.;])Residual risk\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
+                "pattern": "(?:^|[\\s.;])(?:[-*+]\\s+)?Residual risk\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
               }
             ]
           }

@@ -114,6 +114,21 @@ describe("KaizenLoopPayload", () => {
       }),
       /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
     );
+
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Some reviewable code was produced.",
+        notes: "- Completed scope:\n- Incomplete scope:\n- Verification:\n- Residual risk: unknown"
+      }),
+      /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+    );
+
+    assert.doesNotThrow(() => normalizeKaizenLoopPayload({
+      status: "partial",
+      summary: "Some reviewable code was produced.",
+      notes: "- Completed scope: schema docs\n- Incomplete scope: provider rollout\n- Verification: ran targeted checks\n- Residual risk: downstream verifier may still block"
+    }));
   });
 
   it("rejects malformed kaizen-loop discovered issues explicitly", () => {
@@ -320,14 +335,24 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.allOf[2].if.properties.status.const, "partial");
     assert.equal(schema.allOf[2].then.properties.notes.minLength, 1);
     assert.equal(schema.allOf[2].then.properties.notes.pattern, "\\S");
-    assert.deepEqual(
-      schema.allOf[2].then.properties.notes.allOf.map(({ pattern }: { pattern: string }) => pattern),
-      [
-        "(?:^|[\\s.;])Completed scope\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S",
-        "(?:^|[\\s.;])Incomplete scope\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S",
-        "(?:^|[\\s.;])Verification\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S",
-        "(?:^|[\\s.;])Residual risk\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
-      ]
+    const partialNotePatterns = schema.allOf[2].then.properties.notes.allOf
+      .map(({ pattern }: { pattern: string }) => pattern);
+    assert.deepEqual(partialNotePatterns, [
+      "(?:^|[\\s.;])(?:[-*+]\\s+)?Completed scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:[-*+]\\s+)?Incomplete scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:[-*+]\\s+)?Verification\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:[-*+]\\s+)?Residual risk\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
+    ]);
+    const matchesPartialNoteSchema = (notes: string) => (
+      partialNotePatterns.every((pattern: string) => new RegExp(pattern).test(notes))
+    );
+    assert.equal(
+      matchesPartialNoteSchema("- Completed scope:\n- Incomplete scope:\n- Verification:\n- Residual risk: unknown"),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("- Completed scope: schema docs\n- Incomplete scope: provider rollout\n- Verification: ran targeted checks\n- Residual risk: downstream verifier may still block"),
+      true
     );
     assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
     assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
