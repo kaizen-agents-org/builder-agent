@@ -62,6 +62,31 @@ describe("check-dist CLI", () => {
     await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
   });
 
+  it("requires rebuilt output to match the committed tree in CI", async () => {
+    const fixture = await createFixture(
+      'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "fresh\\n");'
+    );
+    const binDir = join(fixture.root, "bin");
+    await Promise.all([mkdir(join(fixture.root, "dist")), mkdir(binDir)]);
+    await writeFile(join(fixture.root, "dist/output.js"), "fresh\n");
+    await writeFile(join(binDir, "git"), '#!/bin/sh\necho " M dist/output.js"\n', { mode: 0o755 });
+
+    await assert.rejects(
+      execFileAsync(process.execPath, [fixture.script], {
+        cwd: fixture.root,
+        env: {
+          ...process.env,
+          CI: "true",
+          PATH: `${binDir}${delimiter}${process.env.PATH}`,
+          TMPDIR: fixture.fixtureTmp
+        }
+      }),
+      (error: { code?: number; stderr?: string }) =>
+        error.code === 1 && Boolean(error.stderr?.includes(" M dist/output.js"))
+    );
+    await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
+  });
+
   it("restores the original output when the build fails", async () => {
     const fixture = await createFixture(
       'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "partial\\n"); process.exit(7);'

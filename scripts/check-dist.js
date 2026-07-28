@@ -39,9 +39,12 @@ try {
     restoreOriginalDist();
     process.exitCode = build.status ?? 1;
   } else {
+    const compareCommittedOutput = Boolean(process.env.CI);
     const result = spawnSync(
       "git",
-      ["diff", "--no-index", "--quiet", "--no-renames", "--", snapshotDist, distDir],
+      compareCommittedOutput
+        ? ["status", "--short", "--untracked-files=all", "--", "dist"]
+        : ["diff", "--no-index", "--quiet", "--no-renames", "--", snapshotDist, distDir],
       {
         cwd: repoRoot,
         encoding: "utf8"
@@ -52,10 +55,13 @@ try {
       restoreOriginalDist();
       console.error(`Unable to compare generated dist files: ${result.error.message}`);
       process.exitCode = 1;
-    } else if (result.status === 0) {
+    } else if (result.status === 0 && (!compareCommittedOutput || !result.stdout.trim())) {
       console.log("Generated dist files are up to date.");
-    } else if (result.status === 1) {
+    } else if ((!compareCommittedOutput && result.status === 1) || (compareCommittedOutput && result.status === 0)) {
       console.error("Generated dist files are stale:");
+      if (compareCommittedOutput) {
+        process.stderr.write(result.stdout);
+      }
       console.error("Run `npm run build` and keep the regenerated dist/ files.");
       process.exitCode = 1;
     } else {
