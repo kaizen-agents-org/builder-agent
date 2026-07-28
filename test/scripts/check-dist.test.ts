@@ -36,7 +36,7 @@ describe("check-dist CLI", () => {
 
     const { stdout } = await execFileAsync(process.execPath, [fixture.script], {
       cwd: fixture.root,
-      env: { ...process.env, TMPDIR: fixture.fixtureTmp }
+      env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
     });
 
     assert.match(stdout, /Generated dist files are up to date/);
@@ -53,7 +53,7 @@ describe("check-dist CLI", () => {
     await assert.rejects(
       execFileAsync(process.execPath, [fixture.script], {
         cwd: fixture.root,
-        env: { ...process.env, TMPDIR: fixture.fixtureTmp }
+        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
       }),
       (error: { code?: number; stderr?: string }) =>
         error.code === 1 && Boolean(error.stderr?.includes("Generated dist files are stale"))
@@ -97,7 +97,7 @@ describe("check-dist CLI", () => {
     await assert.rejects(
       execFileAsync(process.execPath, [fixture.script], {
         cwd: fixture.root,
-        env: { ...process.env, TMPDIR: fixture.fixtureTmp }
+        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
       }),
       (error: { code?: number }) => error.code === 7
     );
@@ -117,7 +117,12 @@ describe("check-dist CLI", () => {
     await assert.rejects(
       execFileAsync(process.execPath, [fixture.script], {
         cwd: fixture.root,
-        env: { ...process.env, PATH: `${binDir}${delimiter}${process.env.PATH}`, TMPDIR: fixture.fixtureTmp }
+        env: {
+          ...process.env,
+          CI: "",
+          PATH: `${binDir}${delimiter}${process.env.PATH}`,
+          TMPDIR: fixture.fixtureTmp
+        }
       }),
       (error: { code?: number; stderr?: string }) =>
         error.code === 2
