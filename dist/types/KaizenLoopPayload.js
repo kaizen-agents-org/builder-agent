@@ -63,7 +63,8 @@ export function normalizeKaizenLoopPayload(input) {
     };
 }
 function hasStructuredPartialNotes(notes) {
-    return PARTIAL_NOTE_LABELS.every((label) => (new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)));
+    return PARTIAL_NOTE_LABELS.every((label) => (notes.match(new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:`, "g"))?.length === 1 &&
+        new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)));
 }
 function normalizeHumanRequest(value) {
     if (value === undefined)

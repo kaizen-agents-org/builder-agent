@@ -62,6 +62,9 @@
           "notes": {
             "minLength": 1,
             "pattern": "\\S",
+            "not": {
+              "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(Completed scope|Incomplete scope|Verification|Residual risk)\\s*:[\\s\\S]*(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?\\1\\s*:"
+            },
             "allOf": [
               {
                 "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Completed scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"

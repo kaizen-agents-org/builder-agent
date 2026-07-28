@@ -126,7 +126,8 @@ describe("KaizenLoopPayload", () => {
 
     for (const notes of [
       "1. Completed scope:\n2. Incomplete scope:\n3. Verification:\n4. Residual risk: unknown",
-      "1) Completed scope:\n2) Incomplete scope:\n3) Verification:\n4) Residual risk: unknown"
+      "1) Completed scope:\n2) Incomplete scope:\n3) Verification:\n4) Residual risk: unknown",
+      "Completed scope:\nCompleted scope: schema docs\nIncomplete scope: provider rollout\nVerification: ran targeted checks\nResidual risk: downstream verifier may still block"
     ]) {
       assert.throws(
         () => normalizeKaizenLoopPayload({
@@ -355,6 +356,11 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.allOf[2].if.properties.status.const, "partial");
     assert.equal(schema.allOf[2].then.properties.notes.minLength, 1);
     assert.equal(schema.allOf[2].then.properties.notes.pattern, "\\S");
+    const duplicatePartialNotePattern = schema.allOf[2].then.properties.notes.not.pattern;
+    assert.equal(
+      duplicatePartialNotePattern,
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(Completed scope|Incomplete scope|Verification|Residual risk)\\s*:[\\s\\S]*(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?\\1\\s*:"
+    );
     const partialNotePatterns = schema.allOf[2].then.properties.notes.allOf
       .map(({ pattern }: { pattern: string }) => pattern);
     assert.deepEqual(partialNotePatterns, [
@@ -365,6 +371,7 @@ describe("KaizenLoopPayload", () => {
     ]);
     const matchesPartialNoteSchema = (notes: string) => (
       partialNotePatterns.every((pattern: string) => new RegExp(pattern).test(notes))
+      && !new RegExp(duplicatePartialNotePattern).test(notes)
     );
     assert.equal(
       matchesPartialNoteSchema("- Completed scope:\n- Incomplete scope:\n- Verification:\n- Residual risk: unknown"),
@@ -385,6 +392,10 @@ describe("KaizenLoopPayload", () => {
     assert.equal(
       matchesPartialNoteSchema("1. Completed scope: schema docs\n2. Incomplete scope: provider rollout\n3. Verification: ran targeted checks\n4. Residual risk: downstream verifier may still block"),
       true
+    );
+    assert.equal(
+      matchesPartialNoteSchema("Completed scope:\nCompleted scope: schema docs\nIncomplete scope: provider rollout\nVerification: ran targeted checks\nResidual risk: downstream verifier may still block"),
+      false
     );
     assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
     assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);

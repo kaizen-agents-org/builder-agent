@@ -79,6 +79,7 @@ export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
 
 function hasStructuredPartialNotes(notes: string): boolean {
   return PARTIAL_NOTE_LABELS.every((label) => (
+    notes.match(new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:`, "g"))?.length === 1 &&
     new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)
   ));
 }
