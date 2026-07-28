@@ -8,6 +8,8 @@ import type {
 
 const STATUS_VALUES = new Set(["fixed", "partial", "blocked"]);
 const PAYLOAD_KEYS = new Set(["status", "summary", "notes", "blockedReason", "humanRequest", "discoveredIssues"]);
+const PARTIAL_NOTE_LABELS = ["Completed scope", "Incomplete scope", "Verification", "Residual risk"];
+const PARTIAL_NOTE_LABEL_PATTERN = PARTIAL_NOTE_LABELS.join("|");
 const HUMAN_REQUEST_REASON_CODES = new Set<HumanRequestReasonCode>([
   "missing_information",
   "credentials",
@@ -42,7 +44,7 @@ export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
   if (typeof payload.notes !== "string") {
     throw new Error("Kaizen Loop payload notes must be a string.");
   }
-  if (payload.status === "partial" && payload.notes.trim().length === 0) {
+  if (payload.status === "partial" && !hasStructuredPartialNotes(payload.notes)) {
     throw new Error("Kaizen Loop payload notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial.");
   }
 
@@ -71,6 +73,12 @@ export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
     ...(blockedReason ? { blockedReason } : {}),
     ...(humanRequest ? { humanRequest } : {})
   };
+}
+
+function hasStructuredPartialNotes(notes: string): boolean {
+  return PARTIAL_NOTE_LABELS.every((label) => (
+    new RegExp(`(?:^|[\\s.;])${label}\\s*:\\s*(?!\\s*(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:)\\S`).test(notes)
+  ));
 }
 
 function normalizeHumanRequest(value: unknown): HumanRequest | undefined {

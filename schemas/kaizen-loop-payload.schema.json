@@ -61,7 +61,21 @@
         "properties": {
           "notes": {
             "minLength": 1,
-            "pattern": "\\S"
+            "pattern": "\\S",
+            "allOf": [
+              {
+                "pattern": "(?:^|[\\s.;])Completed scope\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
+              },
+              {
+                "pattern": "(?:^|[\\s.;])Incomplete scope\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
+              },
+              {
+                "pattern": "(?:^|[\\s.;])Verification\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
+              },
+              {
+                "pattern": "(?:^|[\\s.;])Residual risk\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
+              }
+            ]
           }
         }
       }
@@ -96,7 +110,7 @@
     },
     "notes": {
       "type": "string",
-      "description": "Verification run or skipped, residual risk, reviewer notes, and fallback evidence when relevant. For partial results this must be non-empty and identify completed scope, incomplete scope, verification status, and residual risk."
+      "description": "Verification run or skipped, residual risk, reviewer notes, and fallback evidence when relevant. Partial results must provide non-empty Completed scope:, Incomplete scope:, Verification:, and Residual risk: labeled sections."
     },
     "blockedReason": {
       "type": "string",

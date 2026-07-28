@@ -72,6 +72,48 @@ describe("KaizenLoopPayload", () => {
       }),
       /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
     );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Some reviewable code was produced.",
+        notes: "Implemented the schema and ran tests, but provider rollout remains."
+      }),
+      /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+    );
+  });
+
+  it("requires every partial note section to have a value", () => {
+    const sections = [
+      ["Completed scope", "schema docs"],
+      ["Incomplete scope", "provider rollout"],
+      ["Verification", "ran targeted checks"],
+      ["Residual risk", "downstream verifier may still block"]
+    ];
+
+    for (const [missingLabel] of sections) {
+      const notes = sections
+        .filter(([label]) => label !== missingLabel)
+        .map(([label, value]) => `${label}: ${value}.`)
+        .join(" ");
+
+      assert.throws(
+        () => normalizeKaizenLoopPayload({
+          status: "partial",
+          summary: "Some reviewable code was produced.",
+          notes
+        }),
+        /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+      );
+    }
+
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Some reviewable code was produced.",
+        notes: "Completed scope: Incomplete scope: provider rollout. Verification: skipped. Residual risk: verifier may block."
+      }),
+      /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+    );
   });
 
   it("rejects malformed kaizen-loop discovered issues explicitly", () => {
@@ -278,6 +320,15 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.allOf[2].if.properties.status.const, "partial");
     assert.equal(schema.allOf[2].then.properties.notes.minLength, 1);
     assert.equal(schema.allOf[2].then.properties.notes.pattern, "\\S");
+    assert.deepEqual(
+      schema.allOf[2].then.properties.notes.allOf.map(({ pattern }: { pattern: string }) => pattern),
+      [
+        "(?:^|[\\s.;])Completed scope\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S",
+        "(?:^|[\\s.;])Incomplete scope\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S",
+        "(?:^|[\\s.;])Verification\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S",
+        "(?:^|[\\s.;])Residual risk\\s*:\\s*(?!\\s*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)\\S"
+      ]
+    );
     assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
     assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
     assert.equal(schema.properties.discoveredIssues.items.properties.expected.pattern, "\\S");
