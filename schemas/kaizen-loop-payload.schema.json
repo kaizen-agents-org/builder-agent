@@ -64,16 +64,16 @@
             "pattern": "\\S",
             "allOf": [
               {
-                "pattern": "(?:^|[\\s.;])(?:[-*+]\\s+)?Completed scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Completed scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
               },
               {
-                "pattern": "(?:^|[\\s.;])(?:[-*+]\\s+)?Incomplete scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Incomplete scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
               },
               {
-                "pattern": "(?:^|[\\s.;])(?:[-*+]\\s+)?Verification\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
               },
               {
-                "pattern": "(?:^|[\\s.;])(?:[-*+]\\s+)?Residual risk\\s*:(?=(?:(?!(?:^|[\\s.;])(?:[-*+]\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Residual risk\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
               }
             ]
           }
