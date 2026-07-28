@@ -3,7 +3,7 @@ const PAYLOAD_KEYS = new Set(["status", "summary", "notes", "blockedReason", "hu
 const PARTIAL_NOTE_LABELS = ["Completed scope", "Incomplete scope", "Verification", "Residual risk"];
 const PARTIAL_NOTE_LABEL_PATTERN = PARTIAL_NOTE_LABELS.join("|");
 const PARTIAL_NOTE_PREFIX_PATTERN = "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?";
-const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])`;
+const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])`;
 const MEANINGFUL_NOTE_CONTENT = /[^\s.;,:—–\-_*+|#>]/;
 const HUMAN_REQUEST_REASON_CODES = new Set([
     "missing_information",

@@ -127,6 +127,8 @@ describe("KaizenLoopPayload", () => {
     for (const notes of [
       "1. Completed scope:\n2. Incomplete scope:\n3. Verification:\n4. Residual risk: unknown",
       "1) Completed scope:\n2) Incomplete scope:\n3) Verification:\n4) Residual risk: unknown",
+      "Completed scope: —. Incomplete scope: provider rollout. Verification: ran targeted checks. Residual risk: downstream verifier may still block",
+      "Completed scope: schema docs. Incomplete scope: –. Verification: ran targeted checks. Residual risk: downstream verifier may still block",
       "Completed scope:\nCompleted scope: schema docs\nIncomplete scope: provider rollout\nVerification: ran targeted checks\nResidual risk: downstream verifier may still block"
     ]) {
       assert.throws(
@@ -151,7 +153,7 @@ describe("KaizenLoopPayload", () => {
       notes: "1. Completed scope: schema docs\n2. Incomplete scope: provider rollout\n3. Verification: ran targeted checks\n4. Residual risk: downstream verifier may still block"
     }));
 
-    for (const verification of ["skipped", "skipped —", "skipped - ;"]) {
+    for (const verification of ["skipped", "SKIPPED", "Skipped —", "skipped —", "skipped - ;"]) {
       assert.throws(
         () => normalizeKaizenLoopPayload({
           status: "partial",
@@ -382,15 +384,15 @@ describe("KaizenLoopPayload", () => {
     const partialNotePatterns = partialNoteRules.slice(0, 4)
       .map(({ pattern }: { pattern: string }) => pattern);
     assert.deepEqual(partialNotePatterns, [
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Completed scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])",
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Incomplete scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])",
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])",
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Residual risk\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Completed scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Incomplete scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Residual risk\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
     ]);
     const skippedVerificationRule = partialNoteRules[4];
     assert.equal(
       skippedVerificationRule.if.pattern,
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*skipped\\b"
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*[sS][kK][iI][pP][pP][eE][dD]\\b"
     );
     const matchesPartialNoteSchema = (notes: string) => (
       partialNotePatterns.every((pattern: string) => new RegExp(pattern).test(notes))
@@ -426,6 +428,14 @@ describe("KaizenLoopPayload", () => {
     );
     assert.equal(
       matchesPartialNoteSchema("Completed scope: schema docs. Incomplete scope: provider rollout. Verification: skipped. Residual risk: verifier may block."),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("Completed scope: schema docs. Incomplete scope: provider rollout. Verification: SKIPPED. Residual risk: verifier may block."),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("Completed scope: —. Incomplete scope: provider rollout. Verification: ran tests. Residual risk: verifier may block."),
       false
     );
     assert.equal(
