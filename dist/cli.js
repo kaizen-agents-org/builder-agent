@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { readFile } from "node:fs/promises";
+import { createRequire } from "node:module";
 import { resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { runBuild } from "./builder/BuilderAgent.js";
@@ -7,6 +8,7 @@ import { writeBuildArtifacts } from "./artifacts.js";
 import { runKaizenLoopBuilder } from "./kaizen-loop.js";
 import { normalizeBuildRequest } from "./types/BuildRequest.js";
 const DEFAULT_OUT_DIR = ".kaizen/builder";
+const packageMetadata = createRequire(import.meta.url)("../package.json");
 main(process.argv.slice(2)).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));
     process.exitCode = 3;
@@ -14,7 +16,7 @@ main(process.argv.slice(2)).catch((error) => {
 async function main(args) {
     const command = args[0];
     if (command === "--version" || command === "-v") {
-        console.log("builder-agent 0.1.0");
+        console.log(`builder-agent ${packageMetadata.version}`);
         return;
     }
     if (!command && process.env.KAIZEN_BUILD_RESULT_PATH) {
