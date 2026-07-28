@@ -12,9 +12,11 @@ const execFileAsync = promisify(execFile);
 describe("CLI", () => {
   it("reports the version from package metadata", async () => {
     const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as { version: string };
-    const { stdout } = await execFileAsync(process.execPath, ["dist/cli.js", "--version"]);
 
-    assert.equal(stdout.trim(), `builder-agent ${packageMetadata.version}`);
+    for (const flag of ["--version", "-v"]) {
+      const { stdout } = await execFileAsync(process.execPath, ["dist/cli.js", flag]);
+      assert.equal(stdout.trim(), `builder-agent ${packageMetadata.version}`);
+    }
   });
 
   it("runs the build command and writes structured artifacts", async () => {
