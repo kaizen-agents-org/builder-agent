@@ -48,6 +48,16 @@ describe("TypeScript build boundaries", () => {
 });
 
 describe("builder handoff contract", () => {
+  it("keeps generated dist freshness in the pre-PR verification contract", async () => {
+    const [agents, kaizenConfig] = await Promise.all([
+      readFile("AGENTS.md", "utf8"),
+      readFile(".kaizen/config.yml", "utf8")
+    ]);
+
+    assert.match(agents, /npm run check:dist/);
+    assert.match(kaizenConfig, /  verify:\n(?:    - .*\n)*    - "npm run check:dist"(?:\n|$)/);
+  });
+
   it("documents builder handoff as reviewable evidence, not approval", async () => {
     const [readme, skill, implementPrompt, selfReviewPrompt, improvePrompt] = await Promise.all([
       readFile("README.md", "utf8"),
