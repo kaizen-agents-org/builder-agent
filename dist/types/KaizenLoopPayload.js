@@ -4,6 +4,7 @@ const PARTIAL_NOTE_LABELS = ["Completed scope", "Incomplete scope", "Verificatio
 const PARTIAL_NOTE_LABEL_PATTERN = PARTIAL_NOTE_LABELS.join("|");
 const PARTIAL_NOTE_PREFIX_PATTERN = "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?";
 const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])`;
+const MEANINGFUL_NOTE_CONTENT = /[^\s.;,:—–\-_*+|#>]/;
 const HUMAN_REQUEST_REASON_CODES = new Set([
     "missing_information",
     "credentials",
@@ -63,8 +64,16 @@ export function normalizeKaizenLoopPayload(input) {
     };
 }
 function hasStructuredPartialNotes(notes) {
-    return PARTIAL_NOTE_LABELS.every((label) => (notes.match(new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:`, "g"))?.length === 1 &&
-        new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)));
+    if (!PARTIAL_NOTE_LABELS.every((label) => (notes.match(new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:`, "g"))?.length === 1 &&
+        new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)))) {
+        return false;
+    }
+    const verification = new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}Verification\\s*:\\s*([\\s\\S]*?)(?=${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:|$)`).exec(notes)?.[1].trim();
+    if (!verification || !/^skipped\b/i.test(verification)) {
+        return true;
+    }
+    const reason = /^skipped\s*[—–-]\s*([\s\S]*)$/i.exec(verification)?.[1];
+    return Boolean(reason && MEANINGFUL_NOTE_CONTENT.test(reason));
 }
 function normalizeHumanRequest(value) {
     if (value === undefined)

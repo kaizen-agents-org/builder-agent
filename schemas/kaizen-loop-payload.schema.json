@@ -77,6 +77,14 @@
               },
               {
                 "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Residual risk\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:\\-_*+|#>])"
+              },
+              {
+                "if": {
+                  "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*skipped\\b"
+                },
+                "then": {
+                  "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*skipped\\s*[—–-]\\s*(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+                }
               }
             ]
           }
