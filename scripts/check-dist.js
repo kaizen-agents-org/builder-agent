@@ -8,9 +8,17 @@ const repoRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const distDir = resolve(repoRoot, "dist");
 const snapshotRoot = mkdtempSync(join(tmpdir(), "builder-agent-dist-"));
 const snapshotDist = resolve(snapshotRoot, "dist");
+const hadOriginalDist = existsSync(distDir);
+
+function restoreOriginalDist() {
+  rmSync(distDir, { force: true, recursive: true });
+  if (hadOriginalDist) {
+    cpSync(snapshotDist, distDir, { recursive: true });
+  }
+}
 
 try {
-  if (existsSync(distDir)) {
+  if (hadOriginalDist) {
     cpSync(distDir, snapshotDist, { recursive: true });
   } else {
     mkdirSync(snapshotDist);
@@ -24,9 +32,11 @@ try {
   });
 
   if (build.error) {
+    restoreOriginalDist();
     console.error(`Unable to rebuild generated dist files: ${build.error.message}`);
     process.exitCode = 1;
   } else if (build.status !== 0) {
+    restoreOriginalDist();
     process.exitCode = build.status ?? 1;
   } else {
     const result = spawnSync(
@@ -39,6 +49,7 @@ try {
     );
 
     if (result.error) {
+      restoreOriginalDist();
       console.error(`Unable to compare generated dist files: ${result.error.message}`);
       process.exitCode = 1;
     } else if (result.status === 0) {
@@ -48,10 +59,14 @@ try {
       console.error("Run `npm run build` and keep the regenerated dist/ files.");
       process.exitCode = 1;
     } else {
+      restoreOriginalDist();
       process.stderr.write(result.stderr);
       process.exitCode = result.status ?? 1;
     }
   }
+} catch (error) {
+  restoreOriginalDist();
+  throw error;
 } finally {
   rmSync(snapshotRoot, { force: true, recursive: true });
 }

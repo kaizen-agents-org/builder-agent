@@ -14,9 +14,9 @@
 Run these before opening a PR:
 
 ```sh
+npm run check:dist
 npm test
 npm run validate:json
-npm run check:dist
 ```
 
 ## Local Kaizen Runtime

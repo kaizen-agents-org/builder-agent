@@ -1,0 +1,103 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { delimiter, join } from "node:path";
+import { promisify } from "node:util";
+import { describe, it } from "node:test";
+
+const execFileAsync = promisify(execFile);
+
+async function createFixture(buildSource: string) {
+  const root = await mkdtemp(join(tmpdir(), "check-dist-fixture-"));
+  const scriptsDir = join(root, "scripts");
+  const fixtureTmp = join(root, "tmp");
+  await Promise.all([mkdir(scriptsDir), mkdir(fixtureTmp)]);
+  await Promise.all([
+    writeFile(join(root, "package.json"), JSON.stringify({ type: "module", scripts: { build: "node build.js" } })),
+    writeFile(join(root, "build.js"), buildSource),
+    writeFile(join(scriptsDir, "check-dist.js"), await readFile("scripts/check-dist.js", "utf8"))
+  ]);
+  return { root, script: join(scriptsDir, "check-dist.js"), fixtureTmp };
+}
+
+async function assertTemporarySnapshotRemoved(fixtureTmp: string) {
+  const entries = await readdir(fixtureTmp);
+  assert.deepEqual(entries.filter((entry) => entry.startsWith("builder-agent-dist-")), []);
+}
+
+describe("check-dist CLI", () => {
+  it("accepts generated output that already matches the working tree", async () => {
+    const fixture = await createFixture(
+      'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "fresh\\n");'
+    );
+    await mkdir(join(fixture.root, "dist"));
+    await writeFile(join(fixture.root, "dist/output.js"), "fresh\n");
+
+    const { stdout } = await execFileAsync(process.execPath, [fixture.script], {
+      cwd: fixture.root,
+      env: { ...process.env, TMPDIR: fixture.fixtureTmp }
+    });
+
+    assert.match(stdout, /Generated dist files are up to date/);
+    await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
+  });
+
+  it("rejects stale output and leaves the rebuilt files for review", async () => {
+    const fixture = await createFixture(
+      'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "fresh\\n");'
+    );
+    await mkdir(join(fixture.root, "dist"));
+    await writeFile(join(fixture.root, "dist/output.js"), "stale\n");
+
+    await assert.rejects(
+      execFileAsync(process.execPath, [fixture.script], {
+        cwd: fixture.root,
+        env: { ...process.env, TMPDIR: fixture.fixtureTmp }
+      }),
+      (error: { code?: number; stderr?: string }) =>
+        error.code === 1 && Boolean(error.stderr?.includes("Generated dist files are stale"))
+    );
+    assert.equal(await readFile(join(fixture.root, "dist/output.js"), "utf8"), "fresh\n");
+    await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
+  });
+
+  it("restores the original output when the build fails", async () => {
+    const fixture = await createFixture(
+      'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "partial\\n"); process.exit(7);'
+    );
+    await mkdir(join(fixture.root, "dist"));
+    await writeFile(join(fixture.root, "dist/output.js"), "original\n");
+
+    await assert.rejects(
+      execFileAsync(process.execPath, [fixture.script], {
+        cwd: fixture.root,
+        env: { ...process.env, TMPDIR: fixture.fixtureTmp }
+      }),
+      (error: { code?: number }) => error.code === 7
+    );
+    assert.equal(await readFile(join(fixture.root, "dist/output.js"), "utf8"), "original\n");
+    await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
+  });
+
+  it("restores the original output when the comparison command is unavailable", async () => {
+    const fixture = await createFixture(
+      'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "fresh\\n");'
+    );
+    const binDir = join(fixture.root, "bin");
+    await Promise.all([mkdir(join(fixture.root, "dist")), mkdir(binDir)]);
+    await writeFile(join(fixture.root, "dist/output.js"), "original\n");
+    await writeFile(join(binDir, "git"), "#!/bin/sh\nexit 2\n", { mode: 0o755 });
+
+    await assert.rejects(
+      execFileAsync(process.execPath, [fixture.script], {
+        cwd: fixture.root,
+        env: { ...process.env, PATH: `${binDir}${delimiter}${process.env.PATH}`, TMPDIR: fixture.fixtureTmp }
+      }),
+      (error: { code?: number; stderr?: string }) =>
+        error.code === 2
+    );
+    assert.equal(await readFile(join(fixture.root, "dist/output.js"), "utf8"), "original\n");
+    await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
+  });
+});
