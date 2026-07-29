@@ -3,7 +3,7 @@ import { access, mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises"
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
-import { normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
+import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
@@ -49,10 +49,14 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
             });
             if (result.payload) {
                 const allAttempts = [...attempts, result];
+                const recoveredIssues = collectDiscoveredIssues(allAttempts);
+                const payload = recoveredIssues.length > 0
+                    ? { ...result.payload, discoveredIssues: mergeDiscoveredIssues(recoveredIssues, result.payload.discoveredIssues) }
+                    : result.payload;
                 return {
                     ...result,
                     raw: formatAttempts(allAttempts),
-                    payload: shouldAppendProviderEvidence(result.payload) ? appendProviderEvidence(result.payload, allAttempts) : result.payload
+                    payload: shouldAppendProviderEvidence(payload) ? appendProviderEvidence(payload, allAttempts) : payload
                 };
             }
             const fallbackReason = result.failureClass ?? "invalid_payload";
@@ -64,6 +68,7 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
                     exitCode: result.exitCode,
                     raw: formatAttempts(attempts),
                     providerEvidence: formatProviderEvidence(attempts),
+                    discoveredIssues: collectDiscoveredIssues(attempts),
                     payload: undefined
                 };
             }
@@ -73,6 +78,7 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
             exitCode: lastAttempt?.exitCode ?? 1,
             raw: formatAttempts(attempts),
             providerEvidence: attempts.length > 0 ? formatProviderEvidence(attempts) : undefined,
+            discoveredIssues: collectDiscoveredIssues(attempts),
             payload: undefined
         };
     }
@@ -148,7 +154,8 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
             failureClass: parsedPayload.payload ? undefined : classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError }),
             payloadSource: parsedPayload.payload ? payloadSource : "none",
             raw: rawWithParseError,
-            payload: parsedPayload.payload
+            payload: parsedPayload.payload,
+            discoveredIssues: parsedPayload.discoveredIssues
         };
     }
     catch (error) {
@@ -543,7 +550,7 @@ function classifyFailure({ exitCode, raw, error }) {
 }
 /**
  * @param {string} raw
- * @returns {{ payload?: KaizenLoopPayload, error?: Error }}
+ * @returns {{ payload?: KaizenLoopPayload, discoveredIssues?: DiscoveredIssue[], error?: Error }}
  */
 function parseBuilderPayload(raw) {
     const topLevel = parseMaybeJson(raw);
@@ -558,8 +565,24 @@ function parseBuilderPayload(raw) {
         return { payload: normalizeKaizenLoopPayload(payload) };
     }
     catch (error) {
-        return { error: error instanceof Error ? error : new Error(String(error)) };
+        return {
+            discoveredIssues: extractValidDiscoveredIssues(payload),
+            error: error instanceof Error ? error : new Error(String(error))
+        };
     }
+}
+function collectDiscoveredIssues(attempts) {
+    return mergeDiscoveredIssues(...attempts.map((attempt) => attempt.discoveredIssues ?? []));
+}
+function mergeDiscoveredIssues(...issueGroups) {
+    const seen = new Set();
+    return issueGroups.flat().filter((issue) => {
+        const key = JSON.stringify([issue.repo ?? "", issue.title]);
+        if (seen.has(key))
+            return false;
+        seen.add(key);
+        return true;
+    });
 }
 /**
  * @param {string} command
