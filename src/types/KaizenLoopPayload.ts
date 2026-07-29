@@ -13,6 +13,8 @@ const PARTIAL_NOTE_LABEL_PATTERN = PARTIAL_NOTE_LABELS.join("|");
 const PARTIAL_NOTE_PREFIX_PATTERN = "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?";
 const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])`;
 const MEANINGFUL_NOTE_CONTENT = /[^\s.;,:—–\-_*+|#>]/;
+const SKIPPED_VERIFICATION = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)(?=$|[\s.;,—–-])/i;
+const SKIPPED_VERIFICATION_WITH_REASON = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)[ \t]*[—–-][ \t]*([\s\S]*)$/i;
 const HUMAN_REQUEST_REASON_CODES = new Set<HumanRequestReasonCode>([
   "missing_information",
   "credentials",
@@ -89,11 +91,11 @@ function hasStructuredPartialNotes(notes: string): boolean {
   const verification = new RegExp(
     `${PARTIAL_NOTE_PREFIX_PATTERN}Verification\\s*:\\s*([\\s\\S]*?)(?=${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:|$)`
   ).exec(notes)?.[1].trim();
-  if (!verification || !/^skipped\b/i.test(verification)) {
+  if (!verification || !SKIPPED_VERIFICATION.test(verification)) {
     return true;
   }
 
-  const reason = /^skipped[ \t]*[—–-][ \t]*([\s\S]*)$/i.exec(verification)?.[1];
+  const reason = SKIPPED_VERIFICATION_WITH_REASON.exec(verification)?.[1];
   return Boolean(reason && MEANINGFUL_NOTE_CONTENT.test(reason));
 }
 
