@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
@@ -102,6 +102,30 @@ describe("check-dist CLI", () => {
       (error: { code?: number }) => error.code === 7
     );
     assert.equal(await readFile(join(fixture.root, "dist/output.js"), "utf8"), "original\n");
+    await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
+  });
+
+  it("preserves the original output when snapshot creation fails", async () => {
+    const fixture = await createFixture(
+      'throw new Error("build should not run");'
+    );
+    await mkdir(join(fixture.root, "dist"));
+    const originalOutput = join(fixture.root, "dist/output.js");
+    await writeFile(originalOutput, "original\n", { mode: 0o000 });
+
+    try {
+      await assert.rejects(
+        execFileAsync(process.execPath, [fixture.script], {
+          cwd: fixture.root,
+          env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+        }),
+        (error: { stderr?: string }) => /EACCES|permission denied/i.test(error.stderr ?? "")
+      );
+    } finally {
+      await chmod(originalOutput, 0o600);
+    }
+
+    assert.equal(await readFile(originalOutput, "utf8"), "original\n");
     await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
   });
 

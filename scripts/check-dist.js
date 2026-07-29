@@ -9,8 +9,13 @@ const distDir = resolve(repoRoot, "dist");
 const snapshotRoot = mkdtempSync(join(tmpdir(), "builder-agent-dist-"));
 const snapshotDist = resolve(snapshotRoot, "dist");
 const hadOriginalDist = existsSync(distDir);
+let snapshotCreated = false;
+let originalDistRemoved = false;
 
 function restoreOriginalDist() {
+  if (!snapshotCreated || !originalDistRemoved) {
+    return;
+  }
   rmSync(distDir, { force: true, recursive: true });
   if (hadOriginalDist) {
     cpSync(snapshotDist, distDir, { recursive: true });
@@ -23,8 +28,10 @@ try {
   } else {
     mkdirSync(snapshotDist);
   }
+  snapshotCreated = true;
 
   rmSync(distDir, { force: true, recursive: true });
+  originalDistRemoved = true;
 
   const build = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "build"], {
     cwd: repoRoot,
