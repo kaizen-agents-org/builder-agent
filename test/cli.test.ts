@@ -264,7 +264,52 @@ export default {
     );
   });
 
-  it("treats malformed kaizen-loop provider payloads as invalid instead of dropping discovered issues", async () => {
+  it("preserves valid discovered issues from malformed kaizen-loop provider payloads", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    await mkdir(binDir);
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"discoveredIssues\":[{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"expected\":\"Verifier should pass valid runs.\",\"evidence\":\"verifier.log\"}]}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: dir,
+          KAIZEN_PREFERRED_AGENT: "claude"
+        }
+      }),
+      /Command exited with 2/
+    );
+
+    const result = JSON.parse(await readFile(resultPath, "utf8"));
+
+    assert.equal(result.status, "blocked");
+    assert.equal(result.summary, "Builder agent did not return the required Kaizen Loop JSON payload.");
+    assert.match(result.notes, /Agent "claude" exited with code 0/);
+    assert.match(result.notes, /Failure class: invalid_payload/);
+    assert.deepEqual(result.discoveredIssues, [{
+      title: "Verifier false positive",
+      repo: "verifier",
+      expected: "Verifier should pass valid runs.",
+      evidence: "verifier.log"
+    }]);
+  });
+
+  it("rejects malformed discovered issues from malformed kaizen-loop provider payloads", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
     const resultPath = join(dir, "build-result.json");
@@ -298,9 +343,6 @@ console.log(JSON.stringify({
     const result = JSON.parse(await readFile(resultPath, "utf8"));
 
     assert.equal(result.status, "blocked");
-    assert.equal(result.summary, "Builder agent did not return the required Kaizen Loop JSON payload.");
-    assert.match(result.notes, /Agent "claude" exited with code 0/);
-    assert.match(result.notes, /Failure class: invalid_payload/);
     assert.deepEqual(result.discoveredIssues, []);
   });
 

@@ -100,6 +100,18 @@ export function normalizeDiscoveredIssues(value: unknown): DiscoveredIssue[] {
   return normalizeSharedDiscoveredIssues(value, { label: "Kaizen Loop payload discoveredIssues" });
 }
 
+export function extractValidDiscoveredIssues(input: unknown): DiscoveredIssue[] {
+  if (!input || typeof input !== "object" || Array.isArray(input)) {
+    return [];
+  }
+
+  try {
+    return normalizeDiscoveredIssues((input as Record<string, unknown>).discoveredIssues);
+  } catch {
+    return [];
+  }
+}
+
 function isKaizenLoopStatus(value: unknown): value is KaizenLoopStatus {
   return typeof value === "string" && STATUS_VALUES.has(value);
 }
