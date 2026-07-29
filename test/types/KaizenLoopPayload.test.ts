@@ -435,6 +435,10 @@ describe("KaizenLoopPayload", () => {
       false
     );
     assert.equal(
+      matchesPartialNoteSchema("- Completed scope: schema docs\n- Incomplete scope: provider rollout\n- Verification: skipped\n- Residual risk: verifier may block"),
+      false
+    );
+    assert.equal(
       matchesPartialNoteSchema("Completed scope: —. Incomplete scope: provider rollout. Verification: ran tests. Residual risk: verifier may block."),
       false
     );

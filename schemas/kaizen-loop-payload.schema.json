@@ -83,7 +83,7 @@
                   "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*[sS][kK][iI][pP][pP][eE][dD]\\b"
                 },
                 "then": {
-                  "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*[sS][kK][iI][pP][pP][eE][dD]\\s*[—–-]\\s*(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+                  "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*[sS][kK][iI][pP][pP][eE][dD][ \\t]*[—–-][ \\t]*(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
                 }
               }
             ]

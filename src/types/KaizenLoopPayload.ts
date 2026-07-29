@@ -93,7 +93,7 @@ function hasStructuredPartialNotes(notes: string): boolean {
     return true;
   }
 
-  const reason = /^skipped\s*[—–-]\s*([\s\S]*)$/i.exec(verification)?.[1];
+  const reason = /^skipped[ \t]*[—–-][ \t]*([\s\S]*)$/i.exec(verification)?.[1];
   return Boolean(reason && MEANINGFUL_NOTE_CONTENT.test(reason));
 }
 
