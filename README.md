@@ -302,6 +302,13 @@ When `blocked` depends on a concrete human answer or approval, include `humanReq
 
 `partial` exits successfully so `kaizen-loop` can continue into mechanical checks, independent verifier review, and PR policy gates. It is not an approval to merge or a promise that the task is complete. A `partial` payload must include non-empty `Completed scope:`, `Incomplete scope:`, `Verification:`, and `Residual risk:` sections in `notes` (in any order) so the verifier and reviewer can decide whether to stop, ask for follow-up, or allow a narrowly scoped PR. Each label must appear exactly once, use this exact capitalization, and have a non-empty value; use `Verification: skipped — <reason>` when verification did not run.
 
+```text
+Completed scope: Added the schema validation.
+Incomplete scope: Provider rollout remains.
+Verification: npm test passed.
+Residual risk: Older providers may need prompt updates.
+```
+
 The `summary` should state what changed and why; Builder Agent trims surrounding whitespace and rejects empty summaries. The `notes` field should capture verification run or skipped, residual risk, and reviewer notes when relevant. `discoveredIssues` is optional and defaults to an empty array. The published contract is [kaizen-loop-payload.schema.json](schemas/kaizen-loop-payload.schema.json), and Builder Agent validates provider payloads with the same runtime normalizer before writing `KAIZEN_BUILD_RESULT_PATH`. `builder-agent` does not create pull requests, push branches, or file GitHub issues; those remain `kaizen-loop` responsibility.
 
 ## Adapter Contract
