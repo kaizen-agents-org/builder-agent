@@ -230,6 +230,7 @@ export interface AgentRunResult {
   exitCode: number;
   raw: string;
   payload?: KaizenLoopPayload;
+  discoveredIssues?: DiscoveredIssue[];
   failureClass?: AgentFailureClass;
   fallbackReason?: AgentFailureClass;
   fallbackAllowed?: boolean;

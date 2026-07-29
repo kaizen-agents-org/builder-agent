@@ -103,6 +103,22 @@ function normalizeHumanRequest(value) {
 export function normalizeDiscoveredIssues(value) {
     return normalizeSharedDiscoveredIssues(value, { label: "Kaizen Loop payload discoveredIssues" });
 }
+export function extractValidDiscoveredIssues(input) {
+    if (!input || typeof input !== "object" || Array.isArray(input)) {
+        return [];
+    }
+    const discoveredIssues = input.discoveredIssues;
+    if (!Array.isArray(discoveredIssues))
+        return [];
+    return discoveredIssues.flatMap((issue) => {
+        try {
+            return normalizeDiscoveredIssues([issue]);
+        }
+        catch {
+            return [];
+        }
+    });
+}
 function isKaizenLoopStatus(value) {
     return typeof value === "string" && STATUS_VALUES.has(value);
 }

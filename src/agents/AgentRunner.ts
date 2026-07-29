@@ -3,8 +3,16 @@ import { access, mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises"
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
-import { normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
-import type { AgentFailureClass, AgentKind, AgentProviderConfig, AgentRunInput, AgentRunResult, KaizenLoopPayload } from "../types/contracts.js";
+import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
+import type {
+  AgentFailureClass,
+  AgentKind,
+  AgentProviderConfig,
+  AgentRunInput,
+  AgentRunResult,
+  DiscoveredIssue,
+  KaizenLoopPayload
+} from "../types/contracts.js";
 
 type AgentCommandInput = {
   prompt: string;
@@ -91,10 +99,14 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
 
       if (result.payload) {
         const allAttempts = [...attempts, result];
+        const recoveredIssues = collectDiscoveredIssues(allAttempts);
+        const payload = recoveredIssues.length > 0
+          ? { ...result.payload, discoveredIssues: mergeDiscoveredIssues(recoveredIssues, result.payload.discoveredIssues) }
+          : result.payload;
         return {
           ...result,
           raw: formatAttempts(allAttempts),
-          payload: shouldAppendProviderEvidence(result.payload) ? appendProviderEvidence(result.payload, allAttempts) : result.payload
+          payload: shouldAppendProviderEvidence(payload) ? appendProviderEvidence(payload, allAttempts) : payload
         };
       }
 
@@ -107,6 +119,7 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
           exitCode: result.exitCode,
           raw: formatAttempts(attempts),
           providerEvidence: formatProviderEvidence(attempts),
+          discoveredIssues: collectDiscoveredIssues(attempts),
           payload: undefined
         };
       }
@@ -117,6 +130,7 @@ export async function runImplementationAgent({ agent, prompt, workspaceDir, mode
       exitCode: lastAttempt?.exitCode ?? 1,
       raw: formatAttempts(attempts),
       providerEvidence: attempts.length > 0 ? formatProviderEvidence(attempts) : undefined,
+      discoveredIssues: collectDiscoveredIssues(attempts),
       payload: undefined
     };
   } catch (error) {
@@ -208,7 +222,8 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
       failureClass: parsedPayload.payload ? undefined : classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError }),
       payloadSource: parsedPayload.payload ? payloadSource : "none",
       raw: rawWithParseError,
-      payload: parsedPayload.payload
+      payload: parsedPayload.payload,
+      discoveredIssues: parsedPayload.discoveredIssues
     };
   } catch (error) {
     const raw = error instanceof Error ? error.message : String(error);
@@ -633,9 +648,13 @@ function classifyFailure({ exitCode, raw, error }: { exitCode: number, raw: stri
 
 /**
  * @param {string} raw
- * @returns {{ payload?: KaizenLoopPayload, error?: Error }}
+ * @returns {{ payload?: KaizenLoopPayload, discoveredIssues?: DiscoveredIssue[], error?: Error }}
  */
-function parseBuilderPayload(raw: string): { payload?: KaizenLoopPayload, error?: Error } {
+function parseBuilderPayload(raw: string): {
+  payload?: KaizenLoopPayload;
+  discoveredIssues?: DiscoveredIssue[];
+  error?: Error;
+} {
   const topLevel = parseMaybeJson(raw);
   const finalText =
     topLevel && typeof topLevel === "object" && "result" in topLevel
@@ -650,8 +669,26 @@ function parseBuilderPayload(raw: string): { payload?: KaizenLoopPayload, error?
   try {
     return { payload: normalizeKaizenLoopPayload(payload) };
   } catch (error) {
-    return { error: error instanceof Error ? error : new Error(String(error)) };
+    return {
+      discoveredIssues: extractValidDiscoveredIssues(payload),
+      error: error instanceof Error ? error : new Error(String(error))
+    };
   }
+}
+
+function collectDiscoveredIssues(attempts: AgentAttempt[]): DiscoveredIssue[] {
+  return mergeDiscoveredIssues(...attempts.map((attempt) => attempt.discoveredIssues ?? []));
+}
+
+function mergeDiscoveredIssues(...issueGroups: DiscoveredIssue[][]): DiscoveredIssue[] {
+  const seen = new Set<string>();
+
+  return issueGroups.flat().filter((issue) => {
+    const key = JSON.stringify([issue.repo ?? "", issue.title]);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
 }
 
 /**

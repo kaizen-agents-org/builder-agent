@@ -1,7 +1,7 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
-import { normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
+import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
 export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
     const prompt = await readStream(stdin);
     const workspaceDir = env.KAIZEN_WORKSPACE_DIR || process.cwd();
@@ -39,7 +39,7 @@ function safeNormalizePayload(payload) {
             summary: reason,
             notes: error instanceof Error ? error.message : String(error),
             blockedReason: reason,
-            discoveredIssues: []
+            discoveredIssues: extractValidDiscoveredIssues(payload)
         });
     }
 }
@@ -52,7 +52,7 @@ function blockedPayload(result) {
         summary: reason,
         notes: blockedNotes(result),
         blockedReason: reason,
-        discoveredIssues: []
+        discoveredIssues: result.discoveredIssues ?? []
     };
 }
 function blockedNotes(result) {
