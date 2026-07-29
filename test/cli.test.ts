@@ -309,7 +309,7 @@ console.log(JSON.stringify({
     }]);
   });
 
-  it("rejects malformed discovered issues from malformed kaizen-loop provider payloads", async () => {
+  it("preserves valid discovered issues alongside malformed entries", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
     const resultPath = join(dir, "build-result.json");
@@ -320,7 +320,7 @@ console.log(JSON.stringify({
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"repo\":\"verifier\"}]}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"repo\":\"verifier\"},{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"expected\":\"Verifier should pass valid runs.\",\"evidence\":\"verifier.log\"}]}\n```")}
 }));
 `,
       "utf8"
@@ -343,7 +343,12 @@ console.log(JSON.stringify({
     const result = JSON.parse(await readFile(resultPath, "utf8"));
 
     assert.equal(result.status, "blocked");
-    assert.deepEqual(result.discoveredIssues, []);
+    assert.deepEqual(result.discoveredIssues, [{
+      title: "Verifier false positive",
+      repo: "verifier",
+      expected: "Verifier should pass valid runs.",
+      evidence: "verifier.log"
+    }]);
   });
 
   it("creates the kaizen-loop result directory when it is missing", async () => {

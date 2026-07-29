@@ -105,11 +105,16 @@ export function extractValidDiscoveredIssues(input: unknown): DiscoveredIssue[] 
     return [];
   }
 
-  try {
-    return normalizeDiscoveredIssues((input as Record<string, unknown>).discoveredIssues);
-  } catch {
-    return [];
-  }
+  const discoveredIssues = (input as Record<string, unknown>).discoveredIssues;
+  if (!Array.isArray(discoveredIssues)) return [];
+
+  return discoveredIssues.flatMap((issue) => {
+    try {
+      return normalizeDiscoveredIssues([issue]);
+    } catch {
+      return [];
+    }
+  });
 }
 
 function isKaizenLoopStatus(value: unknown): value is KaizenLoopStatus {

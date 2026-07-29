@@ -88,12 +88,17 @@ export function extractValidDiscoveredIssues(input) {
     if (!input || typeof input !== "object" || Array.isArray(input)) {
         return [];
     }
-    try {
-        return normalizeDiscoveredIssues(input.discoveredIssues);
-    }
-    catch {
+    const discoveredIssues = input.discoveredIssues;
+    if (!Array.isArray(discoveredIssues))
         return [];
-    }
+    return discoveredIssues.flatMap((issue) => {
+        try {
+            return normalizeDiscoveredIssues([issue]);
+        }
+        catch {
+            return [];
+        }
+    });
 }
 function isKaizenLoopStatus(value) {
     return typeof value === "string" && STATUS_VALUES.has(value);
