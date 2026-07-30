@@ -819,6 +819,48 @@ console.log(JSON.stringify({status:"fixed",summary:"implemented",notes:"checked"
     }
   });
 
+  it("cleans up a successful provider group before inherited output pipes can delay close", { skip: process.platform === "win32" }, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const childPidPath = join(dir, "child.pid");
+    let childPid;
+
+    try {
+      const providerScript = `
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], { stdio: ["ignore", "inherit", "inherit"] });
+child.unref();
+writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
+console.log(JSON.stringify({status:"fixed",summary:"implemented",notes:"checked"}));
+`;
+      const result = await runImplementationAgent({
+        agent: "provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            provider: {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              timeoutMs: 2_000,
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      childPid = Number(await waitForFile(childPidPath));
+      assert.equal(result.payload.status, "fixed");
+      assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after successful completion`);
+    } finally {
+      if (childPid && isProcessAlive(childPid)) {
+        process.kill(childPid, "SIGKILL");
+      }
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("falls back for command-missing, timeout, and rate-limited failures when fallbackOn opts in", async () => {
     for (const failureCase of failureClassificationCases) {
       const result = await runFailureClassificationFixture({
