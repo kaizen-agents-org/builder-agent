@@ -130,6 +130,31 @@ describe("check-dist CLI", () => {
     await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
   });
 
+  it("restores the snapshot when the initial dist removal fails after deleting output", async () => {
+    const fixture = await createFixture(
+      'throw new Error("build should not run");'
+    );
+    await mkdir(join(fixture.root, "dist"));
+    const originalOutput = join(fixture.root, "dist/output.js");
+    const failRemoval = join(fixture.root, "fail-removal.js");
+    await writeFile(originalOutput, "original\n");
+    await writeFile(
+      failRemoval,
+      'import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module"; const remove = fs.rmSync; let calls = 0; fs.rmSync = (...args) => { calls += 1; remove(...args); if (calls === 1) throw new Error("injected initial removal failure"); }; syncBuiltinESMExports();'
+    );
+
+    await assert.rejects(
+      execFileAsync(process.execPath, ["--import", failRemoval, fixture.script], {
+        cwd: fixture.root,
+        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+      }),
+      (error: { stderr?: string }) => Boolean(error.stderr?.includes("injected initial removal failure"))
+    );
+
+    assert.equal(await readFile(originalOutput, "utf8"), "original\n");
+    await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
+  });
+
   it("retains the snapshot when restoring the original output fails", async () => {
     const fixture = await createFixture(
       'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "partial\\n"); process.exit(7);'

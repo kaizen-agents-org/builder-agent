@@ -37,8 +37,8 @@ try {
   }
   snapshotCreated = true;
 
-  rmSync(distDir, { force: true, recursive: true });
   originalDistRemoved = true;
+  rmSync(distDir, { force: true, recursive: true });
 
   const build = spawnSync(process.platform === "win32" ? "npm.cmd" : "npm", ["run", "build"], {
     cwd: repoRoot,
