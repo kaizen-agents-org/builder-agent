@@ -1,5 +1,7 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { randomUUID } from "node:crypto";
+import { constants } from "node:fs";
+import { lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
 export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
@@ -12,13 +14,7 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
         throw new Error("KAIZEN_BUILD_RESULT_PATH is required for Kaizen Loop integration.");
     }
     const resultPath = resolve(workspaceDir, configuredResultPath);
-    const workspaceRelativeResultPath = relative(workspaceDir, resultPath);
-    if (!workspaceRelativeResultPath ||
-        workspaceRelativeResultPath === ".." ||
-        workspaceRelativeResultPath.startsWith(`..${sep}`) ||
-        isAbsolute(workspaceRelativeResultPath)) {
-        throw new Error("KAIZEN_BUILD_RESULT_PATH must resolve to a file inside KAIZEN_WORKSPACE_DIR.");
-    }
+    assertPathInsideWorkspace(workspaceDir, resultPath, false);
     const result = await runImplementationAgent({
         agent: preferredAgents,
         prompt,
@@ -27,13 +23,88 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
         env
     });
     const payload = safeNormalizePayload(result.payload ?? blockedPayload(result));
-    await mkdir(dirname(resultPath), { recursive: true });
-    await writeFile(resultPath, `${JSON.stringify(payload, null, 2)}\n`, "utf8");
+    await writeResultFile(workspaceDir, resultPath, `${JSON.stringify(payload, null, 2)}\n`);
     stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
     if (!result.payload && result.raw.trim()) {
         stderr.write(tail(result.raw, 4000));
     }
     return payload;
+}
+async function writeResultFile(workspaceDir, resultPath, contents) {
+    const resolvedWorkspaceDir = await realpath(workspaceDir);
+    const resultDir = dirname(resultPath);
+    const resolvedExistingAncestor = await findExistingAncestor(resultDir);
+    assertPathInsideWorkspace(resolvedWorkspaceDir, resolvedExistingAncestor, true);
+    await mkdir(resultDir, { recursive: true });
+    const resolvedResultDir = await realpath(resultDir);
+    assertPathInsideWorkspace(resolvedWorkspaceDir, resolvedResultDir, true);
+    const resolvedResultPath = join(resolvedResultDir, basename(resultPath));
+    await assertResultTargetIsNotSymlink(resolvedResultPath);
+    const temporaryResultPath = join(resolvedResultDir, `.${basename(resultPath)}.${randomUUID()}.tmp`);
+    let temporaryFileCreated = false;
+    let resultPublished = false;
+    try {
+        const file = await open(temporaryResultPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o666);
+        temporaryFileCreated = true;
+        try {
+            await file.writeFile(contents, "utf8");
+        }
+        finally {
+            await file.close();
+        }
+        await assertResultTargetIsNotSymlink(resolvedResultPath);
+        await rename(temporaryResultPath, resolvedResultPath);
+        resultPublished = true;
+    }
+    finally {
+        if (temporaryFileCreated && !resultPublished) {
+            try {
+                await unlink(temporaryResultPath);
+            }
+            catch (error) {
+                if (error.code !== "ENOENT")
+                    throw error;
+            }
+        }
+    }
+}
+async function assertResultTargetIsNotSymlink(path) {
+    try {
+        if ((await lstat(path)).isSymbolicLink())
+            throw resultPathError();
+    }
+    catch (error) {
+        if (error.code !== "ENOENT")
+            throw error;
+    }
+}
+async function findExistingAncestor(path) {
+    let candidate = path;
+    while (true) {
+        try {
+            return await realpath(candidate);
+        }
+        catch (error) {
+            if (error.code !== "ENOENT")
+                throw error;
+            const parent = dirname(candidate);
+            if (parent === candidate)
+                throw error;
+            candidate = parent;
+        }
+    }
+}
+function assertPathInsideWorkspace(workspaceDir, path, allowWorkspace) {
+    const workspaceRelativePath = relative(workspaceDir, path);
+    if ((!allowWorkspace && !workspaceRelativePath) ||
+        workspaceRelativePath === ".." ||
+        workspaceRelativePath.startsWith(`..${sep}`) ||
+        isAbsolute(workspaceRelativePath)) {
+        throw resultPathError();
+    }
+}
+function resultPathError() {
+    return new Error("KAIZEN_BUILD_RESULT_PATH must resolve to a file inside KAIZEN_WORKSPACE_DIR.");
 }
 function safeNormalizePayload(payload) {
     try {
