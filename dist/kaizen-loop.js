@@ -58,6 +58,26 @@ process.stdout.write(JSON.stringify({ device: directory.dev.toString(), inode: d
 const chunks = [];
 process.stdin.on("data", (chunk) => chunks.push(chunk));
 process.stdin.on("end", () => {
+  const message = Buffer.concat(chunks);
+  const headerEnd = message.indexOf(10);
+  const header = headerEnd === -1 ? "" : message.subarray(0, headerEnd).toString("utf8");
+  const match = /^KAIZEN_RESULT_V1 ([0-9]+)$/.exec(header);
+  const payloadLength = match ? Number(match[1]) : -1;
+  const payloadStart = headerEnd + 1;
+  const payloadEnd = payloadStart + payloadLength;
+  const commitMarker = Buffer.from("\nKAIZEN_RESULT_COMMIT\n");
+  if (
+    !match ||
+    !Number.isSafeInteger(payloadLength) ||
+    payloadLength < 0 ||
+    payloadEnd + commitMarker.length !== message.length ||
+    !message.subarray(payloadEnd).equals(commitMarker)
+  ) {
+    process.stderr.write("result writer received an incomplete publish message");
+    process.exitCode = 1;
+    return;
+  }
+  const payload = message.subarray(payloadStart, payloadEnd);
   const temporary = "." + target + "." + randomUUID() + ".tmp";
   let created = false;
   let published = false;
@@ -66,7 +86,7 @@ process.stdin.on("end", () => {
     created = true;
     let identity;
     try {
-      writeFileSync(descriptor, Buffer.concat(chunks));
+      writeFileSync(descriptor, payload);
       fsyncSync(descriptor);
       identity = fstatSync(descriptor, { bigint: true });
       if (identity.nlink !== 1n) throw new Error("temporary result file gained another link");
@@ -152,7 +172,12 @@ async function startResultWriter(resultDirectory, resultPath) {
                 throw new Error("Result writer has already been used.");
             used = true;
             const exit = waitForExit();
-            child.stdin.end(contents);
+            const payload = Buffer.from(contents);
+            child.stdin.end(Buffer.concat([
+                Buffer.from(`KAIZEN_RESULT_V1 ${payload.length}\n`),
+                payload,
+                Buffer.from("\nKAIZEN_RESULT_COMMIT\n")
+            ]));
             try {
                 await exit;
             }
