@@ -8,6 +8,26 @@ import { describe, it } from "node:test";
 
 const execFileAsync = promisify(execFile);
 
+function fixtureEnvironment(fixtureTmp: string, overrides: NodeJS.ProcessEnv = {}) {
+  return {
+    ...process.env,
+    CI: "",
+    TMPDIR: fixtureTmp,
+    TMP: fixtureTmp,
+    TEMP: fixtureTmp,
+    ...overrides
+  };
+}
+
+async function writeGitStub(binDir: string, command: string) {
+  const windows = process.platform === "win32";
+  const path = join(binDir, windows ? "git.cmd" : "git");
+  const source = windows
+    ? `@echo off\r\n${command}\r\n`
+    : `#!/bin/sh\n${command}\n`;
+  await writeFile(path, source, { mode: 0o755 });
+}
+
 async function createFixture(buildSource: string) {
   const root = await mkdtemp(join(tmpdir(), "check-dist-fixture-"));
   const scriptsDir = join(root, "scripts");
@@ -36,7 +56,7 @@ describe("check-dist CLI", () => {
 
     const { stdout } = await execFileAsync(process.execPath, [fixture.script], {
       cwd: fixture.root,
-      env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+      env: fixtureEnvironment(fixture.fixtureTmp)
     });
 
     assert.match(stdout, /Generated dist files are up to date/);
@@ -53,7 +73,7 @@ describe("check-dist CLI", () => {
     await assert.rejects(
       execFileAsync(process.execPath, [fixture.script], {
         cwd: fixture.root,
-        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+        env: fixtureEnvironment(fixture.fixtureTmp)
       }),
       (error: { code?: number; stderr?: string }) =>
         error.code === 1 && Boolean(error.stderr?.includes("Generated dist files are stale"))
@@ -69,17 +89,20 @@ describe("check-dist CLI", () => {
     const binDir = join(fixture.root, "bin");
     await Promise.all([mkdir(join(fixture.root, "dist")), mkdir(binDir)]);
     await writeFile(join(fixture.root, "dist/output.js"), "fresh\n");
-    await writeFile(join(binDir, "git"), '#!/bin/sh\necho " M dist/output.js"\n', { mode: 0o755 });
+    await writeGitStub(
+      binDir,
+      process.platform === "win32"
+        ? "echo( M dist/output.js"
+        : "printf ' M dist/output.js\\n'"
+    );
 
     await assert.rejects(
       execFileAsync(process.execPath, [fixture.script], {
         cwd: fixture.root,
-        env: {
-          ...process.env,
+        env: fixtureEnvironment(fixture.fixtureTmp, {
           CI: "true",
-          PATH: `${binDir}${delimiter}${process.env.PATH}`,
-          TMPDIR: fixture.fixtureTmp
-        }
+          PATH: `${binDir}${delimiter}${process.env.PATH}`
+        })
       }),
       (error: { code?: number; stderr?: string }) =>
         error.code === 1 && Boolean(error.stderr?.includes(" M dist/output.js"))
@@ -97,7 +120,7 @@ describe("check-dist CLI", () => {
     await assert.rejects(
       execFileAsync(process.execPath, [fixture.script], {
         cwd: fixture.root,
-        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+        env: fixtureEnvironment(fixture.fixtureTmp)
       }),
       (error: { code?: number }) => error.code === 7
     );
@@ -121,7 +144,7 @@ describe("check-dist CLI", () => {
     await assert.rejects(
       execFileAsync(process.execPath, ["--import", failSnapshot, fixture.script], {
         cwd: fixture.root,
-        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+        env: fixtureEnvironment(fixture.fixtureTmp)
       }),
       (error: { stderr?: string }) => Boolean(error.stderr?.includes("injected snapshot failure"))
     );
@@ -146,7 +169,7 @@ describe("check-dist CLI", () => {
     await assert.rejects(
       execFileAsync(process.execPath, ["--import", failRemoval, fixture.script], {
         cwd: fixture.root,
-        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+        env: fixtureEnvironment(fixture.fixtureTmp)
       }),
       (error: { stderr?: string }) => Boolean(error.stderr?.includes("injected initial removal failure"))
     );
@@ -170,7 +193,7 @@ describe("check-dist CLI", () => {
     await assert.rejects(
       execFileAsync(process.execPath, ["--import", failRestore, fixture.script], {
         cwd: fixture.root,
-        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+        env: fixtureEnvironment(fixture.fixtureTmp)
       }),
       (error: { stderr?: string }) => (
         Boolean(error.stderr?.includes("injected restore failure"))
@@ -195,17 +218,14 @@ describe("check-dist CLI", () => {
     const binDir = join(fixture.root, "bin");
     await Promise.all([mkdir(join(fixture.root, "dist")), mkdir(binDir)]);
     await writeFile(join(fixture.root, "dist/output.js"), "original\n");
-    await writeFile(join(binDir, "git"), "#!/bin/sh\nexit 2\n", { mode: 0o755 });
+    await writeGitStub(binDir, process.platform === "win32" ? "exit /b 2" : "exit 2");
 
     await assert.rejects(
       execFileAsync(process.execPath, [fixture.script], {
         cwd: fixture.root,
-        env: {
-          ...process.env,
-          CI: "",
-          PATH: `${binDir}${delimiter}${process.env.PATH}`,
-          TMPDIR: fixture.fixtureTmp
-        }
+        env: fixtureEnvironment(fixture.fixtureTmp, {
+          PATH: `${binDir}${delimiter}${process.env.PATH}`
+        })
       }),
       (error: { code?: number; stderr?: string }) =>
         error.code === 2
