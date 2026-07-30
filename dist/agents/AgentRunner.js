@@ -598,6 +598,7 @@ function runCommand(command, args, options) {
         let settled = false;
         let escalationTimer;
         let shutdownTimer;
+        let exitCleanup;
         let pendingSettlement;
         const child = spawn(command, args, {
             cwd: options.cwd,
@@ -670,12 +671,23 @@ function runCommand(command, args, options) {
         child.stderr.on("data", (chunk) => {
             stderr += chunk;
         });
+        child.once("exit", () => {
+            if (timedOut)
+                return;
+            if (useProcessGroup) {
+                terminateCommandTree(child, "SIGKILL", useProcessGroup);
+            }
+            else {
+                exitCleanup = terminateCommandTreeAndWait(child, "SIGKILL", useProcessGroup);
+            }
+        });
         child.on("error", (error) => {
             settle(() => {
                 reject(timedOut ? new Error(`Agent command timed out after ${timeoutMs}ms.`) : error);
             });
         });
-        child.on("close", (code) => {
+        child.on("close", async (code) => {
+            await exitCleanup;
             settle(() => {
                 if (timedOut) {
                     reject(new Error(`Agent command timed out after ${timeoutMs}ms.`));
@@ -684,6 +696,23 @@ function runCommand(command, args, options) {
                 resolve({ exitCode: code ?? 1, stdout, stderr });
             });
         });
+    });
+}
+function terminateCommandTreeAndWait(child, signal, useProcessGroup) {
+    if (process.platform !== "win32" || child.pid === undefined) {
+        terminateCommandTree(child, signal, useProcessGroup);
+        return Promise.resolve();
+    }
+    return new Promise((resolveTermination) => {
+        const taskkillArgs = ["/pid", String(child.pid), "/t"];
+        if (signal === "SIGKILL")
+            taskkillArgs.push("/f");
+        const taskkill = spawn("taskkill", taskkillArgs, { stdio: "ignore", windowsHide: true });
+        taskkill.once("error", () => {
+            child.kill(signal);
+            resolveTermination();
+        });
+        taskkill.once("close", () => resolveTermination());
     });
 }
 function terminateCommandTree(child, signal, useProcessGroup) {
