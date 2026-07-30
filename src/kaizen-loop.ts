@@ -99,7 +99,7 @@ process.stdin.on("end", () => {
     return;
   }
   const payload = message.subarray(payloadStart, payloadEnd);
-  const temporary = "." + target + "." + randomUUID() + ".tmp";
+  const temporary = ".kaizen-result." + randomUUID() + ".tmp";
   let created = false;
   let published = false;
   try {
