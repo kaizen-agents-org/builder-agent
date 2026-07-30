@@ -596,10 +596,27 @@ function runCommand(command, args, options) {
         const useProcessGroup = process.platform !== "win32";
         let timedOut = false;
         let settled = false;
+        let escalationTimer;
+        const child = spawn(command, args, {
+            cwd: options.cwd,
+            env: options.env,
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: useProcessGroup
+        });
+        const signalHandlers = new Map();
+        const cleanupProcessHandlers = () => {
+            for (const [signal, handler] of signalHandlers) {
+                process.removeListener(signal, handler);
+            }
+            process.removeListener("exit", terminateOnExit);
+        };
+        const terminateOnExit = () => {
+            terminateCommandTree(child, "SIGTERM", useProcessGroup);
+        };
         const timeout = setTimeout(() => {
             timedOut = true;
             terminateCommandTree(child, "SIGTERM", useProcessGroup);
-            setTimeout(() => {
+            escalationTimer = setTimeout(() => {
                 terminateCommandTree(child, "SIGKILL", useProcessGroup);
             }, AGENT_TERMINATION_GRACE_MS);
         }, timeoutMs);
@@ -608,14 +625,25 @@ function runCommand(command, args, options) {
                 return;
             settled = true;
             clearTimeout(timeout);
+            if (escalationTimer)
+                clearTimeout(escalationTimer);
+            if (timedOut)
+                terminateCommandTree(child, "SIGKILL", useProcessGroup);
+            cleanupProcessHandlers();
             callback();
         };
-        const child = spawn(command, args, {
-            cwd: options.cwd,
-            env: options.env,
-            stdio: ["ignore", "pipe", "pipe"],
-            detached: useProcessGroup
-        });
+        if (useProcessGroup) {
+            for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
+                const handler = () => {
+                    terminateCommandTree(child, signal, useProcessGroup);
+                    cleanupProcessHandlers();
+                    process.kill(process.pid, signal);
+                };
+                signalHandlers.set(signal, handler);
+                process.once(signal, handler);
+            }
+            process.once("exit", terminateOnExit);
+        }
         let stdout = "";
         let stderr = "";
         child.stdout.setEncoding("utf8");
