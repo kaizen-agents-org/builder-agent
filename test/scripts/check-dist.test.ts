@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
@@ -111,19 +111,20 @@ describe("check-dist CLI", () => {
     );
     await mkdir(join(fixture.root, "dist"));
     const originalOutput = join(fixture.root, "dist/output.js");
-    await writeFile(originalOutput, "original\n", { mode: 0o000 });
+    const failSnapshot = join(fixture.root, "fail-snapshot.js");
+    await writeFile(originalOutput, "original\n");
+    await writeFile(
+      failSnapshot,
+      'import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module"; fs.cpSync = () => { throw new Error("injected snapshot failure"); }; syncBuiltinESMExports();'
+    );
 
-    try {
-      await assert.rejects(
-        execFileAsync(process.execPath, [fixture.script], {
-          cwd: fixture.root,
-          env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
-        }),
-        (error: { stderr?: string }) => /EACCES|permission denied/i.test(error.stderr ?? "")
-      );
-    } finally {
-      await chmod(originalOutput, 0o600);
-    }
+    await assert.rejects(
+      execFileAsync(process.execPath, ["--import", failSnapshot, fixture.script], {
+        cwd: fixture.root,
+        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+      }),
+      (error: { stderr?: string }) => Boolean(error.stderr?.includes("injected snapshot failure"))
+    );
 
     assert.equal(await readFile(originalOutput, "utf8"), "original\n");
     await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
