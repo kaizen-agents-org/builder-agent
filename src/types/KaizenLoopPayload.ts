@@ -13,7 +13,7 @@ const PARTIAL_NOTE_LABEL_PATTERN = PARTIAL_NOTE_LABELS.join("|");
 const PARTIAL_NOTE_PREFIX_PATTERN = "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?";
 const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])`;
 const MEANINGFUL_NOTE_CONTENT = /[^\s.;,:—–\-_*+|#>]/;
-const SKIPPED_VERIFICATION = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)(?=$|[\s.;,—–-])/i;
+const SKIPPED_VERIFICATION = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)(?=$|[\s.;,:—–-])/i;
 const SKIPPED_VERIFICATION_WITH_REASON = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)[ \t]*[—–-][ \t]*([\s\S]*)$/i;
 const HUMAN_REQUEST_REASON_CODES = new Set<HumanRequestReasonCode>([
   "missing_information",

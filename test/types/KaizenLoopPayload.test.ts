@@ -161,7 +161,10 @@ describe("KaizenLoopPayload", () => {
       "skipped - ;",
       "**skipped**",
       "_skipped_",
-      "`skipped`"
+      "`skipped`",
+      "skipped:",
+      "SKIPPED:",
+      "**skipped**:"
     ]) {
       assert.throws(
         () => normalizeKaizenLoopPayload({
@@ -409,7 +412,7 @@ describe("KaizenLoopPayload", () => {
     const skippedVerificationRule = partialNoteRules[4];
     assert.equal(
       skippedVerificationRule.if.pattern,
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*(?:[sS][kK][iI][pP][pP][eE][dD]|\\*\\*[sS][kK][iI][pP][pP][eE][dD]\\*\\*|__[sS][kK][iI][pP][pP][eE][dD]__|\\*[sS][kK][iI][pP][pP][eE][dD]\\*|_[sS][kK][iI][pP][pP][eE][dD]_|`[sS][kK][iI][pP][pP][eE][dD]`)(?=$|[\\s.;,—–-])"
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*(?:[sS][kK][iI][pP][pP][eE][dD]|\\*\\*[sS][kK][iI][pP][pP][eE][dD]\\*\\*|__[sS][kK][iI][pP][pP][eE][dD]__|\\*[sS][kK][iI][pP][pP][eE][dD]\\*|_[sS][kK][iI][pP][pP][eE][dD]_|`[sS][kK][iI][pP][pP][eE][dD]`)(?=$|[\\s.;,:—–-])"
     );
     const matchesPartialNoteSchema = (notes: string) => (
       partialNotePatterns.every((pattern: string) => new RegExp(pattern).test(notes))
@@ -455,7 +458,7 @@ describe("KaizenLoopPayload", () => {
       matchesPartialNoteSchema("- Completed scope: schema docs\n- Incomplete scope: provider rollout\n- Verification: skipped\n- Residual risk: verifier may block"),
       false
     );
-    for (const verification of ["**skipped**", "_skipped_", "`skipped`"]) {
+    for (const verification of ["**skipped**", "_skipped_", "`skipped`", "skipped:", "SKIPPED:", "**skipped**:"]) {
       assert.equal(
         matchesPartialNoteSchema(`Completed scope: schema docs. Incomplete scope: provider rollout. Verification: ${verification}. Residual risk: verifier may block.`),
         false
