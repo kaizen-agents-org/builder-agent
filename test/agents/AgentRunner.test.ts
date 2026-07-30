@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { execFileSync, spawn } from "node:child_process";
 import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
+import { pathToFileURL } from "node:url";
 import { runImplementationAgent } from "../../dist/index.js";
 
 describe("AgentRunner provider selection", () => {
@@ -613,6 +616,209 @@ console.log(JSON.stringify({
     }
   });
 
+  it("terminates a provider process tree on timeout", { skip: process.platform === "win32" }, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const childPidPath = join(dir, "child.pid");
+    let childPid;
+
+    try {
+      const providerScript = `
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: "ignore" });
+writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
+setInterval(() => {}, 1000);
+`;
+      const resultPromise = runImplementationAgent({
+        agent: "timeout-provider,fallback",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "timeout-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              timeoutMs: 1_000,
+              output: "stdout"
+            },
+            fallback: {
+              command: process.execPath,
+              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      childPid = Number(await waitForFile(childPidPath));
+      const result = await resultPromise;
+      assert.match(result.payload.notes, /timeout-provider: exitCode=1, status=fallback, failureClass=timeout/);
+      assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after timeout`);
+    } finally {
+      if (childPid && isProcessAlive(childPid)) {
+        process.kill(childPid, "SIGKILL");
+      }
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("terminates a detached provider process tree when the runner is signaled", { skip: process.platform === "win32" }, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const childPidPath = join(dir, "child.pid");
+    const runnerPath = join(dir, "runner.mjs");
+    let childPid;
+    let runner;
+
+    try {
+      const providerScript = `
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: "ignore" });
+writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
+setInterval(() => {}, 1000);
+`;
+      await writeFile(
+        runnerPath,
+        `
+import { runImplementationAgent } from ${JSON.stringify(pathToFileURL(join(process.cwd(), "dist/index.js")).href)};
+await runImplementationAgent({
+  agent: "provider",
+  prompt: "Fix issue #1",
+  workspaceDir: ${JSON.stringify(dir)},
+  env: {
+    ...process.env,
+    KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+      provider: {
+        command: process.execPath,
+        args: ["-e", ${JSON.stringify(providerScript)}],
+        timeoutMs: 60_000,
+        output: "stdout"
+      }
+    })
+  }
+});
+`,
+        "utf8"
+      );
+
+      runner = spawn(process.execPath, [runnerPath], { stdio: "ignore" });
+      childPid = Number(await waitForFile(childPidPath));
+      runner.kill("SIGTERM");
+      await waitForChildExit(runner);
+
+      assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after runner cancellation`);
+    } finally {
+      if (runner && runner.exitCode === null && runner.signalCode === null) {
+        runner.kill("SIGKILL");
+      }
+      if (childPid && isProcessAlive(childPid)) {
+        process.kill(childPid, "SIGKILL");
+      }
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("force-terminates a detached provider process tree when the runner exits", { skip: process.platform === "win32" }, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const childPidPath = join(dir, "child.pid");
+    const runnerPath = join(dir, "runner.mjs");
+    let childPid;
+    let runner;
+
+    try {
+      const providerScript = `
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+process.on("SIGTERM", () => {});
+const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: "ignore" });
+writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
+setInterval(() => {}, 1000);
+`;
+      await writeFile(
+        runnerPath,
+        `
+import { runImplementationAgent } from ${JSON.stringify(pathToFileURL(join(process.cwd(), "dist/index.js")).href)};
+setTimeout(() => process.exit(23), 500);
+await runImplementationAgent({
+  agent: "provider",
+  prompt: "Fix issue #1",
+  workspaceDir: ${JSON.stringify(dir)},
+  env: {
+    ...process.env,
+    KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+      provider: {
+        command: process.execPath,
+        args: ["-e", ${JSON.stringify(providerScript)}],
+        timeoutMs: 60_000,
+        output: "stdout"
+      }
+    })
+  }
+});
+`,
+        "utf8"
+      );
+
+      runner = spawn(process.execPath, [runnerPath], { stdio: "ignore" });
+      childPid = Number(await waitForFile(childPidPath));
+      await waitForChildExit(runner);
+
+      assert.equal(runner.exitCode, 23);
+      assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after runner exit`);
+    } finally {
+      if (runner && runner.exitCode === null && runner.signalCode === null) {
+        runner.kill("SIGKILL");
+      }
+      if (childPid && isProcessAlive(childPid)) {
+        process.kill(childPid, "SIGKILL");
+      }
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("removes provider descendants before returning a successful result", { skip: process.platform === "win32" }, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const childPidPath = join(dir, "child.pid");
+    let childPid;
+
+    try {
+      const providerScript = `
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: "ignore" });
+child.unref();
+writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
+console.log(JSON.stringify({status:"fixed",summary:"implemented",notes:"checked"}));
+`;
+      const result = await runImplementationAgent({
+        agent: "provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            provider: {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              timeoutMs: 60_000,
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      childPid = Number(await waitForFile(childPidPath));
+      assert.equal(result.payload.status, "fixed");
+      assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after successful completion`);
+    } finally {
+      if (childPid && isProcessAlive(childPid)) {
+        process.kill(childPid, "SIGKILL");
+      }
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("falls back for command-missing, timeout, and rate-limited failures when fallbackOn opts in", async () => {
     for (const failureCase of failureClassificationCases) {
       const result = await runFailureClassificationFixture({
@@ -950,4 +1156,47 @@ console.log(JSON.stringify({
 function assertClassifiedProviderEvidence(evidence, failureCase, status) {
   assert.match(evidence, failureCase.expectedEvidence, failureCase.name);
   assert.match(evidence, new RegExp(`hermes-agent: exitCode=1, status=${status}`), failureCase.name);
+}
+
+async function waitForProcessExit(pid) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    if (!isProcessAlive(pid)) return true;
+    await delay(50);
+  }
+  return false;
+}
+
+async function waitForFile(path) {
+  for (let attempt = 0; attempt < 60; attempt += 1) {
+    try {
+      return await readFile(path, "utf8");
+    } catch (error) {
+      if (error.code !== "ENOENT") throw error;
+    }
+    await delay(50);
+  }
+  throw new Error(`Timed out waiting for ${path}`);
+}
+
+function waitForChildExit(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve, reject) => {
+    child.once("error", reject);
+    child.once("exit", () => resolve());
+  });
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    if (process.platform !== "win32") {
+      const state = execFileSync("ps", ["-o", "stat=", "-p", String(pid)], { encoding: "utf8" }).trim();
+      if (state.startsWith("Z")) return false;
+    }
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    if (error.status === 1) return false;
+    throw error;
+  }
 }
