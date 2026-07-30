@@ -598,6 +598,7 @@ function runCommand(command, args, options) {
         let settled = false;
         let escalationTimer;
         let shutdownTimer;
+        let pendingSettlement;
         const child = spawn(command, args, {
             cwd: options.cwd,
             env: options.env,
@@ -618,7 +619,14 @@ function runCommand(command, args, options) {
             timedOut = true;
             terminateCommandTree(child, "SIGTERM", useProcessGroup);
             escalationTimer = setTimeout(() => {
+                escalationTimer = undefined;
                 terminateCommandTree(child, "SIGKILL", useProcessGroup);
+                if (pendingSettlement) {
+                    const callback = pendingSettlement;
+                    pendingSettlement = undefined;
+                    cleanupProcessHandlers();
+                    callback();
+                }
             }, AGENT_TERMINATION_GRACE_MS);
         }, timeoutMs);
         const settle = (callback) => {
@@ -626,8 +634,10 @@ function runCommand(command, args, options) {
                 return;
             settled = true;
             clearTimeout(timeout);
-            if (escalationTimer)
-                clearTimeout(escalationTimer);
+            if (timedOut && escalationTimer) {
+                pendingSettlement = callback;
+                return;
+            }
             if (useProcessGroup || timedOut)
                 terminateCommandTree(child, "SIGKILL", useProcessGroup);
             cleanupProcessHandlers();

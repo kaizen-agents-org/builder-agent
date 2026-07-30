@@ -629,6 +629,7 @@ const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); s
 writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
 setInterval(() => {}, 1000);
 `;
+      const startedAt = Date.now();
       const resultPromise = runImplementationAgent({
         agent: "timeout-provider,fallback",
         prompt: "Fix issue #1",
@@ -653,6 +654,7 @@ setInterval(() => {}, 1000);
 
       childPid = Number(await waitForFile(childPidPath));
       const result = await resultPromise;
+      assert.ok(Date.now() - startedAt >= 1_900, "timeout cleanup should preserve the one-second SIGTERM grace period");
       assert.match(result.payload.notes, /timeout-provider: exitCode=1, status=fallback, failureClass=timeout/);
       assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after timeout`);
     } finally {
