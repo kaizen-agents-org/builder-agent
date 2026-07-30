@@ -25,6 +25,8 @@ validateAgainstSchema("examples/build-request.example.json", "schemas/build-requ
 validateAgainstSchema("examples/self-review.example.json", "schemas/self-review.schema.json");
 validateAgainstSchema("examples/build-result.example.json", "schemas/build-result.schema.json");
 validateAgainstSchema("examples/kaizen-loop-payload.example.json", "schemas/kaizen-loop-payload.schema.json");
+validateDiscoveredIssueWhitespaceConstraints("schemas/build-result.schema.json");
+validateDiscoveredIssueWhitespaceConstraints("schemas/kaizen-loop-payload.schema.json");
 
 normalizeBuildRequest(parsed.get("examples/build-request.example.json"));
 normalizeSelfReview(parsed.get("examples/self-review.example.json"), 85);
@@ -41,6 +43,31 @@ function validateAgainstSchema(exampleFile, schemaFile) {
   const errors = validateValue(parsed.get(exampleFile), parsed.get(schemaFile), exampleFile);
   if (errors.length > 0) {
     throw new Error(`${exampleFile} does not match ${schemaFile}:\n${errors.join("\n")}`);
+  }
+}
+
+function validateDiscoveredIssueWhitespaceConstraints(schemaFile) {
+  const issueSchema = parsed.get(schemaFile).properties.discoveredIssues.items;
+  const validIssue = {
+    title: "Follow-up issue",
+    expected: "Expected behavior.",
+    evidence: "builder.log"
+  };
+
+  for (const field of ["title", "body", "expected", "evidence", "repo", "severity"]) {
+    const errors = validateValue({ ...validIssue, [field]: " \n\t " }, issueSchema, `${schemaFile}.${field}`);
+    if (errors.length === 0) {
+      throw new Error(`${schemaFile} accepts a whitespace-only discoveredIssues.${field}`);
+    }
+  }
+
+  const labelErrors = validateValue(
+    { ...validIssue, labels: [" \n\t "] },
+    issueSchema,
+    `${schemaFile}.labels`
+  );
+  if (labelErrors.length === 0) {
+    throw new Error(`${schemaFile} accepts a whitespace-only discoveredIssues.labels item`);
   }
 }
 

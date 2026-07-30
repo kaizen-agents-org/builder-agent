@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
+const AGENT_TERMINATION_GRACE_MS = 1_000;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
 const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
@@ -592,26 +593,74 @@ function mergeDiscoveredIssues(...issueGroups) {
 function runCommand(command, args, options) {
     return new Promise((resolve, reject) => {
         const timeoutMs = options.timeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS;
-        const controller = new AbortController();
+        const useProcessGroup = process.platform !== "win32";
         let timedOut = false;
         let settled = false;
+        let escalationTimer;
+        let shutdownTimer;
+        let exitCleanup;
+        let pendingSettlement;
+        const child = spawn(command, args, {
+            cwd: options.cwd,
+            env: options.env,
+            stdio: ["ignore", "pipe", "pipe"],
+            detached: useProcessGroup
+        });
+        const signalHandlers = new Map();
+        const cleanupProcessHandlers = () => {
+            for (const [signal, handler] of signalHandlers) {
+                process.removeListener(signal, handler);
+            }
+            process.removeListener("exit", terminateOnExit);
+        };
+        const terminateOnExit = () => {
+            terminateCommandTree(child, "SIGKILL", useProcessGroup);
+        };
         const timeout = setTimeout(() => {
             timedOut = true;
-            controller.abort();
+            terminateCommandTree(child, "SIGTERM", useProcessGroup);
+            escalationTimer = setTimeout(() => {
+                escalationTimer = undefined;
+                terminateCommandTree(child, "SIGKILL", useProcessGroup);
+                if (pendingSettlement) {
+                    const callback = pendingSettlement;
+                    pendingSettlement = undefined;
+                    cleanupProcessHandlers();
+                    callback();
+                }
+            }, AGENT_TERMINATION_GRACE_MS);
         }, timeoutMs);
         const settle = (callback) => {
             if (settled)
                 return;
             settled = true;
             clearTimeout(timeout);
+            if (timedOut && escalationTimer) {
+                pendingSettlement = callback;
+                return;
+            }
+            if (useProcessGroup || timedOut)
+                terminateCommandTree(child, "SIGKILL", useProcessGroup);
+            cleanupProcessHandlers();
             callback();
         };
-        const child = spawn(command, args, {
-            cwd: options.cwd,
-            env: options.env,
-            stdio: ["ignore", "pipe", "pipe"],
-            signal: controller.signal
-        });
+        if (useProcessGroup) {
+            for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
+                const handler = () => {
+                    if (shutdownTimer)
+                        return;
+                    terminateCommandTree(child, signal, useProcessGroup);
+                    shutdownTimer = setTimeout(() => {
+                        terminateCommandTree(child, "SIGKILL", useProcessGroup);
+                        cleanupProcessHandlers();
+                        process.kill(process.pid, signal);
+                    }, AGENT_TERMINATION_GRACE_MS);
+                };
+                signalHandlers.set(signal, handler);
+                process.once(signal, handler);
+            }
+            process.once("exit", terminateOnExit);
+        }
         let stdout = "";
         let stderr = "";
         child.stdout.setEncoding("utf8");
@@ -622,12 +671,23 @@ function runCommand(command, args, options) {
         child.stderr.on("data", (chunk) => {
             stderr += chunk;
         });
+        child.once("exit", () => {
+            if (timedOut)
+                return;
+            if (useProcessGroup) {
+                terminateCommandTree(child, "SIGKILL", useProcessGroup);
+            }
+            else {
+                exitCleanup = terminateCommandTreeAndWait(child, "SIGKILL", useProcessGroup);
+            }
+        });
         child.on("error", (error) => {
             settle(() => {
                 reject(timedOut ? new Error(`Agent command timed out after ${timeoutMs}ms.`) : error);
             });
         });
-        child.on("close", (code) => {
+        child.on("close", async (code) => {
+            await exitCleanup;
             settle(() => {
                 if (timedOut) {
                     reject(new Error(`Agent command timed out after ${timeoutMs}ms.`));
@@ -637,6 +697,49 @@ function runCommand(command, args, options) {
             });
         });
     });
+}
+function terminateCommandTreeAndWait(child, signal, useProcessGroup) {
+    if (process.platform !== "win32" || child.pid === undefined) {
+        terminateCommandTree(child, signal, useProcessGroup);
+        return Promise.resolve();
+    }
+    return new Promise((resolveTermination) => {
+        const taskkillArgs = ["/pid", String(child.pid), "/t"];
+        if (signal === "SIGKILL")
+            taskkillArgs.push("/f");
+        const taskkill = spawn("taskkill", taskkillArgs, { stdio: "ignore", windowsHide: true });
+        taskkill.once("error", () => {
+            child.kill(signal);
+            resolveTermination();
+        });
+        taskkill.once("close", () => resolveTermination());
+    });
+}
+function terminateCommandTree(child, signal, useProcessGroup) {
+    if (child.pid === undefined)
+        return;
+    if (process.platform === "win32") {
+        const taskkillArgs = ["/pid", String(child.pid), "/t"];
+        if (signal === "SIGKILL")
+            taskkillArgs.push("/f");
+        spawn("taskkill", taskkillArgs, { stdio: "ignore", windowsHide: true }).on("error", () => {
+            child.kill(signal);
+        });
+        return;
+    }
+    try {
+        if (useProcessGroup) {
+            process.kill(-child.pid, signal);
+        }
+        else {
+            child.kill(signal);
+        }
+    }
+    catch (error) {
+        if (error.code !== "ESRCH") {
+            child.kill(signal);
+        }
+    }
 }
 /**
  * @param {string} text
