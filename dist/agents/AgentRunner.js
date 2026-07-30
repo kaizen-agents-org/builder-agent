@@ -612,7 +612,7 @@ function runCommand(command, args, options) {
             process.removeListener("exit", terminateOnExit);
         };
         const terminateOnExit = () => {
-            terminateCommandTree(child, "SIGTERM", useProcessGroup);
+            terminateCommandTree(child, "SIGKILL", useProcessGroup);
         };
         const timeout = setTimeout(() => {
             timedOut = true;

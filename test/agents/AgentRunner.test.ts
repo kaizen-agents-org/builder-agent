@@ -719,6 +719,64 @@ await runImplementationAgent({
     }
   });
 
+  it("force-terminates a detached provider process tree when the runner exits", { skip: process.platform === "win32" }, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const childPidPath = join(dir, "child.pid");
+    const runnerPath = join(dir, "runner.mjs");
+    let childPid;
+    let runner;
+
+    try {
+      const providerScript = `
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+process.on("SIGTERM", () => {});
+const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: "ignore" });
+writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
+setInterval(() => {}, 1000);
+`;
+      await writeFile(
+        runnerPath,
+        `
+import { runImplementationAgent } from ${JSON.stringify(pathToFileURL(join(process.cwd(), "dist/index.js")).href)};
+setTimeout(() => process.exit(23), 500);
+await runImplementationAgent({
+  agent: "provider",
+  prompt: "Fix issue #1",
+  workspaceDir: ${JSON.stringify(dir)},
+  env: {
+    ...process.env,
+    KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+      provider: {
+        command: process.execPath,
+        args: ["-e", ${JSON.stringify(providerScript)}],
+        timeoutMs: 60_000,
+        output: "stdout"
+      }
+    })
+  }
+});
+`,
+        "utf8"
+      );
+
+      runner = spawn(process.execPath, [runnerPath], { stdio: "ignore" });
+      childPid = Number(await waitForFile(childPidPath));
+      await waitForChildExit(runner);
+
+      assert.equal(runner.exitCode, 23);
+      assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after runner exit`);
+    } finally {
+      if (runner && runner.exitCode === null && runner.signalCode === null) {
+        runner.kill("SIGKILL");
+      }
+      if (childPid && isProcessAlive(childPid)) {
+        process.kill(childPid, "SIGKILL");
+      }
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("falls back for command-missing, timeout, and rate-limited failures when fallbackOn opts in", async () => {
     for (const failureCase of failureClassificationCases) {
       const result = await runFailureClassificationFixture({
