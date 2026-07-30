@@ -597,6 +597,7 @@ function runCommand(command, args, options) {
         let timedOut = false;
         let settled = false;
         let escalationTimer;
+        let shutdownTimer;
         const child = spawn(command, args, {
             cwd: options.cwd,
             env: options.env,
@@ -635,9 +636,14 @@ function runCommand(command, args, options) {
         if (useProcessGroup) {
             for (const signal of ["SIGHUP", "SIGINT", "SIGTERM"]) {
                 const handler = () => {
+                    if (shutdownTimer)
+                        return;
                     terminateCommandTree(child, signal, useProcessGroup);
-                    cleanupProcessHandlers();
-                    process.kill(process.pid, signal);
+                    shutdownTimer = setTimeout(() => {
+                        terminateCommandTree(child, "SIGKILL", useProcessGroup);
+                        cleanupProcessHandlers();
+                        process.kill(process.pid, signal);
+                    }, AGENT_TERMINATION_GRACE_MS);
                 };
                 signalHandlers.set(signal, handler);
                 process.once(signal, handler);

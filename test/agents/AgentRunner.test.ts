@@ -674,7 +674,7 @@ setInterval(() => {}, 1000);
       const providerScript = `
 const { spawn } = require("node:child_process");
 const { writeFileSync } = require("node:fs");
-const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], { stdio: "ignore" });
+const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: "ignore" });
 writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
 setInterval(() => {}, 1000);
 `;
