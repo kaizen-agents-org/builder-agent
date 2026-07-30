@@ -152,6 +152,11 @@ describe("KaizenLoopPayload", () => {
       summary: "Some reviewable code was produced.",
       notes: "1. Completed scope: schema docs\n2. Incomplete scope: provider rollout\n3. Verification: ran targeted checks\n4. Residual risk: downstream verifier may still block"
     }));
+    assert.doesNotThrow(() => normalizeKaizenLoopPayload({
+      status: "partial",
+      summary: "Some reviewable code was produced.",
+      notes: "- **Completed scope:** schema docs\n- **Incomplete scope:** provider rollout\n- **Verification:** ran targeted checks\n- **Residual risk:** downstream verifier may still block"
+    }));
 
     for (const verification of [
       "skipped",
@@ -398,21 +403,21 @@ describe("KaizenLoopPayload", () => {
     const duplicatePartialNotePattern = schema.allOf[2].then.properties.notes.not.pattern;
     assert.equal(
       duplicatePartialNotePattern,
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(Completed scope|Incomplete scope|Verification|Residual risk)\\s*:[\\s\\S]*(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?\\1\\s*:"
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?(Completed scope|Incomplete scope|Verification|Residual risk)\\s*:(?:\\*\\*)?[\\s\\S]*(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?\\1\\s*:(?:\\*\\*)?"
     );
     const partialNoteRules = schema.allOf[2].then.properties.notes.allOf;
     const partialNotePatterns = partialNoteRules.slice(0, 4)
       .map(({ pattern }: { pattern: string }) => pattern);
     assert.deepEqual(partialNotePatterns, [
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Completed scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Incomplete scope\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Residual risk\\s*:(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope\\s*:|\\*\\*Completed scope\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Incomplete scope\\s*:|\\*\\*Incomplete scope\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Verification\\s*:|\\*\\*Verification\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Residual risk\\s*:|\\*\\*Residual risk\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
     ]);
     const skippedVerificationRule = partialNoteRules[4];
     assert.equal(
       skippedVerificationRule.if.pattern,
-      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?Verification\\s*:\\s*(?:[sS][kK][iI][pP][pP][eE][dD]|\\*\\*[sS][kK][iI][pP][pP][eE][dD]\\*\\*|__[sS][kK][iI][pP][pP][eE][dD]__|\\*[sS][kK][iI][pP][pP][eE][dD]\\*|_[sS][kK][iI][pP][pP][eE][dD]_|`[sS][kK][iI][pP][pP][eE][dD]`)(?=$|[\\s.;,:—–-])"
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Verification\\s*:|\\*\\*Verification\\s*:\\*\\*)\\s*(?:[sS][kK][iI][pP][pP][eE][dD]|\\*\\*[sS][kK][iI][pP][pP][eE][dD]\\*\\*|__[sS][kK][iI][pP][pP][eE][dD]__|\\*[sS][kK][iI][pP][pP][eE][dD]\\*|_[sS][kK][iI][pP][pP][eE][dD]_|`[sS][kK][iI][pP][pP][eE][dD]`)(?=$|[\\s.;,:—–-])"
     );
     const matchesPartialNoteSchema = (notes: string) => (
       partialNotePatterns.every((pattern: string) => new RegExp(pattern).test(notes))
@@ -428,6 +433,10 @@ describe("KaizenLoopPayload", () => {
     );
     assert.equal(
       matchesPartialNoteSchema("- Completed scope: schema docs\n- Incomplete scope: provider rollout\n- Verification: ran targeted checks\n- Residual risk: downstream verifier may still block"),
+      true
+    );
+    assert.equal(
+      matchesPartialNoteSchema("- **Completed scope:** schema docs\n- **Incomplete scope:** provider rollout\n- **Verification:** ran targeted checks\n- **Residual risk:** downstream verifier may still block"),
       true
     );
     assert.equal(

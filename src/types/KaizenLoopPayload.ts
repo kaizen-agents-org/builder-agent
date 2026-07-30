@@ -11,7 +11,9 @@ const PAYLOAD_KEYS = new Set(["status", "summary", "notes", "blockedReason", "hu
 const PARTIAL_NOTE_LABELS = ["Completed scope", "Incomplete scope", "Verification", "Residual risk"];
 const PARTIAL_NOTE_LABEL_PATTERN = PARTIAL_NOTE_LABELS.join("|");
 const PARTIAL_NOTE_PREFIX_PATTERN = "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?";
-const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:)[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])`;
+const partialNoteSectionPattern = (labelPattern: string) => `(?:${labelPattern}\\s*:|\\*\\*${labelPattern}\\s*:\\*\\*)`;
+const PARTIAL_NOTE_SECTION_PATTERN = partialNoteSectionPattern(`(?:${PARTIAL_NOTE_LABEL_PATTERN})`);
+const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}${PARTIAL_NOTE_SECTION_PATTERN})[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])`;
 const MEANINGFUL_NOTE_CONTENT = /[^\s.;,:—–\-_*+|#>]/;
 const SKIPPED_VERIFICATION = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)(?=$|[\s.;,:—–-])/i;
 const SKIPPED_VERIFICATION_WITH_REASON = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)[ \t]*[—–-][ \t]*([\s\S]*)$/i;
@@ -82,14 +84,14 @@ export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
 
 function hasStructuredPartialNotes(notes: string): boolean {
   if (!PARTIAL_NOTE_LABELS.every((label) => (
-    notes.match(new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:`, "g"))?.length === 1 &&
-    new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${label}\\s*:${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)
+    notes.match(new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern(label)}`, "g"))?.length === 1 &&
+    new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern(label)}${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)
   ))) {
     return false;
   }
 
   const verification = new RegExp(
-    `${PARTIAL_NOTE_PREFIX_PATTERN}Verification\\s*:\\s*([\\s\\S]*?)(?=${PARTIAL_NOTE_PREFIX_PATTERN}(?:${PARTIAL_NOTE_LABEL_PATTERN})\\s*:|$)`
+    `${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern("Verification")}\\s*([\\s\\S]*?)(?=${PARTIAL_NOTE_PREFIX_PATTERN}${PARTIAL_NOTE_SECTION_PATTERN}|$)`
   ).exec(notes)?.[1].trim();
   if (!verification || !SKIPPED_VERIFICATION.test(verification)) {
     return true;
