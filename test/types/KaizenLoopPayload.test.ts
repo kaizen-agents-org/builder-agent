@@ -72,6 +72,128 @@ describe("KaizenLoopPayload", () => {
       }),
       /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
     );
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Some reviewable code was produced.",
+        notes: "Implemented the schema and ran tests, but provider rollout remains."
+      }),
+      /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+    );
+  });
+
+  it("requires every partial note section to have a value", () => {
+    const sections = [
+      ["Completed scope", "schema docs"],
+      ["Incomplete scope", "provider rollout"],
+      ["Verification", "ran targeted checks"],
+      ["Residual risk", "downstream verifier may still block"]
+    ];
+
+    for (const [missingLabel] of sections) {
+      const notes = sections
+        .filter(([label]) => label !== missingLabel)
+        .map(([label, value]) => `${label}: ${value}.`)
+        .join(" ");
+
+      assert.throws(
+        () => normalizeKaizenLoopPayload({
+          status: "partial",
+          summary: "Some reviewable code was produced.",
+          notes
+        }),
+        /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+      );
+    }
+
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Some reviewable code was produced.",
+        notes: "Completed scope: Incomplete scope: provider rollout. Verification: skipped. Residual risk: verifier may block."
+      }),
+      /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+    );
+
+    assert.throws(
+      () => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Some reviewable code was produced.",
+        notes: "- Completed scope:\n- Incomplete scope:\n- Verification:\n- Residual risk: unknown"
+      }),
+      /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+    );
+
+    for (const notes of [
+      "1. Completed scope:\n2. Incomplete scope:\n3. Verification:\n4. Residual risk: unknown",
+      "1) Completed scope:\n2) Incomplete scope:\n3) Verification:\n4) Residual risk: unknown",
+      "Completed scope: —. Incomplete scope: provider rollout. Verification: ran targeted checks. Residual risk: downstream verifier may still block",
+      "Completed scope: schema docs. Incomplete scope: –. Verification: ran targeted checks. Residual risk: downstream verifier may still block",
+      "Completed scope:\nCompleted scope: schema docs\nIncomplete scope: provider rollout\nVerification: ran targeted checks\nResidual risk: downstream verifier may still block"
+    ]) {
+      assert.throws(
+        () => normalizeKaizenLoopPayload({
+          status: "partial",
+          summary: "Some reviewable code was produced.",
+          notes
+        }),
+        /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+      );
+    }
+
+    assert.doesNotThrow(() => normalizeKaizenLoopPayload({
+      status: "partial",
+      summary: "Some reviewable code was produced.",
+      notes: "- Completed scope: schema docs\n- Incomplete scope: provider rollout\n- Verification: ran targeted checks\n- Residual risk: downstream verifier may still block"
+    }));
+
+    assert.doesNotThrow(() => normalizeKaizenLoopPayload({
+      status: "partial",
+      summary: "Some reviewable code was produced.",
+      notes: "1. Completed scope: schema docs\n2. Incomplete scope: provider rollout\n3. Verification: ran targeted checks\n4. Residual risk: downstream verifier may still block"
+    }));
+    assert.doesNotThrow(() => normalizeKaizenLoopPayload({
+      status: "partial",
+      summary: "Some reviewable code was produced.",
+      notes: "- **Completed scope:** schema docs\n- **Incomplete scope:** provider rollout\n- **Verification:** ran targeted checks\n- **Residual risk:** downstream verifier may still block"
+    }));
+
+    for (const verification of [
+      "skipped",
+      "SKIPPED",
+      "Skipped —",
+      "skipped —",
+      "skipped - ;",
+      "**skipped**",
+      "_skipped_",
+      "`skipped`",
+      "skipped:",
+      "SKIPPED:",
+      "**skipped**:"
+    ]) {
+      assert.throws(
+        () => normalizeKaizenLoopPayload({
+          status: "partial",
+          summary: "Some reviewable code was produced.",
+          notes: `Completed scope: schema docs. Incomplete scope: provider rollout. Verification: ${verification}. Residual risk: downstream verifier may still block.`
+        }),
+        /notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial/
+      );
+    }
+
+    assert.doesNotThrow(() => normalizeKaizenLoopPayload({
+      status: "partial",
+      summary: "Some reviewable code was produced.",
+      notes: "Completed scope: schema docs. Incomplete scope: provider rollout. Verification: skipped — the integration service was unavailable. Residual risk: downstream verifier may still block."
+    }));
+
+    for (const verification of ["**skipped** — service unavailable", "_skipped_ - service unavailable", "`skipped` — service unavailable"]) {
+      assert.doesNotThrow(() => normalizeKaizenLoopPayload({
+        status: "partial",
+        summary: "Some reviewable code was produced.",
+        notes: `Completed scope: schema docs. Incomplete scope: provider rollout. Verification: ${verification}. Residual risk: downstream verifier may still block.`
+      }));
+    }
   });
 
   it("rejects malformed kaizen-loop discovered issues explicitly", () => {
@@ -154,7 +276,7 @@ describe("KaizenLoopPayload", () => {
       () => normalizeKaizenLoopPayload({
         status: "partial",
         summary: "Partially fixed.",
-        notes: "Completed scope: docs. Incomplete scope: provider rollout. Verification: skipped. Residual risk: verifier may block.",
+        notes: "Completed scope: docs. Incomplete scope: provider rollout. Verification: skipped — integration service unavailable. Residual risk: verifier may block.",
         blockedReason: "No longer blocked."
       }),
       /blockedReason is only valid when status is blocked/
@@ -278,6 +400,97 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.allOf[2].if.properties.status.const, "partial");
     assert.equal(schema.allOf[2].then.properties.notes.minLength, 1);
     assert.equal(schema.allOf[2].then.properties.notes.pattern, "\\S");
+    const duplicatePartialNotePattern = schema.allOf[2].then.properties.notes.not.pattern;
+    assert.equal(
+      duplicatePartialNotePattern,
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?(Completed scope|Incomplete scope|Verification|Residual risk)\\s*:(?:\\*\\*)?[\\s\\S]*(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?\\1\\s*:(?:\\*\\*)?"
+    );
+    const partialNoteRules = schema.allOf[2].then.properties.notes.allOf;
+    const partialNotePatterns = partialNoteRules.slice(0, 4)
+      .map(({ pattern }: { pattern: string }) => pattern);
+    assert.deepEqual(partialNotePatterns, [
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope\\s*:|\\*\\*Completed scope\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Incomplete scope\\s*:|\\*\\*Incomplete scope\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Verification\\s*:|\\*\\*Verification\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])",
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Residual risk\\s*:|\\*\\*Residual risk\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+    ]);
+    const skippedVerificationRule = partialNoteRules[4];
+    assert.equal(
+      skippedVerificationRule.if.pattern,
+      "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Verification\\s*:|\\*\\*Verification\\s*:\\*\\*)\\s*(?:[sS][kK][iI][pP][pP][eE][dD]|\\*\\*[sS][kK][iI][pP][pP][eE][dD]\\*\\*|__[sS][kK][iI][pP][pP][eE][dD]__|\\*[sS][kK][iI][pP][pP][eE][dD]\\*|_[sS][kK][iI][pP][pP][eE][dD]_|`[sS][kK][iI][pP][pP][eE][dD]`)(?=$|[\\s.;,:—–-])"
+    );
+    const matchesPartialNoteSchema = (notes: string) => (
+      partialNotePatterns.every((pattern: string) => new RegExp(pattern).test(notes))
+      && !new RegExp(duplicatePartialNotePattern).test(notes)
+      && (
+        !new RegExp(skippedVerificationRule.if.pattern, "i").test(notes)
+        || new RegExp(skippedVerificationRule.then.pattern, "i").test(notes)
+      )
+    );
+    assert.equal(
+      matchesPartialNoteSchema("- Completed scope:\n- Incomplete scope:\n- Verification:\n- Residual risk: unknown"),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("- Completed scope: schema docs\n- Incomplete scope: provider rollout\n- Verification: ran targeted checks\n- Residual risk: downstream verifier may still block"),
+      true
+    );
+    assert.equal(
+      matchesPartialNoteSchema("- **Completed scope:** schema docs\n- **Incomplete scope:** provider rollout\n- **Verification:** ran targeted checks\n- **Residual risk:** downstream verifier may still block"),
+      true
+    );
+    assert.equal(
+      matchesPartialNoteSchema("1. Completed scope:\n2. Incomplete scope:\n3. Verification:\n4. Residual risk: unknown"),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("1) Completed scope:\n2) Incomplete scope:\n3) Verification:\n4) Residual risk: unknown"),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("1. Completed scope: schema docs\n2. Incomplete scope: provider rollout\n3. Verification: ran targeted checks\n4. Residual risk: downstream verifier may still block"),
+      true
+    );
+    assert.equal(
+      matchesPartialNoteSchema("Completed scope:\nCompleted scope: schema docs\nIncomplete scope: provider rollout\nVerification: ran targeted checks\nResidual risk: downstream verifier may still block"),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("Completed scope: schema docs. Incomplete scope: provider rollout. Verification: skipped. Residual risk: verifier may block."),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("Completed scope: schema docs. Incomplete scope: provider rollout. Verification: SKIPPED. Residual risk: verifier may block."),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("- Completed scope: schema docs\n- Incomplete scope: provider rollout\n- Verification: skipped\n- Residual risk: verifier may block"),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("Completed scope: docs. Verification: skipped - Incomplete scope: rollout. Residual risk: low."),
+      false
+    );
+    for (const verification of ["**skipped**", "_skipped_", "`skipped`", "skipped:", "SKIPPED:", "**skipped**:"]) {
+      assert.equal(
+        matchesPartialNoteSchema(`Completed scope: schema docs. Incomplete scope: provider rollout. Verification: ${verification}. Residual risk: verifier may block.`),
+        false
+      );
+    }
+    assert.equal(
+      matchesPartialNoteSchema("Completed scope: —. Incomplete scope: provider rollout. Verification: ran tests. Residual risk: verifier may block."),
+      false
+    );
+    assert.equal(
+      matchesPartialNoteSchema("Completed scope: schema docs. Incomplete scope: provider rollout. Verification: skipped — service unavailable. Residual risk: verifier may block."),
+      true
+    );
+    for (const verification of ["**skipped** — service unavailable", "_skipped_ - service unavailable", "`skipped` — service unavailable"]) {
+      assert.equal(
+        matchesPartialNoteSchema(`Completed scope: schema docs. Incomplete scope: provider rollout. Verification: ${verification}. Residual risk: verifier may block.`),
+        true
+      );
+    }
     assert.equal(schema.properties.discoveredIssues.items.properties.repo.type, "string");
     assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
     assert.equal(schema.properties.discoveredIssues.items.properties.expected.pattern, "\\S");
