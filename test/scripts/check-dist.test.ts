@@ -178,16 +178,16 @@ describe("check-dist CLI", () => {
     await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
   });
 
-  it("retains the snapshot when restoring the original output fails", async () => {
+  it("reports the root error and retains the snapshot when restoring output fails", async () => {
     const fixture = await createFixture(
-      'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "partial\\n"); process.exit(7);'
+      'throw new Error("build should not run");'
     );
     await mkdir(join(fixture.root, "dist"));
     const failRestore = join(fixture.root, "fail-restore.js");
     await writeFile(join(fixture.root, "dist/output.js"), "original\n");
     await writeFile(
       failRestore,
-      'import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module"; const copy = fs.cpSync; let calls = 0; fs.cpSync = (...args) => { calls += 1; if (calls === 2) throw new Error("injected restore failure"); return copy(...args); }; syncBuiltinESMExports();'
+      'import childProcess from "node:child_process"; import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module"; const copy = fs.cpSync; let calls = 0; fs.cpSync = (...args) => { calls += 1; if (calls === 2) throw new Error("injected restore failure"); return copy(...args); }; childProcess.spawnSync = () => ({ error: new Error("injected build spawn failure") }); syncBuiltinESMExports();'
     );
 
     await assert.rejects(
@@ -196,7 +196,8 @@ describe("check-dist CLI", () => {
         env: fixtureEnvironment(fixture.fixtureTmp)
       }),
       (error: { stderr?: string }) => (
-        Boolean(error.stderr?.includes("injected restore failure"))
+        Boolean(error.stderr?.includes("Unable to rebuild generated dist files: injected build spawn failure"))
+        && Boolean(error.stderr?.includes("injected restore failure"))
         && Boolean(error.stderr?.includes("snapshot retained at"))
       )
     );

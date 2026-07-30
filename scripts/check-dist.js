@@ -46,8 +46,8 @@ try {
   });
 
   if (build.error) {
-    restoreOriginalDist();
     console.error(`Unable to rebuild generated dist files: ${build.error.message}`);
+    restoreOriginalDist();
     process.exitCode = 1;
   } else if (build.status !== 0) {
     restoreOriginalDist();
@@ -66,8 +66,8 @@ try {
     );
 
     if (result.error) {
-      restoreOriginalDist();
       console.error(`Unable to compare generated dist files: ${result.error.message}`);
+      restoreOriginalDist();
       process.exitCode = 1;
     } else if (result.status === 0 && (!compareCommittedOutput || !result.stdout.trim())) {
       console.log("Generated dist files are up to date.");
@@ -79,8 +79,8 @@ try {
       console.error("Run `npm run build` and keep the regenerated dist/ files.");
       process.exitCode = 1;
     } else {
-      restoreOriginalDist();
       process.stderr.write(result.stderr);
+      restoreOriginalDist();
       process.exitCode = result.status ?? 1;
     }
   }
