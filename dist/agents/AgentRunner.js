@@ -628,7 +628,7 @@ function runCommand(command, args, options) {
             clearTimeout(timeout);
             if (escalationTimer)
                 clearTimeout(escalationTimer);
-            if (timedOut)
+            if (useProcessGroup || timedOut)
                 terminateCommandTree(child, "SIGKILL", useProcessGroup);
             cleanupProcessHandlers();
             callback();

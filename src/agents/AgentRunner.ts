@@ -733,7 +733,7 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
       settled = true;
       clearTimeout(timeout);
       if (escalationTimer) clearTimeout(escalationTimer);
-      if (timedOut) terminateCommandTree(child, "SIGKILL", useProcessGroup);
+      if (useProcessGroup || timedOut) terminateCommandTree(child, "SIGKILL", useProcessGroup);
       cleanupProcessHandlers();
       callback();
     };
