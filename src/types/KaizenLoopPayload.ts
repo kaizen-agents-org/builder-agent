@@ -8,6 +8,15 @@ import type {
 
 const STATUS_VALUES = new Set(["fixed", "partial", "blocked"]);
 const PAYLOAD_KEYS = new Set(["status", "summary", "notes", "blockedReason", "humanRequest", "discoveredIssues"]);
+const PARTIAL_NOTE_LABELS = ["Completed scope", "Incomplete scope", "Verification", "Residual risk"];
+const PARTIAL_NOTE_LABEL_PATTERN = PARTIAL_NOTE_LABELS.join("|");
+const PARTIAL_NOTE_PREFIX_PATTERN = "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?";
+const partialNoteSectionPattern = (labelPattern: string) => `(?:${labelPattern}\\s*:|\\*\\*${labelPattern}\\s*:\\*\\*)`;
+const PARTIAL_NOTE_SECTION_PATTERN = partialNoteSectionPattern(`(?:${PARTIAL_NOTE_LABEL_PATTERN})`);
+const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}${PARTIAL_NOTE_SECTION_PATTERN})[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])`;
+const MEANINGFUL_NOTE_CONTENT = /[^\s.;,:—–\-_*+|#>]/;
+const SKIPPED_VERIFICATION = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)(?=$|[\s.;,:—–-])/i;
+const SKIPPED_VERIFICATION_WITH_REASON = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)[ \t]*[—–-][ \t]*([\s\S]*)$/i;
 const HUMAN_REQUEST_REASON_CODES = new Set<HumanRequestReasonCode>([
   "missing_information",
   "credentials",
@@ -42,7 +51,7 @@ export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
   if (typeof payload.notes !== "string") {
     throw new Error("Kaizen Loop payload notes must be a string.");
   }
-  if (payload.status === "partial" && payload.notes.trim().length === 0) {
+  if (payload.status === "partial" && !hasStructuredPartialNotes(payload.notes)) {
     throw new Error("Kaizen Loop payload notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial.");
   }
 
@@ -71,6 +80,25 @@ export function normalizeKaizenLoopPayload(input: unknown): KaizenLoopPayload {
     ...(blockedReason ? { blockedReason } : {}),
     ...(humanRequest ? { humanRequest } : {})
   };
+}
+
+function hasStructuredPartialNotes(notes: string): boolean {
+  if (!PARTIAL_NOTE_LABELS.every((label) => (
+    notes.match(new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern(label)}`, "g"))?.length === 1 &&
+    new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern(label)}${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)
+  ))) {
+    return false;
+  }
+
+  const verification = new RegExp(
+    `${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern("Verification")}\\s*([\\s\\S]*?)(?=${PARTIAL_NOTE_PREFIX_PATTERN}${PARTIAL_NOTE_SECTION_PATTERN}|$)`
+  ).exec(notes)?.[1].trim();
+  if (!verification || !SKIPPED_VERIFICATION.test(verification)) {
+    return true;
+  }
+
+  const reason = SKIPPED_VERIFICATION_WITH_REASON.exec(verification)?.[1];
+  return Boolean(reason && MEANINGFUL_NOTE_CONTENT.test(reason));
 }
 
 function normalizeHumanRequest(value: unknown): HumanRequest | undefined {

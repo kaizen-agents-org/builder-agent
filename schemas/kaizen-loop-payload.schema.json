@@ -61,7 +61,32 @@
         "properties": {
           "notes": {
             "minLength": 1,
-            "pattern": "\\S"
+            "pattern": "\\S",
+            "not": {
+              "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?(Completed scope|Incomplete scope|Verification|Residual risk)\\s*:(?:\\*\\*)?[\\s\\S]*(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?\\1\\s*:(?:\\*\\*)?"
+            },
+            "allOf": [
+              {
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Completed scope\\s*:|\\*\\*Completed scope\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+              },
+              {
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Incomplete scope\\s*:|\\*\\*Incomplete scope\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+              },
+              {
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Verification\\s*:|\\*\\*Verification\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+              },
+              {
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Residual risk\\s*:|\\*\\*Residual risk\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+              },
+              {
+                "if": {
+                  "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Verification\\s*:|\\*\\*Verification\\s*:\\*\\*)\\s*(?:[sS][kK][iI][pP][pP][eE][dD]|\\*\\*[sS][kK][iI][pP][pP][eE][dD]\\*\\*|__[sS][kK][iI][pP][pP][eE][dD]__|\\*[sS][kK][iI][pP][pP][eE][dD]\\*|_[sS][kK][iI][pP][pP][eE][dD]_|`[sS][kK][iI][pP][pP][eE][dD]`)(?=$|[\\s.;,:—–-])"
+                },
+                "then": {
+                  "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Verification\\s*:|\\*\\*Verification\\s*:\\*\\*)\\s*(?:[sS][kK][iI][pP][pP][eE][dD]|\\*\\*[sS][kK][iI][pP][pP][eE][dD]\\*\\*|__[sS][kK][iI][pP][pP][eE][dD]__|\\*[sS][kK][iI][pP][pP][eE][dD]\\*|_[sS][kK][iI][pP][pP][eE][dD]_|`[sS][kK][iI][pP][pP][eE][dD]`)[ \\t]*[—–-](?![ \\t]*(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[ \\t]*(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:|\\*\\*(?:Completed scope|Incomplete scope|Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+                }
+              }
+            ]
           }
         }
       }
@@ -96,7 +121,7 @@
     },
     "notes": {
       "type": "string",
-      "description": "Verification run or skipped, residual risk, reviewer notes, and fallback evidence when relevant. For partial results this must be non-empty and identify completed scope, incomplete scope, verification status, and residual risk."
+      "description": "Verification run or skipped, residual risk, reviewer notes, and fallback evidence when relevant. Partial results must provide non-empty Completed scope:, Incomplete scope:, Verification:, and Residual risk: labeled sections."
     },
     "blockedReason": {
       "type": "string",
