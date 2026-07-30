@@ -308,6 +308,38 @@ console.log(JSON.stringify({
     assert.match(await readFile(resultPath, "utf8"), /"status": "fixed"/);
   });
 
+  it("publishes results when the configured filename begins with a dash", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const workspaceDir = join(dir, "workspace");
+    const binDir = join(dir, "bin");
+    const resultPath = join(workspaceDir, "--help");
+    const fakeClaudePath = join(binDir, "claude");
+    await mkdir(workspaceDir);
+    await mkdir(binDir);
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: workspaceDir,
+        KAIZEN_PREFERRED_AGENT: "claude"
+      }
+    });
+
+    assert.match(await readFile(resultPath, "utf8"), /"status": "fixed"/);
+  });
+
   it("returns exit code 0 for partial kaizen-loop payloads so verifier gates PR readiness", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");

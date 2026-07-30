@@ -120,7 +120,7 @@ process.stdin.on("end", () => {
 `;
 async function startResultWriter(resultDirectory, resultPath) {
     await assertResultDirectoryIdentity(resultDirectory);
-    const child = spawn(process.execPath, ["-e", RESULT_WRITER_SCRIPT, basename(resultPath)], {
+    const child = spawn(process.execPath, ["-e", RESULT_WRITER_SCRIPT, "--", basename(resultPath)], {
         cwd: resultDirectory.path,
         stdio: ["pipe", "pipe", "pipe"],
         windowsHide: true
