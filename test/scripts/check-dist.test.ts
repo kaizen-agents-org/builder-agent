@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { mkdir, mkdtemp, readFile, readdir, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { delimiter, join } from "node:path";
 import { promisify } from "node:util";
@@ -128,6 +128,39 @@ describe("check-dist CLI", () => {
 
     assert.equal(await readFile(originalOutput, "utf8"), "original\n");
     await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
+  });
+
+  it("retains the snapshot when restoring the original output fails", async () => {
+    const fixture = await createFixture(
+      'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "partial\\n"); process.exit(7);'
+    );
+    await mkdir(join(fixture.root, "dist"));
+    const failRestore = join(fixture.root, "fail-restore.js");
+    await writeFile(join(fixture.root, "dist/output.js"), "original\n");
+    await writeFile(
+      failRestore,
+      'import fs from "node:fs"; import { syncBuiltinESMExports } from "node:module"; const copy = fs.cpSync; let calls = 0; fs.cpSync = (...args) => { calls += 1; if (calls === 2) throw new Error("injected restore failure"); return copy(...args); }; syncBuiltinESMExports();'
+    );
+
+    await assert.rejects(
+      execFileAsync(process.execPath, ["--import", failRestore, fixture.script], {
+        cwd: fixture.root,
+        env: { ...process.env, CI: "", TMPDIR: fixture.fixtureTmp }
+      }),
+      (error: { stderr?: string }) => (
+        Boolean(error.stderr?.includes("injected restore failure"))
+        && Boolean(error.stderr?.includes("snapshot retained at"))
+      )
+    );
+
+    const snapshots = (await readdir(fixture.fixtureTmp))
+      .filter((entry) => entry.startsWith("builder-agent-dist-"));
+    assert.equal(snapshots.length, 1);
+    assert.equal(
+      await readFile(join(fixture.fixtureTmp, snapshots[0], "dist/output.js"), "utf8"),
+      "original\n"
+    );
+    await rm(join(fixture.fixtureTmp, snapshots[0]), { force: true, recursive: true });
   });
 
   it("restores the original output when the comparison command is unavailable", async () => {

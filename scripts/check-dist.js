@@ -11,14 +11,21 @@ const snapshotDist = resolve(snapshotRoot, "dist");
 const hadOriginalDist = existsSync(distDir);
 let snapshotCreated = false;
 let originalDistRemoved = false;
+let snapshotRetained = false;
 
 function restoreOriginalDist() {
   if (!snapshotCreated || !originalDistRemoved) {
     return;
   }
-  rmSync(distDir, { force: true, recursive: true });
-  if (hadOriginalDist) {
-    cpSync(snapshotDist, distDir, { recursive: true });
+  try {
+    rmSync(distDir, { force: true, recursive: true });
+    if (hadOriginalDist) {
+      cpSync(snapshotDist, distDir, { recursive: true });
+    }
+    originalDistRemoved = false;
+  } catch (error) {
+    snapshotRetained = true;
+    throw error;
   }
 }
 
@@ -78,8 +85,14 @@ try {
     }
   }
 } catch (error) {
-  restoreOriginalDist();
+  if (!snapshotRetained) {
+    restoreOriginalDist();
+  }
   throw error;
 } finally {
-  rmSync(snapshotRoot, { force: true, recursive: true });
+  if (snapshotRetained) {
+    console.error(`Unable to restore the original dist; snapshot retained at ${snapshotDist}`);
+  } else {
+    rmSync(snapshotRoot, { force: true, recursive: true });
+  }
 }
