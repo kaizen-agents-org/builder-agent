@@ -25,6 +25,6 @@ jobs:
           node-version: 20
           cache: npm
       - run: npm ci
+      - run: npm run check:dist
       - run: npm test
       - run: npm run validate:json
-      - run: npm run check:dist
