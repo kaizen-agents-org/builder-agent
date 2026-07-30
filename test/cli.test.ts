@@ -244,23 +244,36 @@ console.log(JSON.stringify({
   it("does not overwrite a hard-linked file outside the workspace", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const workspaceDir = join(dir, "workspace");
+    const binDir = join(dir, "bin");
     const resultPath = join(workspaceDir, "result.json");
     const externalPath = join(dir, "external.json");
     await mkdir(workspaceDir);
+    await mkdir(binDir);
     await writeFile(externalPath, "do not overwrite", "utf8");
     await link(externalPath, resultPath);
-
-    await assert.rejects(
-      spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
-        env: {
-          ...process.env,
-          KAIZEN_BUILD_RESULT_PATH: resultPath,
-          KAIZEN_WORKSPACE_DIR: workspaceDir
-        }
-      }),
-      /KAIZEN_BUILD_RESULT_PATH must resolve to a file inside KAIZEN_WORKSPACE_DIR/
+    const fakeClaudePath = join(binDir, "claude");
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
     );
+    await chmod(fakeClaudePath, 0o755);
+
+    await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: workspaceDir,
+        KAIZEN_PREFERRED_AGENT: "claude"
+      }
+    });
     assert.equal(await readFile(externalPath, "utf8"), "do not overwrite");
+    assert.match(await readFile(resultPath, "utf8"), /"status": "fixed"/);
   });
 
   it("returns exit code 0 for partial kaizen-loop payloads so verifier gates PR readiness", async () => {
