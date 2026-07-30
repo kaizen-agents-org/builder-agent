@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { chmod, link, mkdir, mkdtemp, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -162,6 +162,182 @@ console.log(JSON.stringify({
         evidence: "log excerpt"
       }
     ]);
+  });
+
+  it("rejects kaizen-loop result paths outside the workspace", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const workspaceDir = join(dir, "workspace");
+    await mkdir(workspaceDir);
+
+    for (const [configuredResultPath, escapedResultPath] of [
+      ["../escaped-relative.json", join(dir, "escaped-relative.json")],
+      [join(dir, "escaped-absolute.json"), join(dir, "escaped-absolute.json")]
+    ]) {
+      await assert.rejects(
+        spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+          env: {
+            ...process.env,
+            KAIZEN_BUILD_RESULT_PATH: configuredResultPath,
+            KAIZEN_WORKSPACE_DIR: workspaceDir
+          }
+        }),
+        /KAIZEN_BUILD_RESULT_PATH must resolve to a file inside KAIZEN_WORKSPACE_DIR/
+      );
+      await assert.rejects(readFile(escapedResultPath, "utf8"), { code: "ENOENT" });
+    }
+  });
+
+  it("does not follow symlinks when writing the kaizen-loop result", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const workspaceDir = join(dir, "workspace");
+    const outsideDir = join(dir, "outside");
+    const binDir = join(dir, "bin");
+    await mkdir(workspaceDir);
+    await mkdir(outsideDir);
+    await mkdir(binDir);
+
+    for (const resultPathKind of ["parent", "file"]) {
+      const resultPath =
+        resultPathKind === "parent"
+          ? join(workspaceDir, "linked", "build-result.json")
+          : join(workspaceDir, "build-result.json");
+      const escapedResultPath = join(outsideDir, `${resultPathKind}-result.json`);
+      const fakeClaudePath = join(binDir, `claude-${resultPathKind}`);
+
+      await writeFile(escapedResultPath, "do not overwrite", "utf8");
+      await writeFile(
+        fakeClaudePath,
+        `#!/usr/bin/env node
+import { rmSync, symlinkSync } from "node:fs";
+rmSync(${JSON.stringify(resultPathKind === "parent" ? join(workspaceDir, "linked") : resultPath)}, { force: true, recursive: true });
+symlinkSync(
+  ${JSON.stringify(resultPathKind === "parent" ? outsideDir : escapedResultPath)},
+  ${JSON.stringify(resultPathKind === "parent" ? join(workspaceDir, "linked") : resultPath)},
+  ${JSON.stringify(resultPathKind === "parent" ? "dir" : "file")}
+);
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+        "utf8"
+      );
+      await chmod(fakeClaudePath, 0o755);
+      await symlink(fakeClaudePath, join(binDir, "claude"));
+
+      await assert.rejects(
+        spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+          env: {
+            ...process.env,
+            PATH: `${binDir}:${process.env.PATH}`,
+            KAIZEN_BUILD_RESULT_PATH: resultPath,
+            KAIZEN_WORKSPACE_DIR: workspaceDir,
+            KAIZEN_PREFERRED_AGENT: "claude"
+          }
+        }),
+        /KAIZEN_BUILD_RESULT_PATH must resolve to a file inside KAIZEN_WORKSPACE_DIR/
+      );
+      assert.equal(await readFile(escapedResultPath, "utf8"), "do not overwrite");
+      await unlink(join(binDir, "claude"));
+    }
+  });
+
+  it("does not overwrite a hard-linked file outside the workspace", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const workspaceDir = join(dir, "workspace");
+    const binDir = join(dir, "bin");
+    const resultPath = join(workspaceDir, "result.json");
+    const externalPath = join(dir, "external.json");
+    await mkdir(workspaceDir);
+    await mkdir(binDir);
+    await writeFile(externalPath, "do not overwrite", "utf8");
+    await link(externalPath, resultPath);
+    const fakeClaudePath = join(binDir, "claude");
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: workspaceDir,
+        KAIZEN_PREFERRED_AGENT: "claude"
+      }
+    });
+    assert.equal(await readFile(externalPath, "utf8"), "do not overwrite");
+    assert.match(await readFile(resultPath, "utf8"), /"status": "fixed"/);
+  });
+
+  it("publishes results when the configured filename is near the component length limit", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const workspaceDir = join(dir, "workspace");
+    const binDir = join(dir, "bin");
+    const resultPath = join(workspaceDir, `${"r".repeat(225)}.json`);
+    const fakeClaudePath = join(binDir, "claude");
+    await mkdir(workspaceDir);
+    await mkdir(binDir);
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: workspaceDir,
+        KAIZEN_PREFERRED_AGENT: "claude"
+      }
+    });
+
+    assert.match(await readFile(resultPath, "utf8"), /"status": "fixed"/);
+  });
+
+  it("publishes results when the configured filename begins with a dash", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const workspaceDir = join(dir, "workspace");
+    const binDir = join(dir, "bin");
+    const resultPath = join(workspaceDir, "--help");
+    const fakeClaudePath = join(binDir, "claude");
+    await mkdir(workspaceDir);
+    await mkdir(binDir);
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    await spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`,
+        KAIZEN_BUILD_RESULT_PATH: resultPath,
+        KAIZEN_WORKSPACE_DIR: workspaceDir,
+        KAIZEN_PREFERRED_AGENT: "claude"
+      }
+    });
+
+    assert.match(await readFile(resultPath, "utf8"), /"status": "fixed"/);
   });
 
   it("returns exit code 0 for partial kaizen-loop payloads so verifier gates PR readiness", async () => {
