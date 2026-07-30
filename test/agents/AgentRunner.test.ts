@@ -3,6 +3,7 @@ import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { runImplementationAgent } from "../../dist/index.js";
 
 describe("AgentRunner provider selection", () => {
@@ -613,6 +614,52 @@ console.log(JSON.stringify({
     }
   });
 
+  it("terminates a provider process tree on timeout", { skip: process.platform === "win32" }, async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const childPidPath = join(dir, "child.pid");
+    let childPid;
+
+    try {
+      const providerScript = `
+const { spawn } = require("node:child_process");
+const { writeFileSync } = require("node:fs");
+const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: "ignore" });
+writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
+setInterval(() => {}, 1000);
+`;
+      const result = await runImplementationAgent({
+        agent: "timeout-provider,fallback",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "timeout-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              timeoutMs: 100,
+              output: "stdout"
+            },
+            fallback: {
+              command: process.execPath,
+              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      childPid = Number(await readFile(childPidPath, "utf8"));
+      assert.match(result.payload.notes, /timeout-provider: exitCode=1, status=fallback, failureClass=timeout/);
+      assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after timeout`);
+    } finally {
+      if (childPid && isProcessAlive(childPid)) {
+        process.kill(childPid, "SIGKILL");
+      }
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("falls back for command-missing, timeout, and rate-limited failures when fallbackOn opts in", async () => {
     for (const failureCase of failureClassificationCases) {
       const result = await runFailureClassificationFixture({
@@ -950,4 +997,22 @@ console.log(JSON.stringify({
 function assertClassifiedProviderEvidence(evidence, failureCase, status) {
   assert.match(evidence, failureCase.expectedEvidence, failureCase.name);
   assert.match(evidence, new RegExp(`hermes-agent: exitCode=1, status=${status}`), failureCase.name);
+}
+
+async function waitForProcessExit(pid) {
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    if (!isProcessAlive(pid)) return true;
+    await delay(50);
+  }
+  return false;
+}
+
+function isProcessAlive(pid) {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch (error) {
+    if (error.code === "ESRCH") return false;
+    throw error;
+  }
 }

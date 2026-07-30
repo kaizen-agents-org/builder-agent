@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
+const AGENT_TERMINATION_GRACE_MS = 1_000;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
 const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
@@ -592,12 +593,15 @@ function mergeDiscoveredIssues(...issueGroups) {
 function runCommand(command, args, options) {
     return new Promise((resolve, reject) => {
         const timeoutMs = options.timeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS;
-        const controller = new AbortController();
+        const useProcessGroup = process.platform !== "win32";
         let timedOut = false;
         let settled = false;
         const timeout = setTimeout(() => {
             timedOut = true;
-            controller.abort();
+            terminateCommandTree(child, "SIGTERM", useProcessGroup);
+            setTimeout(() => {
+                terminateCommandTree(child, "SIGKILL", useProcessGroup);
+            }, AGENT_TERMINATION_GRACE_MS);
         }, timeoutMs);
         const settle = (callback) => {
             if (settled)
@@ -610,7 +614,7 @@ function runCommand(command, args, options) {
             cwd: options.cwd,
             env: options.env,
             stdio: ["ignore", "pipe", "pipe"],
-            signal: controller.signal
+            detached: useProcessGroup
         });
         let stdout = "";
         let stderr = "";
@@ -637,6 +641,32 @@ function runCommand(command, args, options) {
             });
         });
     });
+}
+function terminateCommandTree(child, signal, useProcessGroup) {
+    if (child.pid === undefined)
+        return;
+    if (process.platform === "win32") {
+        const taskkillArgs = ["/pid", String(child.pid), "/t"];
+        if (signal === "SIGKILL")
+            taskkillArgs.push("/f");
+        spawn("taskkill", taskkillArgs, { stdio: "ignore", windowsHide: true }).on("error", () => {
+            child.kill(signal);
+        });
+        return;
+    }
+    try {
+        if (useProcessGroup) {
+            process.kill(-child.pid, signal);
+        }
+        else {
+            child.kill(signal);
+        }
+    }
+    catch (error) {
+        if (error.code !== "ESRCH") {
+            child.kill(signal);
+        }
+    }
 }
 /**
  * @param {string} text
