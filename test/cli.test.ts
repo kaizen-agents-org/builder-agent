@@ -208,7 +208,8 @@ console.log(JSON.stringify({
       await writeFile(
         fakeClaudePath,
         `#!/usr/bin/env node
-import { symlinkSync } from "node:fs";
+import { rmSync, symlinkSync } from "node:fs";
+rmSync(${JSON.stringify(resultPathKind === "parent" ? join(workspaceDir, "linked") : resultPath)}, { force: true, recursive: true });
 symlinkSync(
   ${JSON.stringify(resultPathKind === "parent" ? outsideDir : escapedResultPath)},
   ${JSON.stringify(resultPathKind === "parent" ? join(workspaceDir, "linked") : resultPath)},

@@ -1,6 +1,5 @@
-import { randomUUID } from "node:crypto";
 import { constants } from "node:fs";
-import { lstat, mkdir, open, realpath, rename, unlink } from "node:fs/promises";
+import { lstat, mkdir, open, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
@@ -15,22 +14,28 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
     }
     const resultPath = resolve(workspaceDir, configuredResultPath);
     assertPathInsideWorkspace(workspaceDir, resultPath, false);
-    const result = await runImplementationAgent({
-        agent: preferredAgents,
-        prompt,
-        workspaceDir,
-        model,
-        env
-    });
-    const payload = safeNormalizePayload(result.payload ?? blockedPayload(result));
-    await writeResultFile(workspaceDir, resultPath, `${JSON.stringify(payload, null, 2)}\n`);
-    stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
-    if (!result.payload && result.raw.trim()) {
-        stderr.write(tail(result.raw, 4000));
+    const resultFile = await prepareResultFile(workspaceDir, resultPath);
+    try {
+        const result = await runImplementationAgent({
+            agent: preferredAgents,
+            prompt,
+            workspaceDir,
+            model,
+            env
+        });
+        const payload = safeNormalizePayload(result.payload ?? blockedPayload(result));
+        await writeResultFile(resultFile, resultPath, `${JSON.stringify(payload, null, 2)}\n`);
+        stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
+        if (!result.payload && result.raw.trim()) {
+            stderr.write(tail(result.raw, 4000));
+        }
+        return payload;
     }
-    return payload;
+    finally {
+        await resultFile.file.close();
+    }
 }
-async function writeResultFile(workspaceDir, resultPath, contents) {
+async function prepareResultFile(workspaceDir, resultPath) {
     const resolvedWorkspaceDir = await realpath(workspaceDir);
     const resultDir = dirname(resultPath);
     const resolvedExistingAncestor = await findExistingAncestor(resultDir);
@@ -40,32 +45,35 @@ async function writeResultFile(workspaceDir, resultPath, contents) {
     assertPathInsideWorkspace(resolvedWorkspaceDir, resolvedResultDir, true);
     const resolvedResultPath = join(resolvedResultDir, basename(resultPath));
     await assertResultTargetIsNotSymlink(resolvedResultPath);
-    const temporaryResultPath = join(resolvedResultDir, `.${basename(resultPath)}.${randomUUID()}.tmp`);
-    let temporaryFileCreated = false;
-    let resultPublished = false;
+    const file = await open(resolvedResultPath, constants.O_CREAT | constants.O_WRONLY | constants.O_NOFOLLOW, 0o666);
     try {
-        const file = await open(temporaryResultPath, constants.O_CREAT | constants.O_EXCL | constants.O_WRONLY, 0o666);
-        temporaryFileCreated = true;
-        try {
-            await file.writeFile(contents, "utf8");
-        }
-        finally {
-            await file.close();
-        }
-        await assertResultTargetIsNotSymlink(resolvedResultPath);
-        await rename(temporaryResultPath, resolvedResultPath);
-        resultPublished = true;
+        const identity = await file.stat({ bigint: true });
+        await assertResultFileIdentity(resultPath, identity.dev, identity.ino);
+        return { file, device: identity.dev, inode: identity.ino };
     }
-    finally {
-        if (temporaryFileCreated && !resultPublished) {
-            try {
-                await unlink(temporaryResultPath);
-            }
-            catch (error) {
-                if (error.code !== "ENOENT")
-                    throw error;
-            }
+    catch (error) {
+        await file.close();
+        throw error;
+    }
+}
+async function writeResultFile(resultFile, resultPath, contents) {
+    await assertResultFileIdentity(resultPath, resultFile.device, resultFile.inode);
+    await resultFile.file.truncate(0);
+    await resultFile.file.writeFile(contents, "utf8");
+    await resultFile.file.sync();
+    await assertResultFileIdentity(resultPath, resultFile.device, resultFile.inode);
+}
+async function assertResultFileIdentity(path, device, inode) {
+    try {
+        const identity = await lstat(path, { bigint: true });
+        if (identity.isSymbolicLink() || identity.dev !== device || identity.ino !== inode) {
+            throw resultPathError();
         }
+    }
+    catch (error) {
+        if (error.code === "ENOENT")
+            throw resultPathError();
+        throw error;
     }
 }
 async function assertResultTargetIsNotSymlink(path) {
