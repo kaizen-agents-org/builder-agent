@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { delimiter, join } from "node:path";
+import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
 
@@ -19,13 +19,14 @@ function fixtureEnvironment(fixtureTmp: string, overrides: NodeJS.ProcessEnv = {
   };
 }
 
-async function writeGitStub(binDir: string, command: string) {
-  const windows = process.platform === "win32";
-  const path = join(binDir, windows ? "git.cmd" : "git");
-  const source = windows
-    ? `@echo off\r\n${command}\r\n`
-    : `#!/bin/sh\n${command}\n`;
-  await writeFile(path, source, { mode: 0o755 });
+async function writeGitSpawnStub(root: string, result: { status: number; stdout?: string; stderr?: string }) {
+  const path = join(root, "stub-git-spawn.js");
+  const serializedResult = JSON.stringify({ stdout: "", stderr: "", ...result });
+  await writeFile(
+    path,
+    `import childProcess from "node:child_process"; import { syncBuiltinESMExports } from "node:module"; const spawn = childProcess.spawnSync; childProcess.spawnSync = (command, ...args) => command === "git" ? ${serializedResult} : spawn(command, ...args); syncBuiltinESMExports();`
+  );
+  return path;
 }
 
 async function createFixture(buildSource: string) {
@@ -86,23 +87,17 @@ describe("check-dist CLI", () => {
     const fixture = await createFixture(
       'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "fresh\\n");'
     );
-    const binDir = join(fixture.root, "bin");
-    await Promise.all([mkdir(join(fixture.root, "dist")), mkdir(binDir)]);
+    await mkdir(join(fixture.root, "dist"));
     await writeFile(join(fixture.root, "dist/output.js"), "fresh\n");
-    await writeGitStub(
-      binDir,
-      process.platform === "win32"
-        ? "echo( M dist/output.js"
-        : "printf ' M dist/output.js\\n'"
-    );
+    const stubGit = await writeGitSpawnStub(fixture.root, {
+      status: 0,
+      stdout: " M dist/output.js\n"
+    });
 
     await assert.rejects(
-      execFileAsync(process.execPath, [fixture.script], {
+      execFileAsync(process.execPath, ["--import", stubGit, fixture.script], {
         cwd: fixture.root,
-        env: fixtureEnvironment(fixture.fixtureTmp, {
-          CI: "true",
-          PATH: `${binDir}${delimiter}${process.env.PATH}`
-        })
+        env: fixtureEnvironment(fixture.fixtureTmp, { CI: "true" })
       }),
       (error: { code?: number; stderr?: string }) =>
         error.code === 1 && Boolean(error.stderr?.includes(" M dist/output.js"))
@@ -216,17 +211,14 @@ describe("check-dist CLI", () => {
     const fixture = await createFixture(
       'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "fresh\\n");'
     );
-    const binDir = join(fixture.root, "bin");
-    await Promise.all([mkdir(join(fixture.root, "dist")), mkdir(binDir)]);
+    await mkdir(join(fixture.root, "dist"));
     await writeFile(join(fixture.root, "dist/output.js"), "original\n");
-    await writeGitStub(binDir, process.platform === "win32" ? "exit /b 2" : "exit 2");
+    const stubGit = await writeGitSpawnStub(fixture.root, { status: 2 });
 
     await assert.rejects(
-      execFileAsync(process.execPath, [fixture.script], {
+      execFileAsync(process.execPath, ["--import", stubGit, fixture.script], {
         cwd: fixture.root,
-        env: fixtureEnvironment(fixture.fixtureTmp, {
-          PATH: `${binDir}${delimiter}${process.env.PATH}`
-        })
+        env: fixtureEnvironment(fixture.fixtureTmp)
       }),
       (error: { code?: number; stderr?: string }) =>
         error.code === 2
