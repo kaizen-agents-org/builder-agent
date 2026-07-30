@@ -1,10 +1,10 @@
 import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, resolve } from "node:path";
+import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
 import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
 export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
     const prompt = await readStream(stdin);
-    const workspaceDir = env.KAIZEN_WORKSPACE_DIR || process.cwd();
+    const workspaceDir = resolve(env.KAIZEN_WORKSPACE_DIR || process.cwd());
     const preferredAgents = normalizeAgents(env.KAIZEN_PREFERRED_AGENT);
     const model = env.KAIZEN_AGENT_MODEL || undefined;
     const configuredResultPath = env.KAIZEN_BUILD_RESULT_PATH;
@@ -12,6 +12,13 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }) {
         throw new Error("KAIZEN_BUILD_RESULT_PATH is required for Kaizen Loop integration.");
     }
     const resultPath = resolve(workspaceDir, configuredResultPath);
+    const workspaceRelativeResultPath = relative(workspaceDir, resultPath);
+    if (!workspaceRelativeResultPath ||
+        workspaceRelativeResultPath === ".." ||
+        workspaceRelativeResultPath.startsWith(`..${sep}`) ||
+        isAbsolute(workspaceRelativeResultPath)) {
+        throw new Error("KAIZEN_BUILD_RESULT_PATH must resolve to a file inside KAIZEN_WORKSPACE_DIR.");
+    }
     const result = await runImplementationAgent({
         agent: preferredAgents,
         prompt,

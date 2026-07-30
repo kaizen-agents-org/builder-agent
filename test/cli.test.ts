@@ -164,6 +164,29 @@ console.log(JSON.stringify({
     ]);
   });
 
+  it("rejects kaizen-loop result paths outside the workspace", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const workspaceDir = join(dir, "workspace");
+    await mkdir(workspaceDir);
+
+    for (const [configuredResultPath, escapedResultPath] of [
+      ["../escaped-relative.json", join(dir, "escaped-relative.json")],
+      [join(dir, "escaped-absolute.json"), join(dir, "escaped-absolute.json")]
+    ]) {
+      await assert.rejects(
+        spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+          env: {
+            ...process.env,
+            KAIZEN_BUILD_RESULT_PATH: configuredResultPath,
+            KAIZEN_WORKSPACE_DIR: workspaceDir
+          }
+        }),
+        /KAIZEN_BUILD_RESULT_PATH must resolve to a file inside KAIZEN_WORKSPACE_DIR/
+      );
+      await assert.rejects(readFile(escapedResultPath, "utf8"), { code: "ENOENT" });
+    }
+  });
+
   it("returns exit code 0 for partial kaizen-loop payloads so verifier gates PR readiness", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
