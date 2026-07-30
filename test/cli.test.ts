@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, symlink, unlink, writeFile } from "node:fs/promises";
+import { chmod, link, mkdir, mkdtemp, readFile, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -239,6 +239,28 @@ console.log(JSON.stringify({
       assert.equal(await readFile(escapedResultPath, "utf8"), "do not overwrite");
       await unlink(join(binDir, "claude"));
     }
+  });
+
+  it("does not overwrite a hard-linked file outside the workspace", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const workspaceDir = join(dir, "workspace");
+    const resultPath = join(workspaceDir, "result.json");
+    const externalPath = join(dir, "external.json");
+    await mkdir(workspaceDir);
+    await writeFile(externalPath, "do not overwrite", "utf8");
+    await link(externalPath, resultPath);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #1", {
+        env: {
+          ...process.env,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: workspaceDir
+        }
+      }),
+      /KAIZEN_BUILD_RESULT_PATH must resolve to a file inside KAIZEN_WORKSPACE_DIR/
+    );
+    assert.equal(await readFile(externalPath, "utf8"), "do not overwrite");
   });
 
   it("returns exit code 0 for partial kaizen-loop payloads so verifier gates PR readiness", async () => {

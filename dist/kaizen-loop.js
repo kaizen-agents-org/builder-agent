@@ -48,6 +48,8 @@ async function prepareResultFile(workspaceDir, resultPath) {
     const file = await open(resolvedResultPath, constants.O_CREAT | constants.O_WRONLY | constants.O_NOFOLLOW, 0o666);
     try {
         const identity = await file.stat({ bigint: true });
+        if (identity.nlink !== 1n)
+            throw resultPathError();
         await assertResultFileIdentity(resultPath, identity.dev, identity.ino);
         return { file, device: identity.dev, inode: identity.ino };
     }
@@ -66,7 +68,10 @@ async function writeResultFile(resultFile, resultPath, contents) {
 async function assertResultFileIdentity(path, device, inode) {
     try {
         const identity = await lstat(path, { bigint: true });
-        if (identity.isSymbolicLink() || identity.dev !== device || identity.ino !== inode) {
+        if (identity.isSymbolicLink() ||
+            identity.nlink !== 1n ||
+            identity.dev !== device ||
+            identity.ino !== inode) {
             throw resultPathError();
         }
     }
