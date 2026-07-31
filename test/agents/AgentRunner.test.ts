@@ -619,6 +619,7 @@ console.log(JSON.stringify({
   it("terminates a provider process tree on timeout", { skip: process.platform === "win32" }, async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const childPidPath = join(dir, "child.pid");
+    const childReadyPath = join(dir, "child-ready");
     const childSignalPath = join(dir, "child-signal-at");
     let childPid;
 
@@ -626,12 +627,12 @@ console.log(JSON.stringify({
       const providerScript = `
 const { spawn } = require("node:child_process");
 const { writeFileSync } = require("node:fs");
-const child = spawn(process.execPath, ["-e", ${JSON.stringify(`const { writeFileSync } = require("node:fs"); process.on("SIGTERM", () => writeFileSync(${JSON.stringify(childSignalPath)}, String(Date.now()))); setInterval(() => {}, 1000);`)}], { stdio: "ignore" });
+const child = spawn(process.execPath, ["-e", ${JSON.stringify(`const { writeFileSync } = require("node:fs"); process.once("SIGTERM", () => writeFileSync(${JSON.stringify(childSignalPath)}, String(Date.now()))); writeFileSync(${JSON.stringify(childReadyPath)}, "ready"); setInterval(() => {}, 1000);`)}], { stdio: "ignore" });
 writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
 setInterval(() => {}, 1000);
 `;
       const resultPromise = runImplementationAgent({
-        agent: "timeout-provider,fallback",
+        agent: "timeout-provider",
         prompt: "Fix issue #1",
         workspaceDir: dir,
         env: {
@@ -640,12 +641,7 @@ setInterval(() => {}, 1000);
             "timeout-provider": {
               command: process.execPath,
               args: ["-e", providerScript],
-              timeoutMs: 1_000,
-              output: "stdout"
-            },
-            fallback: {
-              command: process.execPath,
-              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+              timeoutMs: 3_000,
               output: "stdout"
             }
           })
@@ -653,12 +649,15 @@ setInterval(() => {}, 1000);
       });
 
       childPid = Number(await waitForFile(childPidPath));
+      await waitForFile(childReadyPath);
       const childSignalAtPromise = waitForFile(childSignalPath);
       const result = await resultPromise;
       const settledAt = Date.now();
       const childSignalAt = Number(await childSignalAtPromise);
       assert.ok(settledAt - childSignalAt >= 900, "timeout cleanup should preserve the one-second SIGTERM grace period");
-      assert.match(result.payload.notes, /timeout-provider: exitCode=1, status=fallback, failureClass=timeout/);
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.payload, undefined);
+      assert.match(result.providerEvidence, /timeout-provider: exitCode=1, status=fallback, failureClass=timeout/);
       assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after timeout`);
     } finally {
       if (childPid && isProcessAlive(childPid)) {
