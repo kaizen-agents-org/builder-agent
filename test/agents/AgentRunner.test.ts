@@ -135,7 +135,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: 
     await writeFile(
       fakeCodexPath,
       `#!/usr/bin/env node
-console.error("codex is not authenticated");
+console.error("codex is not authenticated; api_key=top-secret " + "x".repeat(400));
 process.exit(1);
 `,
       "utf8"
@@ -165,6 +165,11 @@ console.log(JSON.stringify({
     assert.equal(result.exitCode, 0);
     assert.equal(result.payload.summary, "implemented by fallback");
     assert.match(result.payload.notes, /codex: exitCode=1, status=fallback, failureClass=auth_failed/);
+    assert.match(result.payload.notes, /Failure detail: codex is not authenticated; api_key=\[REDACTED\]/);
+    assert.doesNotMatch(result.payload.notes, /top-secret/);
+    const failureDetail = result.payload.notes.split("\n").find((line) => line.startsWith("  Failure detail: "));
+    assert.ok(failureDetail);
+    assert.ok(failureDetail.length <= "  Failure detail: ".length + 240);
     assert.match(result.payload.notes, /claude: exitCode=0, status=selected/);
   });
 
