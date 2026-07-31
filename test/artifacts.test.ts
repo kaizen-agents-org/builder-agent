@@ -105,7 +105,7 @@ describe("artifacts", () => {
     }]);
     assert.deepEqual(iteration1ResidualNotes, ["Tests still need to be added."]);
     assert.equal(iteration2Summary.summary, "Added targeted regression coverage.");
-    assert.deepEqual(iteration2ChangedFiles, ["src/feature.js", "test/feature.test.js"]);
+    assert.deepEqual(iteration2ChangedFiles, ["test/feature.test.js"]);
     assert.deepEqual(iteration2DiscoveredIssues, [{
       title: "Builder docs need a note",
       repo: "builder-agent",
@@ -119,6 +119,7 @@ describe("artifacts", () => {
       summary: "The focused regression test passed."
     }]);
     assert.deepEqual(writtenResult.verification, [...iteration1Verification, ...iteration2Verification]);
+    assert.deepEqual(writtenResult.changedFiles, ["src/feature.js", "test/feature.test.js"]);
     assert.equal(Object.hasOwn(writtenResult, "iterationArtifacts"), false);
     await assert.rejects(readFile(join(outDir, "iterations", "3", "stale.json"), "utf8"));
   });

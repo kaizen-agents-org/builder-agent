@@ -65,6 +65,8 @@ describe("BuilderAgent", () => {
     assert.equal(result.iterations, 2);
     assert.equal(adapter.calls.improve, 1);
     assert.deepEqual(result.changedFiles, ["src/feature.js", "test/feature.test.js"]);
+    assert.deepEqual(result.iterationArtifacts[0].changedFiles, ["src/feature.js"]);
+    assert.deepEqual(result.iterationArtifacts[1].changedFiles, ["test/feature.test.js"]);
   });
 
   it("accumulates normalized verification evidence while preserving iteration snapshots", async () => {

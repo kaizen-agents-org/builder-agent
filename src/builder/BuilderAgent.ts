@@ -33,6 +33,7 @@ export class BuilderAgent {
     let taskUnderstanding: TaskUnderstanding | undefined;
     let planSummary: string | undefined;
     let changedFiles: string[] = [];
+    let iterationChangedFiles: string[] = [];
     let discoveredIssues: DiscoveredIssue[] = [];
     let verification: VerificationEvidence[] = [];
     let residualNotes: string[] = [];
@@ -54,6 +55,7 @@ export class BuilderAgent {
         iteration: 1
       });
       changedFiles = await reconcileChangedFiles(extractChangedFiles(implementation), workspaceTracker);
+      iterationChangedFiles = [...changedFiles];
       discoveredIssues = extractDiscoveredIssues(implementation);
       verification = extractVerification(implementation);
       residualNotes = uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
@@ -75,7 +77,7 @@ export class BuilderAgent {
         iterationArtifacts.push(createIterationArtifact({
           iteration,
           implementation,
-          changedFiles,
+          changedFiles: iterationChangedFiles,
           verification: extractVerification(implementation),
           residualNotes: uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes"),
           review: latestReview,
@@ -124,7 +126,9 @@ export class BuilderAgent {
           instructions: improvementInstructions,
           iteration: iteration + 1
         });
+        const previousChangedFiles = new Set(changedFiles);
         changedFiles = await reconcileChangedFiles(uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles"), workspaceTracker);
+        iterationChangedFiles = changedFiles.filter((file) => !previousChangedFiles.has(file));
         discoveredIssues = dedupeDiscoveredIssues([...discoveredIssues, ...extractDiscoveredIssues(implementation)]);
         verification = normalizeVerificationEvidence([...verification, ...extractVerification(implementation)]);
         residualNotes = uniqueStrings([...residualNotes, ...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
