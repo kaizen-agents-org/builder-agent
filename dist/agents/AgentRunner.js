@@ -537,6 +537,7 @@ function formatProviderFailureDetail(raw) {
         .replace(/(\bauthorization\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^,;]+)/gi, "$1[REDACTED]")
         .replace(/\b(Bearer)\s+\S+/gi, "$1 [REDACTED]")
         .replace(/((?<!\w)["']?(?:[a-z0-9]+[-_])*(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)["']?(?!\w)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1[REDACTED]")
+        .replace(/(\b(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)\b\s+(?:provided|supplied|received|used|is|was)\s*:?\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1[REDACTED]")
         .replace(/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s/]+@/gi, "$1[REDACTED]@")
         .replace(/\s+/g, " ");
     return redacted.length > PROVIDER_FAILURE_DETAIL_MAX_LENGTH

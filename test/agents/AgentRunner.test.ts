@@ -193,6 +193,13 @@ console.log(JSON.stringify({
         failureClass: "auth_failed"
       },
       {
+        name: "contextual bare credential",
+        output: "Incorrect API key provided: sk-live-supersecret",
+        expectedDetail: /Failure detail: Incorrect API key provided: \[REDACTED\]/,
+        secrets: ["sk-live-supersecret"],
+        failureClass: "auth_failed"
+      },
+      {
         name: "invalid payload",
         output: "provider returned invalid payload",
         expectedDetail: /Failure detail: provider returned invalid payload/,
