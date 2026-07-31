@@ -175,8 +175,11 @@ describe("BuildResult", () => {
     assert.deepEqual(schema.properties.verification.items.properties.status.enum, ["passed", "failed", "skipped"]);
     assert.equal(schema.properties.discoveredIssues.type, "array");
     assert.deepEqual(schema.properties.discoveredIssues.items.required, ["title", "expected", "evidence"]);
-    assert.equal(schema.properties.discoveredIssues.items.properties.expected.pattern, "\\S");
-    assert.equal(schema.properties.discoveredIssues.items.properties.evidence.pattern, "\\S");
+    const discoveredIssueProperties = schema.properties.discoveredIssues.items.properties;
+    for (const field of ["title", "body", "expected", "evidence", "repo", "severity"]) {
+      assert.equal(discoveredIssueProperties[field].pattern, "\\S");
+    }
+    assert.equal(discoveredIssueProperties.labels.items.pattern, "\\S");
     assert.equal(schema.required.includes("discoveredIssues"), false);
   });
 });
