@@ -131,15 +131,6 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: 
     await mkdir(binDir);
     const fakeCodexPath = join(binDir, "codex");
     const fakeClaudePath = join(binDir, "claude");
-
-    await writeFile(
-      fakeCodexPath,
-      `#!/usr/bin/env node
-console.error("codex is not authenticated; api_key=top-secret " + "x".repeat(400));
-process.exit(1);
-`,
-      "utf8"
-    );
     await writeFile(
       fakeClaudePath,
       `#!/usr/bin/env node
@@ -149,28 +140,93 @@ console.log(JSON.stringify({
 `,
       "utf8"
     );
-    await chmod(fakeCodexPath, 0o755);
     await chmod(fakeClaudePath, 0o755);
 
-    const result = await runImplementationAgent({
-      agent: "codex,claude",
-      prompt: "Fix issue #1",
-      workspaceDir: dir,
-      env: {
-        ...process.env,
-        PATH: `${binDir}:${process.env.PATH}`
+    const failureCases = [
+      {
+        name: "api key",
+        output: "codex is not authenticated; api_key=top-secret",
+        expectedDetail: /Failure detail: codex is not authenticated; api_key=\[REDACTED\]/,
+        secrets: ["top-secret"],
+        failureClass: "auth_failed"
+      },
+      {
+        name: "authorization bearer",
+        output: "codex is not authenticated; Authorization: Bearer bearer-secret",
+        expectedDetail: /Failure detail: codex is not authenticated; Authorization: \[REDACTED\]/,
+        secrets: ["bearer-secret"],
+        failureClass: "auth_failed"
+      },
+      {
+        name: "authorization basic",
+        output: "codex is not authenticated; Authorization: Basic basic-secret",
+        expectedDetail: /Failure detail: codex is not authenticated; Authorization: \[REDACTED\]/,
+        secrets: ["basic-secret"],
+        failureClass: "auth_failed"
+      },
+      {
+        name: "quoted credential",
+        output: 'codex is not authenticated; "client_secret"="quoted-secret"',
+        expectedDetail: /Failure detail: codex is not authenticated; "client_secret"=\[REDACTED\]/,
+        secrets: ["quoted-secret"],
+        failureClass: "auth_failed"
+      },
+      {
+        name: "URL credential",
+        output: "codex is not authenticated; https://user:url-secret@example.test/path",
+        expectedDetail: /Failure detail: codex is not authenticated; https:\/\/user:\[REDACTED\]@example\.test\/path/,
+        secrets: ["url-secret"],
+        failureClass: "auth_failed"
+      },
+      {
+        name: "generic credential fields",
+        output: "codex is not authenticated; token=token-secret auth_token=auth-secret access_key=access-secret secret=generic-secret",
+        expectedDetail: /Failure detail: codex is not authenticated; token=\[REDACTED\] auth_token=\[REDACTED\] access_key=\[REDACTED\] secret=\[REDACTED\]/,
+        secrets: ["token-secret", "auth-secret", "access-secret", "generic-secret"],
+        failureClass: "auth_failed"
+      },
+      {
+        name: "invalid payload",
+        output: "provider returned invalid payload",
+        expectedDetail: /Failure detail: provider returned invalid payload/,
+        secrets: [],
+        failureClass: "invalid_payload"
       }
-    });
+    ] as const;
 
-    assert.equal(result.exitCode, 0);
-    assert.equal(result.payload.summary, "implemented by fallback");
-    assert.match(result.payload.notes, /codex: exitCode=1, status=fallback, failureClass=auth_failed/);
-    assert.match(result.payload.notes, /Failure detail: codex is not authenticated; api_key=\[REDACTED\]/);
-    assert.doesNotMatch(result.payload.notes, /top-secret/);
-    const failureDetail = result.payload.notes.split("\n").find((line) => line.startsWith("  Failure detail: "));
-    assert.ok(failureDetail);
-    assert.ok(failureDetail.length <= "  Failure detail: ".length + 240);
-    assert.match(result.payload.notes, /claude: exitCode=0, status=selected/);
+    for (const failureCase of failureCases) {
+      await writeFile(
+        fakeCodexPath,
+        `#!/usr/bin/env node
+console.error(${JSON.stringify(failureCase.output)} + " " + "x".repeat(400));
+process.exit(1);
+`,
+        "utf8"
+      );
+      await chmod(fakeCodexPath, 0o755);
+
+      const result = await runImplementationAgent({
+        agent: "codex,claude",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`
+        }
+      });
+
+      assert.equal(result.exitCode, 0, failureCase.name);
+      assert.equal(result.payload.summary, "implemented by fallback", failureCase.name);
+      assert.match(result.payload.notes, new RegExp(`codex: exitCode=1, status=fallback, failureClass=${failureCase.failureClass}`), failureCase.name);
+      assert.match(result.payload.notes, failureCase.expectedDetail, failureCase.name);
+      for (const secret of failureCase.secrets) {
+        assert.doesNotMatch(result.payload.notes, new RegExp(secret), failureCase.name);
+      }
+      const failureDetail = result.payload.notes.split("\n").find((line) => line.startsWith("  Failure detail: "));
+      assert.ok(failureDetail, failureCase.name);
+      assert.ok(failureDetail.length <= "  Failure detail: ".length + 240, failureCase.name);
+      assert.match(result.payload.notes, /claude: exitCode=0, status=selected/, failureCase.name);
+    }
   });
 
   it("returns aggregated attempt output when all preferred backends fail without a payload", async () => {

@@ -630,8 +630,9 @@ function formatProviderFailureDetail(raw: string): string | undefined {
   if (!finalLine) return undefined;
 
   const redacted = finalLine
+    .replace(/(\bauthorization\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^,;]+)/gi, "$1[REDACTED]")
     .replace(/\b(Bearer)\s+\S+/gi, "$1 [REDACTED]")
-    .replace(/((?:["']?)(?:authorization|api[-_ ]?key|access[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password)(?:["']?)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1[REDACTED]")
+    .replace(/((?<!\w)["']?(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)["']?(?!\w)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|[^\s,;]+)/gi, "$1[REDACTED]")
     .replace(/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s/]+@/gi, "$1[REDACTED]@")
     .replace(/\s+/g, " ");
 
