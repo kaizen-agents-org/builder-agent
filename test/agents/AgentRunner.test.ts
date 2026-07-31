@@ -619,17 +619,17 @@ console.log(JSON.stringify({
   it("terminates a provider process tree on timeout", { skip: process.platform === "win32" }, async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const childPidPath = join(dir, "child.pid");
+    const childSignalPath = join(dir, "child-signal-at");
     let childPid;
 
     try {
       const providerScript = `
 const { spawn } = require("node:child_process");
 const { writeFileSync } = require("node:fs");
-const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: "ignore" });
+const child = spawn(process.execPath, ["-e", ${JSON.stringify(`const { writeFileSync } = require("node:fs"); process.on("SIGTERM", () => writeFileSync(${JSON.stringify(childSignalPath)}, String(Date.now()))); setInterval(() => {}, 1000);`)}], { stdio: "ignore" });
 writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
 setInterval(() => {}, 1000);
 `;
-      const startedAt = Date.now();
       const resultPromise = runImplementationAgent({
         agent: "timeout-provider,fallback",
         prompt: "Fix issue #1",
@@ -653,8 +653,10 @@ setInterval(() => {}, 1000);
       });
 
       childPid = Number(await waitForFile(childPidPath));
+      const childSignalAtPromise = waitForFile(childSignalPath);
       const result = await resultPromise;
-      assert.ok(Date.now() - startedAt >= 1_900, "timeout cleanup should preserve the one-second SIGTERM grace period");
+      const childSignalAt = Number(await childSignalAtPromise);
+      assert.ok(Date.now() - childSignalAt >= 900, "timeout cleanup should preserve the one-second SIGTERM grace period");
       assert.match(result.payload.notes, /timeout-provider: exitCode=1, status=fallback, failureClass=timeout/);
       assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after timeout`);
     } finally {
