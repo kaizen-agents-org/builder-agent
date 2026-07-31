@@ -186,6 +186,13 @@ console.log(JSON.stringify({
         failureClass: "auth_failed"
       },
       {
+        name: "credential fields containing delimiters",
+        output: "codex is not authenticated; password=alpha,beta token=gamma;delta",
+        expectedDetail: /Failure detail: codex is not authenticated; password=\[REDACTED\] token=\[REDACTED\]/,
+        secrets: ["alpha,beta", "beta", "gamma;delta", "delta"],
+        failureClass: "auth_failed"
+      },
+      {
         name: "provider-prefixed credential fields",
         output: "codex is not authenticated; OPENAI_API_KEY=openai-secret GITHUB_TOKEN=github-secret AWS_SECRET_ACCESS_KEY=aws-secret",
         expectedDetail: /Failure detail: codex is not authenticated; OPENAI_API_KEY=\[REDACTED\] GITHUB_TOKEN=\[REDACTED\] AWS_SECRET_ACCESS_KEY=\[REDACTED\]/,
