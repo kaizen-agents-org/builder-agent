@@ -650,7 +650,7 @@ setInterval(() => {}, 1000);
 
       childPid = Number(await waitForFile(childPidPath));
       await waitForFile(childReadyPath);
-      const childSignalAtPromise = waitForFile(childSignalPath);
+      const childSignalAtPromise = waitForFile(childSignalPath, 5_000);
       const result = await resultPromise;
       const settledAt = Date.now();
       const childSignalAt = Number(await childSignalAtPromise);
@@ -1212,15 +1212,16 @@ async function waitForProcessExit(pid) {
   return false;
 }
 
-async function waitForFile(path) {
-  for (let attempt = 0; attempt < 60; attempt += 1) {
+async function waitForFile(path, timeoutMs = 3_000) {
+  const deadline = Date.now() + timeoutMs;
+  do {
     try {
       return await readFile(path, "utf8");
     } catch (error) {
       if (error.code !== "ENOENT") throw error;
     }
     await delay(50);
-  }
+  } while (Date.now() < deadline);
   throw new Error(`Timed out waiting for ${path}`);
 }
 
