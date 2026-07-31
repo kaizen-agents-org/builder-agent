@@ -655,8 +655,9 @@ setInterval(() => {}, 1000);
       childPid = Number(await waitForFile(childPidPath));
       const childSignalAtPromise = waitForFile(childSignalPath);
       const result = await resultPromise;
+      const settledAt = Date.now();
       const childSignalAt = Number(await childSignalAtPromise);
-      assert.ok(Date.now() - childSignalAt >= 900, "timeout cleanup should preserve the one-second SIGTERM grace period");
+      assert.ok(settledAt - childSignalAt >= 900, "timeout cleanup should preserve the one-second SIGTERM grace period");
       assert.match(result.payload.notes, /timeout-provider: exitCode=1, status=fallback, failureClass=timeout/);
       assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after timeout`);
     } finally {
