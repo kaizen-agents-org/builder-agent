@@ -186,6 +186,13 @@ console.log(JSON.stringify({
         failureClass: "auth_failed"
       },
       {
+        name: "provider-prefixed credential fields",
+        output: "codex is not authenticated; OPENAI_API_KEY=openai-secret GITHUB_TOKEN=github-secret AWS_SECRET_ACCESS_KEY=aws-secret",
+        expectedDetail: /Failure detail: codex is not authenticated; OPENAI_API_KEY=\[REDACTED\] GITHUB_TOKEN=\[REDACTED\] AWS_SECRET_ACCESS_KEY=\[REDACTED\]/,
+        secrets: ["openai-secret", "github-secret", "aws-secret"],
+        failureClass: "auth_failed"
+      },
+      {
         name: "invalid payload",
         output: "provider returned invalid payload",
         expectedDetail: /Failure detail: provider returned invalid payload/,
