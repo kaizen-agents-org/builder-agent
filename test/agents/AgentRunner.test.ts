@@ -6,7 +6,7 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
-import { runImplementationAgent } from "../../dist/index.js";
+import { normalizeKaizenLoopPayload, runImplementationAgent } from "../../dist/index.js";
 
 describe("AgentRunner provider selection", () => {
   it("supports the kaizen-loop contract with the codex backend", async () => {
@@ -179,6 +179,13 @@ console.log(JSON.stringify({
         failureClass: "auth_failed"
       },
       {
+        name: "token-only URL credential",
+        output: "codex is not authenticated; https://ghp_token-secret@example.test/path",
+        expectedDetail: /Failure detail: codex is not authenticated; https:\/\/\[REDACTED\]@example\.test\/path/,
+        secrets: ["ghp_token-secret", "token-secret"],
+        failureClass: "auth_failed"
+      },
+      {
         name: "generic credential fields",
         output: "codex is not authenticated; token=token-secret auth_token=auth-secret access_key=access-secret secret=generic-secret",
         expectedDetail: /Failure detail: codex is not authenticated; token=\[REDACTED\] auth_token=\[REDACTED\] access_key=\[REDACTED\] secret=\[REDACTED\]/,
@@ -248,6 +255,47 @@ process.exit(1);
       assert.ok(failureDetail.length <= "  Failure detail: ".length + 240, failureCase.name);
       assert.match(result.payload.notes, /claude: exitCode=0, status=selected/, failureCase.name);
     }
+  });
+
+  it("preserves structured partial notes when provider failure details contain reserved labels", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    await mkdir(binDir);
+    const fakeCodexPath = join(binDir, "codex");
+    const fakeClaudePath = join(binDir, "claude");
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+console.error("Verification: provider could not start");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"partial\",\"summary\":\"implemented by fallback\",\"notes\":\"Completed scope: updated fallback handling. Incomplete scope: provider rollout remains. Verification: npm test passed. Residual risk: provider integration remains unverified.\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    const result = await runImplementationAgent({
+      agent: "codex,claude",
+      prompt: "Fix issue #1",
+      workspaceDir: dir,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`
+      }
+    });
+
+    assert.equal(result.payload.status, "partial");
+    assert.match(result.payload.notes, /Failure detail: Verification= provider could not start/);
+    assert.doesNotThrow(() => normalizeKaizenLoopPayload(result.payload));
   });
 
   it("returns aggregated attempt output when all preferred backends fail without a payload", async () => {
