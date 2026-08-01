@@ -6,7 +6,7 @@ import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const AGENT_TERMINATION_GRACE_MS = 1_000;
-const PROVIDER_OUTPUT_CAPTURE_MAX_LENGTH = 256 * 1024;
+const PROVIDER_OUTPUT_CAPTURE_MAX_BYTES = 256 * 1024;
 const PROVIDER_FAILURE_DETAIL_MAX_LENGTH = 240;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
@@ -733,28 +733,51 @@ function runCommand(command, args, options) {
     });
 }
 function createBoundedOutputCapture() {
-    return { head: "", tail: "", totalLength: 0 };
+    return { head: "", tail: "", totalBytes: 0 };
 }
 function appendBoundedOutput(capture, chunk) {
-    capture.totalLength += chunk.length;
-    const headLimit = Math.floor(PROVIDER_OUTPUT_CAPTURE_MAX_LENGTH / 2);
-    const tailLimit = PROVIDER_OUTPUT_CAPTURE_MAX_LENGTH - headLimit;
-    const headRemainder = Math.max(0, headLimit - capture.head.length);
-    const headChunk = chunk.slice(0, headRemainder);
+    capture.totalBytes += Buffer.byteLength(chunk, "utf8");
+    const headLimit = Math.floor(PROVIDER_OUTPUT_CAPTURE_MAX_BYTES / 2);
+    const headRemainder = Math.max(0, headLimit - Buffer.byteLength(capture.head, "utf8"));
+    const headChunk = utf8Prefix(chunk, headRemainder);
     capture.head += headChunk;
     const tailChunk = chunk.slice(headChunk.length);
+    const tailLimit = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - Buffer.byteLength(capture.head, "utf8");
     if (tailChunk)
-        capture.tail = `${capture.tail}${tailChunk}`.slice(-tailLimit);
+        capture.tail = utf8Suffix(`${capture.tail}${tailChunk}`, tailLimit);
 }
 function renderBoundedOutput(capture, stream) {
-    if (capture.totalLength <= PROVIDER_OUTPUT_CAPTURE_MAX_LENGTH) {
+    if (capture.totalBytes <= PROVIDER_OUTPUT_CAPTURE_MAX_BYTES) {
         return { output: `${capture.head}${capture.tail}`, truncated: false };
     }
-    const omittedLength = capture.totalLength - capture.head.length - capture.tail.length;
+    const largestMarker = `\n[builder-agent: ${stream} truncated; omitted ${capture.totalBytes} bytes]\n`;
+    const retainedBytes = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - Buffer.byteLength(largestMarker, "utf8");
+    const head = utf8Prefix(capture.head, Math.floor(retainedBytes / 2));
+    const tail = utf8Suffix(capture.tail, retainedBytes - Buffer.byteLength(head, "utf8"));
+    const omittedBytes = capture.totalBytes - Buffer.byteLength(head, "utf8") - Buffer.byteLength(tail, "utf8");
+    const marker = `\n[builder-agent: ${stream} truncated; omitted ${omittedBytes} bytes]\n`;
     return {
-        output: `${capture.head}\n[builder-agent: ${stream} truncated; omitted ${omittedLength} characters]\n${capture.tail}`,
+        output: `${head}${marker}${tail}`,
         truncated: true
     };
+}
+function utf8Prefix(value, maxBytes) {
+    const bytes = Buffer.from(value, "utf8");
+    if (bytes.length <= maxBytes)
+        return value;
+    let end = maxBytes;
+    while (end > 0 && (bytes[end] & 0xc0) === 0x80)
+        end -= 1;
+    return bytes.subarray(0, end).toString("utf8");
+}
+function utf8Suffix(value, maxBytes) {
+    const bytes = Buffer.from(value, "utf8");
+    if (bytes.length <= maxBytes)
+        return value;
+    let start = bytes.length - maxBytes;
+    while (start < bytes.length && (bytes[start] & 0xc0) === 0x80)
+        start += 1;
+    return bytes.subarray(start).toString("utf8");
 }
 function terminateCommandTreeAndWait(child, signal, useProcessGroup) {
     if (process.platform !== "win32" || child.pid === undefined) {

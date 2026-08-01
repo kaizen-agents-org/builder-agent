@@ -407,9 +407,9 @@ console.log(JSON.stringify({
 
     try {
       const providerScript = `
-process.stdout.write("stdout-head\\n" + "x".repeat(400_000) + "\\n");
+process.stdout.write("stdout-head\\n" + "漢".repeat(200_000) + "\\n");
 process.stdout.write(JSON.stringify({ status: "fixed", summary: "payload survived truncation", notes: "checked" }));
-process.stderr.write("stderr-head\\n" + "y".repeat(400_000) + "\\nstderr-tail");
+process.stderr.write("stderr-head\\n" + "🙂".repeat(150_000) + "\\nstderr-tail");
 `;
       const result = await runImplementationAgent({
         agent: "noisy-provider",
@@ -430,11 +430,49 @@ process.stderr.write("stderr-head\\n" + "y".repeat(400_000) + "\\nstderr-tail");
       assert.equal(result.payload.status, "fixed");
       assert.equal(result.payload.summary, "payload survived truncation");
       assert.match(result.raw, /^stdout-head/);
-      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ characters\]/);
-      assert.match(result.raw, /\[builder-agent: stderr truncated; omitted \d+ characters\]/);
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.raw, /\[builder-agent: stderr truncated; omitted \d+ bytes\]/);
       assert.match(result.raw, /stderr-tail/);
-      assert.ok(result.raw.length < 530_000, `captured output was ${result.raw.length} characters`);
+      assert.doesNotMatch(result.raw, /�/);
+      const providerOutput = result.raw.slice(0, result.raw.indexOf('\nAgent "'));
+      assert.ok(Buffer.byteLength(providerOutput, "utf8") <= (2 * 256 * 1024) + 1);
       assert.match(result.payload.notes, /truncatedOutput=stdout,stderr/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("does not truncate provider output at the exact byte limit", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const payload = JSON.stringify({ status: "fixed", summary: "exact boundary", notes: "checked" });
+      const providerScript = `
+const payload = ${JSON.stringify(payload)};
+process.stdout.write("界".repeat(Math.floor((256 * 1024 - Buffer.byteLength(payload)) / 3)));
+process.stdout.write("x".repeat(256 * 1024 - Buffer.byteLength(payload) - Buffer.byteLength("界".repeat(Math.floor((256 * 1024 - Buffer.byteLength(payload)) / 3)))));
+process.stdout.write(payload);
+`;
+      const result = await runImplementationAgent({
+        agent: "boundary-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "boundary-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload.summary, "exact boundary");
+      assert.doesNotMatch(result.raw, /truncated; omitted/);
+      const providerOutput = result.raw.slice(0, result.raw.indexOf('\nAgent "'));
+      assert.equal(Buffer.byteLength(providerOutput, "utf8"), (256 * 1024) + 1);
     } finally {
       await rm(dir, { force: true, recursive: true });
     }
