@@ -616,6 +616,91 @@ setTimeout(() => {
     }
   });
 
+  it("preserves the left boundary when scanning retained numeric status suffixes", async () => {
+    const cases = [
+      { token: "9401", fallbackOn: "auth_failed" },
+      { token: "9429", fallbackOn: "rate_limited" }
+    ] as const;
+
+    for (const failureCase of cases) {
+      const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+      try {
+        const providerScript = `
+process.stderr.write(${JSON.stringify(`${failureCase.token} ${"x".repeat(12)}`)});
+process.exitCode = 1;
+`;
+        const result = await runImplementationAgent({
+          agent: "numeric-provider,fallback",
+          prompt: "Fix issue #1",
+          workspaceDir: dir,
+          env: {
+            ...process.env,
+            KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+              "numeric-provider": {
+                command: process.execPath,
+                args: ["-e", providerScript],
+                fallbackOn: [failureCase.fallbackOn],
+                output: "stdout"
+              },
+              fallback: {
+                command: process.execPath,
+                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback should not run',notes:'checked'}));"],
+                output: "stdout"
+              }
+            })
+          }
+        });
+
+        assert.equal(result.payload, undefined, failureCase.token);
+        assert.match(result.raw, new RegExp(failureCase.token), failureCase.token);
+        assert.match(result.providerEvidence, /numeric-provider: exitCode=1, status=stopped, failureClass=invalid_payload/, failureCase.token);
+        assert.doesNotMatch(result.raw, /fallback should not run/, failureCase.token);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    }
+  });
+
+  it("prefers a higher-priority last-message failure over streamed evidence", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+const { writeFileSync } = require("node:fs");
+process.stdout.write("provider rate limit reached");
+writeFileSync(process.argv[1], "Unauthorized: login required");
+process.exitCode = 1;
+`;
+      const result = await runImplementationAgent({
+        agent: "last-message-provider,fallback",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "last-message-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript, "{{outputPath}}"],
+              fallbackOn: ["auth_failed"],
+              output: "last-message"
+            },
+            fallback: {
+              command: process.execPath,
+              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'auth fallback selected',notes:'checked'}));"],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "auth fallback selected");
+      assert.match(result.payload.notes, /last-message-provider: exitCode=1, status=fallback, failureClass=auth_failed/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("does not append built-in providers to an explicit custom-only list", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");

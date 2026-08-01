@@ -26,7 +26,7 @@ const FAILURE_CLASS_LITERALS = {
     rate_limited: ["rate limit", "too many requests", "quota exceeded"],
     provider_blocked: ["content policy", "provider blocked", "safety refusal", "safety policy"]
 };
-const FAILURE_CLASS_SCAN_CARRY_LENGTH = Math.max(3, ...Object.values(FAILURE_CLASS_LITERALS).flat().map((value) => value.length)) - 1;
+const FAILURE_CLASS_SCAN_CARRY_LENGTH = Math.max(4, ...Object.values(FAILURE_CLASS_LITERALS).flat().map((value) => value.length));
 const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
 const HEALTH_CHECK_FIELDS = new Set(["command", "args", "timeoutMs"]);
 const CLAUDE_VERIFICATION_TOOLS = ["npm", "pnpm", "yarn"].flatMap((command) => [
@@ -174,7 +174,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
             exitCode: result.exitCode,
             failureClass: parsedPayload.payload
                 ? undefined
-                : result.observedFailureClass ?? classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError }),
+                : preferFailureClass(result.observedFailureClass, classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError })) ?? "invalid_payload",
             payloadSource: parsedPayload.payload ? payloadSource : "none",
             truncatedOutput: result.truncatedOutput,
             raw: rawWithParseError,
