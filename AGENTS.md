@@ -14,7 +14,6 @@
 Run these before opening a PR:
 
 ```sh
-npm run check:dist
 npm test
 npm run validate:json
 ```
