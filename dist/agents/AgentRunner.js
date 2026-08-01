@@ -583,9 +583,9 @@ function classifyFailure({ exitCode, raw, error }) {
 }
 function detectFailureClass(text, endOfStream = true) {
     for (const failureClass of FAILURE_CLASS_PRECEDENCE) {
-        if (failureClass === "auth_failed" && (endOfStream ? /\b401\b/ : /\b401\b(?=.)/).test(text))
+        if (failureClass === "auth_failed" && (endOfStream ? /\b401\b/ : /\b401\b(?=[\s\S])/).test(text))
             return failureClass;
-        if (failureClass === "rate_limited" && (endOfStream ? /\b429\b/ : /\b429\b(?=.)/).test(text))
+        if (failureClass === "rate_limited" && (endOfStream ? /\b429\b/ : /\b429\b(?=[\s\S])/).test(text))
             return failureClass;
         if (FAILURE_CLASS_LITERALS[failureClass].some((value) => text.includes(value)))
             return failureClass;

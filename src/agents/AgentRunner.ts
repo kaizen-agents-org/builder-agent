@@ -695,8 +695,8 @@ function classifyFailure({ exitCode, raw, error }: { exitCode: number, raw: stri
 
 function detectFailureClass(text: string, endOfStream = true): AgentFailureClass | undefined {
   for (const failureClass of FAILURE_CLASS_PRECEDENCE) {
-    if (failureClass === "auth_failed" && (endOfStream ? /\b401\b/ : /\b401\b(?=.)/).test(text)) return failureClass;
-    if (failureClass === "rate_limited" && (endOfStream ? /\b429\b/ : /\b429\b(?=.)/).test(text)) return failureClass;
+    if (failureClass === "auth_failed" && (endOfStream ? /\b401\b/ : /\b401\b(?=[\s\S])/).test(text)) return failureClass;
+    if (failureClass === "rate_limited" && (endOfStream ? /\b429\b/ : /\b429\b(?=[\s\S])/).test(text)) return failureClass;
     if (FAILURE_CLASS_LITERALS[failureClass].some((value) => text.includes(value))) return failureClass;
   }
   return undefined;

@@ -520,6 +520,53 @@ process.exitCode = 1;
     }
   });
 
+  it("classifies newline-terminated status codes omitted by bounded capture", async () => {
+    const cases = [
+      { status: "401", fallbackOn: "auth_failed" },
+      { status: "429", fallbackOn: "rate_limited" }
+    ] as const;
+
+    for (const failureCase of cases) {
+      const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+      try {
+        const providerScript = `
+process.stderr.write("head\\n" + "a".repeat(150_000));
+process.stderr.write(${JSON.stringify(`\n${failureCase.status}\n`)});
+process.stderr.write("b".repeat(150_000) + "\\ntail");
+process.exitCode = 1;
+`;
+        const result = await runImplementationAgent({
+          agent: "noisy-provider,fallback",
+          prompt: "Fix issue #1",
+          workspaceDir: dir,
+          env: {
+            ...process.env,
+            KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+              "noisy-provider": {
+                command: process.execPath,
+                args: ["-e", providerScript],
+                fallbackOn: [failureCase.fallbackOn],
+                output: "stdout"
+              },
+              fallback: {
+                command: process.execPath,
+                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+                output: "stdout"
+              }
+            })
+          }
+        });
+
+        assert.equal(result.payload?.summary, "fallback selected", failureCase.status);
+        assert.match(result.payload.notes, new RegExp(`failureClass=${failureCase.fallbackOn}`), failureCase.status);
+        assert.doesNotMatch(result.raw, new RegExp(`\\b${failureCase.status}\\b`), failureCase.status);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    }
+  });
+
   it("does not classify numeric status prefixes before the next chunk confirms the boundary", async () => {
     const cases = [
       { prefix: "401", completed: "4012", fallbackOn: "auth_failed" },
