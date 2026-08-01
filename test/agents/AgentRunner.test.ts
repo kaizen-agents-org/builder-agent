@@ -8,6 +8,8 @@ import { setTimeout as delay } from "node:timers/promises";
 import { pathToFileURL } from "node:url";
 import { normalizeKaizenLoopPayload, runImplementationAgent } from "../../dist/index.js";
 
+const processTreeTestSkip = processTreeTestSkipReason();
+
 describe("AgentRunner provider selection", () => {
   it("supports the kaizen-loop contract with the codex backend", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
@@ -753,7 +755,33 @@ console.log(JSON.stringify({
     }
   });
 
-  it("terminates a provider process tree on timeout", { skip: process.platform === "win32" }, async () => {
+  it("skips process-tree assertions when process status inspection is denied", () => {
+    const deniedInspection = () => {
+      const error = new Error("spawnSync ps EPERM");
+      error.code = "EPERM";
+      throw error;
+    };
+
+    assert.equal(
+      processTreeTestSkipReason("linux", deniedInspection),
+      "process-tree assertions require permission to run ps"
+    );
+  });
+
+  it("does not hide unexpected process status inspection failures", () => {
+    const missingInspection = () => {
+      const error = new Error("spawnSync ps ENOENT");
+      error.code = "ENOENT";
+      throw error;
+    };
+
+    assert.throws(
+      () => processTreeTestSkipReason("linux", missingInspection),
+      { code: "ENOENT" }
+    );
+  });
+
+  it("terminates a provider process tree on timeout", { skip: processTreeTestSkip }, async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const childPidPath = join(dir, "child.pid");
     const childReadyPath = join(dir, "child-ready");
@@ -804,7 +832,7 @@ setInterval(() => {}, 1000);
     }
   });
 
-  it("terminates a detached provider process tree when the runner is signaled", { skip: process.platform === "win32" }, async () => {
+  it("terminates a detached provider process tree when the runner is signaled", { skip: processTreeTestSkip }, async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const childPidPath = join(dir, "child.pid");
     const runnerPath = join(dir, "runner.mjs");
@@ -860,7 +888,7 @@ await runImplementationAgent({
     }
   });
 
-  it("force-terminates a detached provider process tree when the runner exits", { skip: process.platform === "win32" }, async () => {
+  it("force-terminates a detached provider process tree when the runner exits", { skip: processTreeTestSkip }, async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const childPidPath = join(dir, "child.pid");
     const runnerPath = join(dir, "runner.mjs");
@@ -918,7 +946,7 @@ await runImplementationAgent({
     }
   });
 
-  it("removes provider descendants before returning a successful result", { skip: process.platform === "win32" }, async () => {
+  it("removes provider descendants before returning a successful result", { skip: processTreeTestSkip }, async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const childPidPath = join(dir, "child.pid");
     let childPid;
@@ -960,7 +988,7 @@ console.log(JSON.stringify({status:"fixed",summary:"implemented",notes:"checked"
     }
   });
 
-  it("cleans up a successful provider group before inherited output pipes can delay close", { skip: process.platform === "win32" }, async () => {
+  it("cleans up a successful provider group before inherited output pipes can delay close", { skip: processTreeTestSkip }, async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const childPidPath = join(dir, "child.pid");
     let childPid;
@@ -1383,4 +1411,19 @@ function isProcessAlive(pid) {
     if (error.status === 1) return false;
     throw error;
   }
+}
+
+function processTreeTestSkipReason(platform = process.platform, inspectProcessStatus = execFileSync) {
+  if (platform === "win32") return "process-tree assertions require Unix process groups";
+
+  try {
+    inspectProcessStatus("ps", ["-o", "stat=", "-p", String(process.pid)], { encoding: "utf8" });
+  } catch (error) {
+    if (error && typeof error === "object" && "code" in error && (error.code === "EACCES" || error.code === "EPERM")) {
+      return "process-tree assertions require permission to run ps";
+    }
+    throw error;
+  }
+
+  return false;
 }
