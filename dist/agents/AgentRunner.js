@@ -4,12 +4,29 @@ import { constants } from "node:fs";
 import { tmpdir } from "node:os";
 import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
+class CommandTimeoutError extends Error {
+    result;
+    constructor(timeoutMs, result) {
+        super(`Agent command timed out after ${timeoutMs}ms.`);
+        this.result = result;
+        this.name = "CommandTimeoutError";
+    }
+}
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const AGENT_TERMINATION_GRACE_MS = 1_000;
 const PROVIDER_OUTPUT_CAPTURE_MAX_BYTES = 256 * 1024;
 const PROVIDER_FAILURE_DETAIL_MAX_LENGTH = 240;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
+const FAILURE_CLASS_PRECEDENCE = ["command_missing", "timeout", "auth_failed", "rate_limited", "provider_blocked"];
+const FAILURE_CLASS_LITERALS = {
+    command_missing: ["enoent", "not found", "command not found"],
+    timeout: ["timed out", "timeout"],
+    auth_failed: ["unauthorized", "unauthenticated", "not authenticated", "api key", "login required"],
+    rate_limited: ["rate limit", "too many requests", "quota exceeded"],
+    provider_blocked: ["content policy", "provider blocked", "safety refusal", "safety policy"]
+};
+const FAILURE_CLASS_SCAN_CARRY_LENGTH = Math.max(3, ...Object.values(FAILURE_CLASS_LITERALS).flat().map((value) => value.length)) - 1;
 const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
 const HEALTH_CHECK_FIELDS = new Set(["command", "args", "timeoutMs"]);
 const CLAUDE_VERIFICATION_TOOLS = ["npm", "pnpm", "yarn"].flatMap((command) => [
@@ -136,7 +153,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
                 return {
                     agent,
                     exitCode: healthResult.exitCode,
-                    failureClass: classifyFailure({ exitCode: healthResult.exitCode, raw }),
+                    failureClass: healthResult.observedFailureClass ?? classifyFailure({ exitCode: healthResult.exitCode, raw }),
                     payloadSource: "none",
                     truncatedOutput: healthResult.truncatedOutput,
                     raw,
@@ -155,7 +172,9 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
         return {
             agent,
             exitCode: result.exitCode,
-            failureClass: parsedPayload.payload ? undefined : classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError }),
+            failureClass: parsedPayload.payload
+                ? undefined
+                : result.observedFailureClass ?? classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError }),
             payloadSource: parsedPayload.payload ? payloadSource : "none",
             truncatedOutput: result.truncatedOutput,
             raw: rawWithParseError,
@@ -164,12 +183,16 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
         };
     }
     catch (error) {
-        const raw = error instanceof Error ? error.message : String(error);
+        const timeoutResult = error instanceof CommandTimeoutError ? error.result : undefined;
+        const raw = timeoutResult
+            ? `${timeoutResult.stdout}${timeoutResult.stderr}\n${error.message}`
+            : error instanceof Error ? error.message : String(error);
         return {
             agent,
             exitCode: 1,
-            failureClass: classifyFailure({ exitCode: 1, raw, error }),
+            failureClass: error instanceof CommandTimeoutError ? "timeout" : classifyFailure({ exitCode: 1, raw, error }),
             payloadSource: "none",
+            truncatedOutput: timeoutResult?.truncatedOutput,
             raw,
             payload: undefined
         };
@@ -556,22 +579,21 @@ function formatProviderFailureDetail(raw) {
 function classifyFailure({ exitCode, raw, error }) {
     const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
     const text = `${code}\n${raw}`.toLowerCase();
-    if (text.includes("enoent") || text.includes("not found") || text.includes("command not found")) {
-        return "command_missing";
+    return detectFailureClass(text) ?? "invalid_payload";
+}
+function detectFailureClass(text) {
+    for (const failureClass of FAILURE_CLASS_PRECEDENCE) {
+        if (failureClass === "auth_failed" && /\b401\b/.test(text))
+            return failureClass;
+        if (failureClass === "rate_limited" && /\b429\b/.test(text))
+            return failureClass;
+        if (FAILURE_CLASS_LITERALS[failureClass].some((value) => text.includes(value)))
+            return failureClass;
     }
-    if (text.includes("timed out") || text.includes("timeout")) {
-        return "timeout";
-    }
-    if (/\b401\b/.test(text) || text.includes("unauthorized") || text.includes("unauthenticated") || text.includes("not authenticated") || text.includes("api key") || text.includes("login required")) {
-        return "auth_failed";
-    }
-    if (/\b429\b/.test(text) || text.includes("rate limit") || text.includes("too many requests") || text.includes("quota exceeded")) {
-        return "rate_limited";
-    }
-    if (text.includes("content policy") || text.includes("provider blocked") || text.includes("safety refusal") || text.includes("safety policy")) {
-        return "provider_blocked";
-    }
-    return "invalid_payload";
+    return undefined;
+}
+function preferFailureClass(...classes) {
+    return FAILURE_CLASS_PRECEDENCE.find((failureClass) => classes.includes(failureClass));
 }
 /**
  * @param {string} raw
@@ -706,36 +728,43 @@ function runCommand(command, args, options) {
             }
         });
         child.on("error", (error) => {
+            if (timedOut)
+                return;
             settle(() => {
-                reject(timedOut ? new Error(`Agent command timed out after ${timeoutMs}ms.`) : error);
+                reject(error);
             });
         });
         child.on("close", async (code) => {
             await exitCleanup;
             settle(() => {
-                if (timedOut) {
-                    reject(new Error(`Agent command timed out after ${timeoutMs}ms.`));
-                    return;
-                }
                 const capturedStdout = renderBoundedOutput(stdout, "stdout");
                 const capturedStderr = renderBoundedOutput(stderr, "stderr");
-                resolve({
+                const result = {
                     exitCode: code ?? 1,
                     stdout: capturedStdout.output,
                     stderr: capturedStderr.output,
                     truncatedOutput: [
                         ...(capturedStdout.truncated ? ["stdout"] : []),
                         ...(capturedStderr.truncated ? ["stderr"] : [])
-                    ]
-                });
+                    ],
+                    observedFailureClass: preferFailureClass(stdout.observedFailureClass, stderr.observedFailureClass)
+                };
+                if (timedOut) {
+                    reject(new CommandTimeoutError(timeoutMs, result));
+                    return;
+                }
+                resolve(result);
             });
         });
     });
 }
 function createBoundedOutputCapture() {
-    return { head: "", tail: "", totalBytes: 0 };
+    return { head: "", tail: "", totalBytes: 0, classificationTail: "" };
 }
 function appendBoundedOutput(capture, chunk) {
+    const classificationText = `${capture.classificationTail}${chunk}`.toLowerCase();
+    capture.observedFailureClass = preferFailureClass(capture.observedFailureClass, detectFailureClass(classificationText));
+    capture.classificationTail = classificationText.slice(-FAILURE_CLASS_SCAN_CARRY_LENGTH);
     capture.totalBytes += Buffer.byteLength(chunk, "utf8");
     const headLimit = Math.floor(PROVIDER_OUTPUT_CAPTURE_MAX_BYTES / 2);
     const headRemainder = Math.max(0, headLimit - Buffer.byteLength(capture.head, "utf8"));

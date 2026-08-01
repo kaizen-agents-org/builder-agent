@@ -478,6 +478,48 @@ process.stdout.write(payload);
     }
   });
 
+  it("classifies provider failures from output omitted by bounded capture", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stderr.write("head\\n" + "a".repeat(150_000));
+process.stderr.write("provider rate limit reached");
+process.stderr.write("b".repeat(150_000) + "\\ntail");
+process.exitCode = 1;
+`;
+      const result = await runImplementationAgent({
+        agent: "noisy-provider,fallback",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "noisy-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              fallbackOn: ["rate_limited"],
+              output: "stdout"
+            },
+            fallback: {
+              command: process.execPath,
+              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload.status, "fixed");
+      assert.equal(result.payload.summary, "fallback selected");
+      assert.match(result.payload.notes, /noisy-provider: exitCode=1, status=fallback, failureClass=rate_limited/);
+      assert.match(result.payload.notes, /truncatedOutput=stderr/);
+      assert.doesNotMatch(result.raw, /provider rate limit reached/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("does not append built-in providers to an explicit custom-only list", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
@@ -870,6 +912,7 @@ const { spawn } = require("node:child_process");
 const { writeFileSync } = require("node:fs");
 const child = spawn(process.execPath, ["-e", ${JSON.stringify(`const { writeFileSync } = require("node:fs"); process.once("SIGTERM", () => writeFileSync(${JSON.stringify(childSignalPath)}, String(Date.now()))); writeFileSync(${JSON.stringify(childReadyPath)}, "ready"); setInterval(() => {}, 1000);`)}], { stdio: "ignore" });
 writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
+process.stdout.write("x".repeat(300_000));
 setInterval(() => {}, 1000);
 `;
       const resultPromise = runImplementationAgent({
@@ -899,6 +942,8 @@ setInterval(() => {}, 1000);
       assert.equal(result.exitCode, 1);
       assert.equal(result.payload, undefined);
       assert.match(result.providerEvidence, /timeout-provider: exitCode=1, status=fallback, failureClass=timeout/);
+      assert.match(result.providerEvidence, /truncatedOutput=stdout/);
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
       assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after timeout`);
     } finally {
       if (childPid && isProcessAlive(childPid)) {
