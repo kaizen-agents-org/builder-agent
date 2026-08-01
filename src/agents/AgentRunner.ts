@@ -51,6 +51,7 @@ type CommandResult = {
 
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const AGENT_TERMINATION_GRACE_MS = 1_000;
+const PROVIDER_FAILURE_DETAIL_MAX_LENGTH = 240;
 const DEFAULT_FALLBACK_ON: AgentFailureClass[] = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
 const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
@@ -611,15 +612,36 @@ function shouldAppendProviderEvidence(payload: KaizenLoopPayload): boolean {
  */
 function formatProviderEvidence(attempts: AgentAttempt[]): string {
   const selected = attempts.find((attempt) => attempt.payload);
-  const lines = attempts.map((attempt) => {
+  const lines = attempts.flatMap((attempt) => {
     const status = selected === attempt ? "selected" : attempt.fallbackAllowed ? "fallback" : "stopped";
-    return `- ${attempt.agent ?? "unknown"}: exitCode=${attempt.exitCode}, status=${status}, failureClass=${attempt.failureClass ?? "none"}, fallbackReason=${attempt.fallbackReason ?? "none"}, payloadSource=${attempt.payloadSource ?? "none"}`;
+    const summary = `- ${attempt.agent ?? "unknown"}: exitCode=${attempt.exitCode}, status=${status}, failureClass=${attempt.failureClass ?? "none"}, fallbackReason=${attempt.fallbackReason ?? "none"}, payloadSource=${attempt.payloadSource ?? "none"}`;
+    const failureDetail = selected === attempt ? undefined : formatProviderFailureDetail(attempt.raw);
+    return failureDetail ? [summary, `  Failure detail: ${failureDetail}`] : [summary];
   });
   return [
     "Provider evidence:",
     ...lines,
     ...(selected ? [`Selected backend: ${selected.agent ?? "unknown"}`, `Final payload source: ${selected.payloadSource ?? "unknown"}`] : [])
   ].join("\n");
+}
+
+function formatProviderFailureDetail(raw: string): string | undefined {
+  const finalLine = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1);
+  if (!finalLine) return undefined;
+
+  const redacted = finalLine
+    .replace(/(\bauthorization\b\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|.+)/gi, "$1[REDACTED]")
+    .replace(/\b(Bearer)\s+\S+/gi, "$1 [REDACTED]")
+    .replace(/((?<!\w)["']?(?:[a-z0-9]+[-_])*(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)["']?(?!\w)\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+)/gi, "$1[REDACTED]")
+    .replace(/(\b(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)\b\s+(?:provided|supplied|received|used|is|was)\s*:?\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+)/gi, "$1[REDACTED]")
+    .replace(/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s/]+@/gi, "$1[REDACTED]@")
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^:@\s/]+@/gi, "$1[REDACTED]@")
+    .replace(/\b(Completed scope|Incomplete scope|Verification|Residual risk)\s*:/gi, "$1=")
+    .replace(/\s+/g, " ");
+
+  return redacted.length > PROVIDER_FAILURE_DETAIL_MAX_LENGTH
+    ? `${redacted.slice(0, PROVIDER_FAILURE_DETAIL_MAX_LENGTH - 1)}…`
+    : redacted;
 }
 
 /**
