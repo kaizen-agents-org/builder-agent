@@ -65,6 +65,31 @@ describe("BuilderAgent", () => {
     assert.equal(result.iterations, 2);
     assert.equal(adapter.calls.improve, 1);
     assert.deepEqual(result.changedFiles, ["src/feature.js", "test/feature.test.js"]);
+    assert.deepEqual(result.iterationArtifacts[0].changedFiles, ["src/feature.js"]);
+    assert.deepEqual(result.iterationArtifacts[1].changedFiles, ["test/feature.test.js"]);
+  });
+
+  it("includes a file in each iteration that edits it", async () => {
+    const workspaceDir = await createGitWorkspace();
+    const featurePath = join(workspaceDir, "src", "feature.js");
+    const adapter = createAdapter({ reviews: [failingReview, passingReview] });
+    adapter.implement = async () => {
+      await writeFile(featurePath, "export const value = 2;\n", "utf8");
+      return { changedFiles: ["src/feature.js"], residualNotes: [] };
+    };
+    adapter.improve = async () => {
+      await writeFile(featurePath, "export const value = 3;\n", "utf8");
+      return { changedFiles: ["src/feature.js"], residualNotes: [] };
+    };
+
+    const result = await new BuilderAgent(adapter, { workspaceDir }).build({
+      task: "Implement a small feature.",
+      maxIterations: 2
+    });
+
+    assert.deepEqual(result.changedFiles, ["src/feature.js"]);
+    assert.deepEqual(result.iterationArtifacts[0].changedFiles, ["src/feature.js"]);
+    assert.deepEqual(result.iterationArtifacts[1].changedFiles, ["src/feature.js"]);
   });
 
   it("accumulates normalized verification evidence while preserving iteration snapshots", async () => {

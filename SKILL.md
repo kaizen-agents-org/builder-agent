@@ -81,7 +81,7 @@ When the caller asks for structured artifacts or the work is run by an orchestra
 - `.kaizen/builder/build-result.json`
 - `.kaizen/builder/discovered-issues.json`
 - `.kaizen/builder/iterations/<n>/implementation-summary.json`
-- `.kaizen/builder/iterations/<n>/changed-files.json`
+- `.kaizen/builder/iterations/<n>/changed-files.json` (files newly added to the cumulative changed-file set by that iteration)
 - `.kaizen/builder/iterations/<n>/discovered-issues.json`
 - `.kaizen/builder/iterations/<n>/self-review.json`
 - `.kaizen/builder/iterations/<n>/improvement-instructions.json`

@@ -33,6 +33,7 @@ export class BuilderAgent {
     let taskUnderstanding: TaskUnderstanding | undefined;
     let planSummary: string | undefined;
     let changedFiles: string[] = [];
+    let iterationChangedFiles: string[] = [];
     let discoveredIssues: DiscoveredIssue[] = [];
     let verification: VerificationEvidence[] = [];
     let residualNotes: string[] = [];
@@ -54,6 +55,8 @@ export class BuilderAgent {
         iteration: 1
       });
       changedFiles = await reconcileChangedFiles(extractChangedFiles(implementation), workspaceTracker);
+      iterationChangedFiles = [...changedFiles];
+      await advanceIterationBaseline(workspaceTracker);
       discoveredIssues = extractDiscoveredIssues(implementation);
       verification = extractVerification(implementation);
       residualNotes = uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
@@ -75,7 +78,7 @@ export class BuilderAgent {
         iterationArtifacts.push(createIterationArtifact({
           iteration,
           implementation,
-          changedFiles,
+          changedFiles: iterationChangedFiles,
           verification: extractVerification(implementation),
           residualNotes: uniqueStrings([...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes"),
           review: latestReview,
@@ -124,7 +127,11 @@ export class BuilderAgent {
           instructions: improvementInstructions,
           iteration: iteration + 1
         });
-        changedFiles = await reconcileChangedFiles(uniqueStrings([...changedFiles, ...extractChangedFiles(implementation)], "changedFiles"), workspaceTracker);
+        const previousChangedFiles = new Set(changedFiles);
+        const reportedChangedFiles = extractChangedFiles(implementation);
+        iterationChangedFiles = await reconcileIterationChangedFiles(reportedChangedFiles, previousChangedFiles, workspaceTracker);
+        changedFiles = await reconcileChangedFiles(uniqueStrings([...changedFiles, ...reportedChangedFiles], "changedFiles"), workspaceTracker);
+        await advanceIterationBaseline(workspaceTracker);
         discoveredIssues = dedupeDiscoveredIssues([...discoveredIssues, ...extractDiscoveredIssues(implementation)]);
         verification = normalizeVerificationEvidence([...verification, ...extractVerification(implementation)]);
         residualNotes = uniqueStrings([...residualNotes, ...extractResidualNotes(implementation), ...workspaceTracker.residualNotes], "residualNotes");
@@ -173,6 +180,7 @@ export async function runBuild(request: BuildRequestInput, adapter: BuilderAdapt
 interface WorkspaceChangeTracker {
   workspaceDir: string;
   baseline: Map<string, string>;
+  iterationBaseline: Map<string, string>;
   disabled: boolean;
   residualNotes: string[];
 }
@@ -258,6 +266,7 @@ async function createWorkspaceChangeTracker(workspaceDir: string): Promise<Works
     return {
       workspaceDir,
       baseline: new Map(),
+      iterationBaseline: new Map(),
       disabled: true,
       residualNotes: [WORKSPACE_RECONCILIATION_NOTE]
     };
@@ -266,9 +275,40 @@ async function createWorkspaceChangeTracker(workspaceDir: string): Promise<Works
   return {
     workspaceDir,
     baseline: snapshot.fingerprints,
+    iterationBaseline: snapshot.fingerprints,
     disabled: false,
     residualNotes: []
   };
+}
+
+async function reconcileIterationChangedFiles(reportedChangedFiles: string[], previousChangedFiles: Set<string>, tracker: WorkspaceChangeTracker): Promise<string[]> {
+  const reportedDelta = reportedChangedFiles.filter((file) => !previousChangedFiles.has(file));
+  if (tracker.disabled) {
+    return reportedDelta;
+  }
+
+  const snapshot = await captureWorkspaceChangedFiles(tracker.workspaceDir);
+  if (!snapshot.ok) {
+    tracker.disabled = true;
+    tracker.residualNotes = uniqueStrings([...tracker.residualNotes, WORKSPACE_RECONCILIATION_NOTE], "residualNotes");
+    return reportedDelta;
+  }
+
+  const candidates = new Set([...tracker.iterationBaseline.keys(), ...snapshot.fingerprints.keys()]);
+  const workspaceDelta = [...candidates].filter((file) => tracker.iterationBaseline.get(file) !== snapshot.fingerprints.get(file));
+  return uniqueStrings([...reportedDelta, ...workspaceDelta], "changedFiles");
+}
+
+async function advanceIterationBaseline(tracker: WorkspaceChangeTracker): Promise<void> {
+  if (tracker.disabled) return;
+
+  const snapshot = await captureWorkspaceChangedFiles(tracker.workspaceDir);
+  if (!snapshot.ok) {
+    tracker.disabled = true;
+    tracker.residualNotes = uniqueStrings([...tracker.residualNotes, WORKSPACE_RECONCILIATION_NOTE], "residualNotes");
+    return;
+  }
+  tracker.iterationBaseline = snapshot.fingerprints;
 }
 
 async function reconcileChangedFiles(reportedChangedFiles: string[], tracker: WorkspaceChangeTracker): Promise<string[]> {
