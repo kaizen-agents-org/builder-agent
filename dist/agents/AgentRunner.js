@@ -534,10 +534,10 @@ function formatProviderFailureDetail(raw) {
     if (!finalLine)
         return undefined;
     const redacted = finalLine
-        .replace(/(\bauthorization\b\s*[:=]\s*)(?:"[^"]*"|'[^']*'|.+)/gi, "$1[REDACTED]")
+        .replace(/(\bauthorization\b\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|.+)/gi, "$1[REDACTED]")
         .replace(/\b(Bearer)\s+\S+/gi, "$1 [REDACTED]")
-        .replace(/((?<!\w)["']?(?:[a-z0-9]+[-_])*(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)["']?(?!\w)\s*[:=]\s*)(?:"[^"]*"|'[^']*'|\S+)/gi, "$1[REDACTED]")
-        .replace(/(\b(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)\b\s+(?:provided|supplied|received|used|is|was)\s*:?\s*)(?:"[^"]*"|'[^']*'|\S+)/gi, "$1[REDACTED]")
+        .replace(/((?<!\w)["']?(?:[a-z0-9]+[-_])*(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)["']?(?!\w)\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+)/gi, "$1[REDACTED]")
+        .replace(/(\b(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)\b\s+(?:provided|supplied|received|used|is|was)\s*:?\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+)/gi, "$1[REDACTED]")
         .replace(/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s/]+@/gi, "$1[REDACTED]@")
         .replace(/([a-z][a-z0-9+.-]*:\/\/)[^:@\s/]+@/gi, "$1[REDACTED]@")
         .replace(/\b(Completed scope|Incomplete scope|Verification|Residual risk)\s*:/gi, "$1=")

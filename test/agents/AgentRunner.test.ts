@@ -172,6 +172,13 @@ console.log(JSON.stringify({
         failureClass: "auth_failed"
       },
       {
+        name: "quoted credential containing an escaped quote",
+        output: 'codex is not authenticated; api_key="alpha\\"beta"',
+        expectedDetail: /Failure detail: codex is not authenticated; api_key=\[REDACTED\]/,
+        secrets: ['alpha\\"beta', "beta"],
+        failureClass: "auth_failed"
+      },
+      {
         name: "URL credential",
         output: "codex is not authenticated; https://user:url-secret@example.test/path",
         expectedDetail: /Failure detail: codex is not authenticated; https:\/\/user:\[REDACTED\]@example\.test\/path/,
