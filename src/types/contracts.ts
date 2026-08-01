@@ -79,6 +79,7 @@ export interface BuildResult {
   iterations: number;
   taskUnderstanding: TaskUnderstanding;
   planSummary: string;
+  /** Cumulative changed files across all completed iterations. */
   changedFiles: string[];
   review: SelfReviewResult;
   verification: VerificationEvidence[];
@@ -147,6 +148,7 @@ export interface BuilderAdapter {
 export interface IterationArtifact {
   iteration: number;
   implementationSummary: string;
+  /** Files newly added to the cumulative changed-file set by this iteration. */
   changedFiles: string[];
   discoveredIssues: DiscoveredIssue[];
   review: SelfReviewResult;
