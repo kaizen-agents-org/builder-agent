@@ -23,7 +23,7 @@ export async function createBuildInfo(root = packageRoot): Promise<GeneratedBuil
   const packageMetadata = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as { version: string };
   const sourceCommit = process.env.BUILDER_AGENT_SOURCE_COMMIT?.trim() || "unknown";
 
-  if (sourceCommit !== "unknown" && !/^[0-9a-f]{40,64}$/i.test(sourceCommit)) {
+  if (sourceCommit !== "unknown" && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(sourceCommit)) {
     throw new Error("BUILDER_AGENT_SOURCE_COMMIT must be a full Git commit hash");
   }
 
@@ -91,7 +91,7 @@ async function listFiles(path: string): Promise<string[]> {
 function isGeneratedBuildInfo(value: GeneratedBuildInfo): boolean {
   return typeof value?.version === "string"
     && (value?.sourceCommit === "unknown"
-      || /^[0-9a-f]{40,64}$/i.test(value?.sourceCommit))
+      || /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(value?.sourceCommit))
     && /^sha256:[0-9a-f]{64}$/.test(value?.sourceHash);
 }
 

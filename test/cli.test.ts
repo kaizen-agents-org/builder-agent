@@ -26,7 +26,7 @@ describe("CLI", () => {
 
     assert.equal(buildInfo.name, "builder-agent");
     assert.equal(buildInfo.version, packageMetadata.version);
-    assert.match(buildInfo.sourceCommit, /^(unknown|[0-9a-f]{40,64})$/i);
+    assert.match(buildInfo.sourceCommit, /^(?:unknown|[0-9a-f]{40}|[0-9a-f]{64})$/i);
     assert.match(buildInfo.sourceHash, /^sha256:[0-9a-f]{64}$/);
     assert.equal(buildInfo.status, "current");
   });
@@ -55,7 +55,7 @@ describe("CLI", () => {
 
     const buildInfoPath = join(dir, "dist", "build-info.json");
     const generatedBuildInfo = await readFile(buildInfoPath, "utf8");
-    await writeFile(buildInfoPath, generatedBuildInfo.replace('"sourceCommit": "unknown"', '"sourceCommit": "invalid"'));
+    await writeFile(buildInfoPath, generatedBuildInfo.replace('"sourceCommit": "unknown"', `"sourceCommit": "${"a".repeat(41)}"`));
     const invalid = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
     assert.equal(JSON.parse(invalid.stdout).status, "unknown");
     await writeFile(buildInfoPath, generatedBuildInfo);

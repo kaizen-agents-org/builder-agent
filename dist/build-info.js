@@ -7,7 +7,7 @@ const sourceInputs = ["package.json", "tsconfig.json", "src", "scripts/generate-
 export async function createBuildInfo(root = packageRoot) {
     const packageMetadata = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
     const sourceCommit = process.env.BUILDER_AGENT_SOURCE_COMMIT?.trim() || "unknown";
-    if (sourceCommit !== "unknown" && !/^[0-9a-f]{40,64}$/i.test(sourceCommit)) {
+    if (sourceCommit !== "unknown" && !/^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(sourceCommit)) {
         throw new Error("BUILDER_AGENT_SOURCE_COMMIT must be a full Git commit hash");
     }
     return {
@@ -65,7 +65,7 @@ async function listFiles(path) {
 function isGeneratedBuildInfo(value) {
     return typeof value?.version === "string"
         && (value?.sourceCommit === "unknown"
-            || /^[0-9a-f]{40,64}$/i.test(value?.sourceCommit))
+            || /^(?:[0-9a-f]{40}|[0-9a-f]{64})$/i.test(value?.sourceCommit))
         && /^sha256:[0-9a-f]{64}$/.test(value?.sourceHash);
 }
 async function unknownBuildInfo(root) {
