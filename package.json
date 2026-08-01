@@ -24,7 +24,8 @@
     "test",
     "docs",
     "SKILL.md",
-    "README.md"
+    "README.md",
+    "tsconfig.json"
   ],
   "engines": {
     "node": ">=20"

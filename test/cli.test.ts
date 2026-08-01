@@ -31,6 +31,14 @@ describe("CLI", () => {
     assert.equal(buildInfo.status, "current");
   });
 
+  it("packages every input needed to verify build provenance", async () => {
+    const { stdout } = await execFileAsync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"]);
+    const packResult = JSON.parse(stdout) as Array<{ files: Array<{ path: string }> }>;
+    const packagedFiles = packResult[0]?.files.map(({ path }) => path);
+
+    assert.ok(packagedFiles?.includes("tsconfig.json"));
+  });
+
   it("reports stale or unknown when built source cannot be verified", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-provenance-"));
     await Promise.all([
