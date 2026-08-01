@@ -249,6 +249,8 @@ builder-agent < prompt.txt
 
 Provider `args` support `{{prompt}}`, `{{workspaceDir}}`, `{{model}}`, and `{{outputPath}}` placeholders. `{{model}}` renders as an empty value when `KAIZEN_AGENT_MODEL` is unset. `output` is `stdout` by default; use `last-message` for CLIs that write the final response to the `{{outputPath}}` file. Empty placeholder values are omitted; if the omitted value follows a flag-like argument such as `--model`, the flag is omitted too.
 
+Captured stdout and stderr are each limited to 256 Ki characters, split between head and tail context so trailing payloads and diagnostics remain available. Truncated streams include an omission marker in raw output and are listed in provider evidence as `truncatedOutput`.
+
 Provider registries can also live in a JSON file:
 
 ```sh

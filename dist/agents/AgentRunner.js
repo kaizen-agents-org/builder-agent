@@ -6,6 +6,7 @@ import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const AGENT_TERMINATION_GRACE_MS = 1_000;
+const PROVIDER_OUTPUT_CAPTURE_MAX_LENGTH = 256 * 1024;
 const PROVIDER_FAILURE_DETAIL_MAX_LENGTH = 240;
 const DEFAULT_FALLBACK_ON = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
@@ -137,6 +138,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
                     exitCode: healthResult.exitCode,
                     failureClass: classifyFailure({ exitCode: healthResult.exitCode, raw }),
                     payloadSource: "none",
+                    truncatedOutput: healthResult.truncatedOutput,
                     raw,
                     payload: undefined
                 };
@@ -155,6 +157,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
             exitCode: result.exitCode,
             failureClass: parsedPayload.payload ? undefined : classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError }),
             payloadSource: parsedPayload.payload ? payloadSource : "none",
+            truncatedOutput: result.truncatedOutput,
             raw: rawWithParseError,
             payload: parsedPayload.payload,
             discoveredIssues: parsedPayload.discoveredIssues
@@ -519,7 +522,8 @@ function formatProviderEvidence(attempts) {
     const selected = attempts.find((attempt) => attempt.payload);
     const lines = attempts.flatMap((attempt) => {
         const status = selected === attempt ? "selected" : attempt.fallbackAllowed ? "fallback" : "stopped";
-        const summary = `- ${attempt.agent ?? "unknown"}: exitCode=${attempt.exitCode}, status=${status}, failureClass=${attempt.failureClass ?? "none"}, fallbackReason=${attempt.fallbackReason ?? "none"}, payloadSource=${attempt.payloadSource ?? "none"}`;
+        const truncatedOutput = attempt.truncatedOutput?.join(",") || "none";
+        const summary = `- ${attempt.agent ?? "unknown"}: exitCode=${attempt.exitCode}, status=${status}, failureClass=${attempt.failureClass ?? "none"}, fallbackReason=${attempt.fallbackReason ?? "none"}, payloadSource=${attempt.payloadSource ?? "none"}, truncatedOutput=${truncatedOutput}`;
         const failureDetail = selected === attempt ? undefined : formatProviderFailureDetail(attempt.raw);
         return failureDetail ? [summary, `  Failure detail: ${failureDetail}`] : [summary];
     });
@@ -681,15 +685,15 @@ function runCommand(command, args, options) {
             }
             process.once("exit", terminateOnExit);
         }
-        let stdout = "";
-        let stderr = "";
+        const stdout = createBoundedOutputCapture();
+        const stderr = createBoundedOutputCapture();
         child.stdout.setEncoding("utf8");
         child.stderr.setEncoding("utf8");
         child.stdout.on("data", (chunk) => {
-            stdout += chunk;
+            appendBoundedOutput(stdout, chunk);
         });
         child.stderr.on("data", (chunk) => {
-            stderr += chunk;
+            appendBoundedOutput(stderr, chunk);
         });
         child.once("exit", () => {
             if (timedOut)
@@ -713,10 +717,44 @@ function runCommand(command, args, options) {
                     reject(new Error(`Agent command timed out after ${timeoutMs}ms.`));
                     return;
                 }
-                resolve({ exitCode: code ?? 1, stdout, stderr });
+                const capturedStdout = renderBoundedOutput(stdout, "stdout");
+                const capturedStderr = renderBoundedOutput(stderr, "stderr");
+                resolve({
+                    exitCode: code ?? 1,
+                    stdout: capturedStdout.output,
+                    stderr: capturedStderr.output,
+                    truncatedOutput: [
+                        ...(capturedStdout.truncated ? ["stdout"] : []),
+                        ...(capturedStderr.truncated ? ["stderr"] : [])
+                    ]
+                });
             });
         });
     });
+}
+function createBoundedOutputCapture() {
+    return { head: "", tail: "", totalLength: 0 };
+}
+function appendBoundedOutput(capture, chunk) {
+    capture.totalLength += chunk.length;
+    const headLimit = Math.floor(PROVIDER_OUTPUT_CAPTURE_MAX_LENGTH / 2);
+    const tailLimit = PROVIDER_OUTPUT_CAPTURE_MAX_LENGTH - headLimit;
+    const headRemainder = Math.max(0, headLimit - capture.head.length);
+    const headChunk = chunk.slice(0, headRemainder);
+    capture.head += headChunk;
+    const tailChunk = chunk.slice(headChunk.length);
+    if (tailChunk)
+        capture.tail = `${capture.tail}${tailChunk}`.slice(-tailLimit);
+}
+function renderBoundedOutput(capture, stream) {
+    if (capture.totalLength <= PROVIDER_OUTPUT_CAPTURE_MAX_LENGTH) {
+        return { output: `${capture.head}${capture.tail}`, truncated: false };
+    }
+    const omittedLength = capture.totalLength - capture.head.length - capture.tail.length;
+    return {
+        output: `${capture.head}\n[builder-agent: ${stream} truncated; omitted ${omittedLength} characters]\n${capture.tail}`,
+        truncated: true
+    };
 }
 function terminateCommandTreeAndWait(child, signal, useProcessGroup) {
     if (process.platform !== "win32" || child.pid === undefined) {

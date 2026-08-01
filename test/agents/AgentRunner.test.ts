@@ -402,6 +402,44 @@ console.log(JSON.stringify({
     assert.deepEqual(args, ["run", "--cwd", dir, "--model", "zai-coder", "Fix issue #1"]);
   });
 
+  it("bounds provider output while preserving head, tail, and a trailing payload", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write("stdout-head\\n" + "x".repeat(400_000) + "\\n");
+process.stdout.write(JSON.stringify({ status: "fixed", summary: "payload survived truncation", notes: "checked" }));
+process.stderr.write("stderr-head\\n" + "y".repeat(400_000) + "\\nstderr-tail");
+`;
+      const result = await runImplementationAgent({
+        agent: "noisy-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "noisy-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload.status, "fixed");
+      assert.equal(result.payload.summary, "payload survived truncation");
+      assert.match(result.raw, /^stdout-head/);
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ characters\]/);
+      assert.match(result.raw, /\[builder-agent: stderr truncated; omitted \d+ characters\]/);
+      assert.match(result.raw, /stderr-tail/);
+      assert.ok(result.raw.length < 530_000, `captured output was ${result.raw.length} characters`);
+      assert.match(result.payload.notes, /truncatedOutput=stdout,stderr/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("does not append built-in providers to an explicit custom-only list", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
