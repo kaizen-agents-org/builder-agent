@@ -520,6 +520,55 @@ process.exitCode = 1;
     }
   });
 
+  it("does not classify numeric status prefixes before the next chunk confirms the boundary", async () => {
+    const cases = [
+      { prefix: "401", completed: "4012", fallbackOn: "auth_failed" },
+      { prefix: "429", completed: "4292", fallbackOn: "rate_limited" }
+    ] as const;
+
+    for (const failureCase of cases) {
+      const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+      try {
+        const providerScript = `
+process.stderr.write(${JSON.stringify(failureCase.prefix)});
+setTimeout(() => {
+  process.stderr.write("2");
+  process.exit(1);
+}, 20);
+`;
+        const result = await runImplementationAgent({
+          agent: "split-status-provider,fallback",
+          prompt: "Fix issue #1",
+          workspaceDir: dir,
+          env: {
+            ...process.env,
+            KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+              "split-status-provider": {
+                command: process.execPath,
+                args: ["-e", providerScript],
+                fallbackOn: [failureCase.fallbackOn],
+                output: "stdout"
+              },
+              fallback: {
+                command: process.execPath,
+                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback should not run',notes:'checked'}));"],
+                output: "stdout"
+              }
+            })
+          }
+        });
+
+        assert.equal(result.payload, undefined, failureCase.completed);
+        assert.match(result.raw, new RegExp(failureCase.completed), failureCase.completed);
+        assert.match(result.providerEvidence, /split-status-provider: exitCode=1, status=stopped, failureClass=invalid_payload/, failureCase.completed);
+        assert.doesNotMatch(result.raw, /fallback should not run/, failureCase.completed);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    }
+  });
+
   it("does not append built-in providers to an explicit custom-only list", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");

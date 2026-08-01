@@ -581,11 +581,11 @@ function classifyFailure({ exitCode, raw, error }) {
     const text = `${code}\n${raw}`.toLowerCase();
     return detectFailureClass(text) ?? "invalid_payload";
 }
-function detectFailureClass(text) {
+function detectFailureClass(text, endOfStream = true) {
     for (const failureClass of FAILURE_CLASS_PRECEDENCE) {
-        if (failureClass === "auth_failed" && /\b401\b/.test(text))
+        if (failureClass === "auth_failed" && (endOfStream ? /\b401\b/ : /\b401\b(?=.)/).test(text))
             return failureClass;
-        if (failureClass === "rate_limited" && /\b429\b/.test(text))
+        if (failureClass === "rate_limited" && (endOfStream ? /\b429\b/ : /\b429\b(?=.)/).test(text))
             return failureClass;
         if (FAILURE_CLASS_LITERALS[failureClass].some((value) => text.includes(value)))
             return failureClass;
@@ -747,7 +747,7 @@ function runCommand(command, args, options) {
                         ...(capturedStdout.truncated ? ["stdout"] : []),
                         ...(capturedStderr.truncated ? ["stderr"] : [])
                     ],
-                    observedFailureClass: preferFailureClass(stdout.observedFailureClass, stderr.observedFailureClass)
+                    observedFailureClass: preferFailureClass(stdout.observedFailureClass, detectFailureClass(stdout.classificationTail), stderr.observedFailureClass, detectFailureClass(stderr.classificationTail))
                 };
                 if (timedOut) {
                     reject(new CommandTimeoutError(timeoutMs, result));
@@ -763,7 +763,7 @@ function createBoundedOutputCapture() {
 }
 function appendBoundedOutput(capture, chunk) {
     const classificationText = `${capture.classificationTail}${chunk}`.toLowerCase();
-    capture.observedFailureClass = preferFailureClass(capture.observedFailureClass, detectFailureClass(classificationText));
+    capture.observedFailureClass = preferFailureClass(capture.observedFailureClass, detectFailureClass(classificationText, false));
     capture.classificationTail = classificationText.slice(-FAILURE_CLASS_SCAN_CARRY_LENGTH);
     capture.totalBytes += Buffer.byteLength(chunk, "utf8");
     const headLimit = Math.floor(PROVIDER_OUTPUT_CAPTURE_MAX_BYTES / 2);
