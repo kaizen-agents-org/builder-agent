@@ -53,6 +53,13 @@ describe("CLI", () => {
     const { stdout } = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
     assert.equal(JSON.parse(stdout).status, "stale");
 
+    const buildInfoPath = join(dir, "dist", "build-info.json");
+    const generatedBuildInfo = await readFile(buildInfoPath, "utf8");
+    await writeFile(buildInfoPath, generatedBuildInfo.replace('"sourceCommit": "unknown"', '"sourceCommit": "invalid"'));
+    const invalid = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
+    assert.equal(JSON.parse(invalid.stdout).status, "unknown");
+    await writeFile(buildInfoPath, generatedBuildInfo);
+
     await rm(join(dir, "src"), { recursive: true });
     const unknown = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
     assert.equal(JSON.parse(unknown.stdout).status, "unknown");

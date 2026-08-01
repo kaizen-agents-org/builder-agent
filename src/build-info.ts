@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { readdir, readFile, stat } from "node:fs/promises";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
@@ -66,7 +66,7 @@ async function calculateSourceHash(root: string): Promise<string> {
   const hash = createHash("sha256");
 
   for (const file of files) {
-    hash.update(relative(root, file));
+    hash.update(relative(root, file).replaceAll(sep, "/"));
     hash.update("\0");
     hash.update(await readFile(file));
     hash.update("\0");
@@ -90,7 +90,8 @@ async function listFiles(path: string): Promise<string[]> {
 
 function isGeneratedBuildInfo(value: GeneratedBuildInfo): boolean {
   return typeof value?.version === "string"
-    && typeof value?.sourceCommit === "string"
+    && (value?.sourceCommit === "unknown"
+      || /^[0-9a-f]{40,64}$/i.test(value?.sourceCommit))
     && /^sha256:[0-9a-f]{64}$/.test(value?.sourceHash);
 }
 
