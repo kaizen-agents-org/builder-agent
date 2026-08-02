@@ -1,7 +1,7 @@
 import { spawn } from "node:child_process";
 import { lstat, mkdir, realpath } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
-import { normalizeAgents, runImplementationAgent } from "./agents/AgentRunner.js";
+import { normalizeAgents, redactSensitiveProviderOutput, runImplementationAgent } from "./agents/AgentRunner.js";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "./types/KaizenLoopPayload.js";
 import type { AgentRunResult, KaizenLoopBuilderIO, KaizenLoopPayload } from "./types/contracts.js";
 
@@ -291,7 +291,7 @@ function blockedPayload(result: AgentRunResult): KaizenLoopPayload {
 }
 
 function blockedNotes(result: AgentRunResult): string {
-  const rawTail = tail(result.raw, 2000);
+  const rawTail = tail(redactSensitiveProviderOutput(result.raw), 2000);
   if (!result.providerEvidence) return rawTail;
   return rawTail ? `${result.providerEvidence}\n\nRaw output tail:\n${rawTail}` : result.providerEvidence;
 }

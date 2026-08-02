@@ -531,6 +531,59 @@ console.log(JSON.stringify({
     }]);
   });
 
+  it("redacts sensitive provider output from blocked kaizen-loop payloads", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const resultPath = join(dir, "build-result.json");
+    const secret = "sk-live-provider-secret";
+    await mkdir(binDir);
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+console.error("provider request failed");
+console.error("api_key=${secret}");
+process.exit(1);
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    await assert.rejects(
+      spawnWithInput(process.execPath, ["dist/cli.js"], "Fix issue #185", {
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_BUILD_RESULT_PATH: resultPath,
+          KAIZEN_WORKSPACE_DIR: dir,
+          KAIZEN_PREFERRED_AGENT: "redaction-test",
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "redaction-test": {
+              command: "claude",
+              output: "stdout",
+              fallbackOn: []
+            }
+          })
+        }
+      }),
+      (error) => {
+        const payloadStart = error.message.lastIndexOf('{\n  "status"');
+        const output = JSON.parse(error.message.slice(payloadStart));
+        assert.equal(output.status, "blocked");
+        assert.match(output.notes, /Raw output tail:/);
+        assert.match(output.notes, /provider request failed/);
+        assert.match(output.notes, /api_key=\[REDACTED\]/);
+        assert.doesNotMatch(output.notes, new RegExp(secret));
+        return true;
+      }
+    );
+
+    const resultText = await readFile(resultPath, "utf8");
+    assert.match(resultText, /api_key=\[REDACTED\]/);
+    assert.doesNotMatch(resultText, new RegExp(secret));
+  });
+
   it("preserves valid discovered issues alongside malformed entries", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
