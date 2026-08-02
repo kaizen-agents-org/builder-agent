@@ -808,6 +808,7 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
     let shutdownTimer: NodeJS.Timeout | undefined;
     let exitCleanup: Promise<void> | undefined;
     let pendingSettlement: (() => void) | undefined;
+    let stdinError: Error | undefined;
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env,
@@ -870,7 +871,9 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
     const stderr = createBoundedOutputCapture();
 
     if (child.stdin) {
-      child.stdin.on("error", () => {});
+      child.stdin.on("error", (error) => {
+        stdinError = error;
+      });
       child.stdin.end(options.stdin);
     }
 
@@ -920,6 +923,10 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
         };
         if (timedOut) {
           reject(new CommandTimeoutError(timeoutMs, result));
+          return;
+        }
+        if (stdinError) {
+          reject(stdinError);
           return;
         }
         resolve(result);

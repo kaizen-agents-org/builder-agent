@@ -16,7 +16,8 @@ describe("AgentRunner provider selection", () => {
     const binDir = join(dir, "bin");
     const argsPath = join(dir, "codex-args.json");
     const stdinPath = join(dir, "codex-stdin.txt");
-    const prompt = `Fix issue #1\n${"large prompt context\n".repeat(20_000)}`;
+    const promptMarker = "codex-prompt-marker-7f3d";
+    const prompt = `Fix issue #1\n${promptMarker}\n${"large prompt context\n".repeat(20_000)}`;
     await mkdir(binDir);
     await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
     const fakeCodexPath = join(binDir, "codex");
@@ -84,7 +85,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
       "-C"
     ]);
     assert.equal(args.at(-1), "-");
-    assert.ok(args.every((arg) => arg !== prompt));
+    assert.ok(!args.join("").includes(promptMarker));
     assert.equal(stdin, prompt);
   });
 
@@ -93,7 +94,8 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     const binDir = join(dir, "bin");
     const argsPath = join(dir, "claude-args.json");
     const stdinPath = join(dir, "claude-stdin.txt");
-    const prompt = `Fix issue #1\n${"large prompt context\n".repeat(20_000)}`;
+    const promptMarker = "claude-prompt-marker-4b9a";
+    const prompt = `Fix issue #1\n${promptMarker}\n${"large prompt context\n".repeat(20_000)}`;
     await mkdir(binDir);
     await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
     const fakeClaudePath = join(binDir, "claude");
@@ -130,7 +132,7 @@ console.log(JSON.stringify({
     assert.equal(result.exitCode, 0);
     assert.equal(result.payload.summary, "implemented with claude");
     assert.ok(args.includes("-p"));
-    assert.ok(args.every((arg) => arg !== prompt));
+    assert.ok(!args.join("").includes(promptMarker));
     assert.equal(stdin, prompt);
   });
 
@@ -319,6 +321,55 @@ process.exit(1);
       assert.ok(failureDetail.length <= "  Failure detail: ".length + 240, failureCase.name);
       assert.match(result.payload.notes, /claude: exitCode=0, status=selected/, failureCase.name);
     }
+  });
+
+  it("falls back when a provider closes stdin before consuming the prompt", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const fakeCodexPath = join(binDir, "codex");
+    const fakeClaudePath = join(binDir, "claude");
+    await mkdir(binDir);
+    await writeFile(
+      fakeCodexPath,
+      `#!/usr/bin/env node
+const { closeSync, writeFileSync } = require("node:fs");
+const args = process.argv.slice(2);
+const outputIndex = args.indexOf("--output-last-message");
+writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: "unread prompt", notes: "" }));
+closeSync(0);
+setTimeout(() => process.exit(0), 100);
+`,
+      "utf8"
+    );
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+(async () => {
+for await (const chunk of process.stdin) void chunk;
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"fallback consumed prompt\",\"notes\":\"checked\"}\n```")}
+}));
+})();
+`,
+      "utf8"
+    );
+    await chmod(fakeCodexPath, 0o755);
+    await chmod(fakeClaudePath, 0o755);
+
+    const result = await runImplementationAgent({
+      agent: "codex,claude",
+      prompt: "large prompt context\n".repeat(500_000),
+      workspaceDir: dir,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`
+      }
+    });
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.payload.summary, "fallback consumed prompt");
+    assert.match(result.payload.notes, /codex: exitCode=1, status=fallback, failureClass=invalid_payload/);
+    assert.match(result.payload.notes, /claude: exitCode=0, status=selected/);
   });
 
   it("preserves structured partial notes when provider failure details contain reserved labels", async () => {

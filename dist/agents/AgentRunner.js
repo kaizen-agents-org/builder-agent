@@ -678,6 +678,7 @@ function runCommand(command, args, options) {
         let shutdownTimer;
         let exitCleanup;
         let pendingSettlement;
+        let stdinError;
         const child = spawn(command, args, {
             cwd: options.cwd,
             env: options.env,
@@ -742,7 +743,9 @@ function runCommand(command, args, options) {
         const stdout = createBoundedOutputCapture();
         const stderr = createBoundedOutputCapture();
         if (child.stdin) {
-            child.stdin.on("error", () => { });
+            child.stdin.on("error", (error) => {
+                stdinError = error;
+            });
             child.stdin.end(options.stdin);
         }
         child.stdout.setEncoding("utf8");
@@ -789,6 +792,10 @@ function runCommand(command, args, options) {
                 };
                 if (timedOut) {
                     reject(new CommandTimeoutError(timeoutMs, result));
+                    return;
+                }
+                if (stdinError) {
+                    reject(stdinError);
                     return;
                 }
                 resolve(result);
