@@ -167,7 +167,12 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
         const lastMessage = provider.output === "last-message" ? await readFile(outputPath, "utf8").catch(() => "") : "";
         const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
         const payloadSource = lastMessage ? "last-message" : "stdout";
-        const parsedPayload = parseBuilderPayload(lastMessage || raw);
+        let parsedPayload = parseBuilderPayload(lastMessage || raw);
+        if (!lastMessage && !parsedPayload.payload && result.stdoutTail) {
+            const parsedTail = parseBuilderPayload(result.stdoutTail);
+            if (parsedTail.payload)
+                parsedPayload = parsedTail;
+        }
         const rawWithParseError = parsedPayload.error ? `${raw}\n${parsedPayload.error.message}` : raw;
         return {
             agent,
@@ -742,6 +747,7 @@ function runCommand(command, args, options) {
                 const result = {
                     exitCode: code ?? 1,
                     stdout: capturedStdout.output,
+                    stdoutTail: capturedStdout.truncated ? capturedStdout.tail : undefined,
                     stderr: capturedStderr.output,
                     truncatedOutput: [
                         ...(capturedStdout.truncated ? ["stdout"] : []),
@@ -798,7 +804,8 @@ function finalClassificationText(capture) {
 }
 function renderBoundedOutput(capture, stream) {
     if (capture.totalBytes <= PROVIDER_OUTPUT_CAPTURE_MAX_BYTES) {
-        return { output: `${capture.head}${capture.tail}`, truncated: false };
+        const output = `${capture.head}${capture.tail}`;
+        return { output, tail: output, truncated: false };
     }
     const largestMarker = `\n[builder-agent: ${stream} truncated; omitted ${capture.totalBytes} bytes]\n`;
     const retainedBytes = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - Buffer.byteLength(largestMarker, "utf8");
@@ -808,6 +815,7 @@ function renderBoundedOutput(capture, stream) {
     const marker = `\n[builder-agent: ${stream} truncated; omitted ${omittedBytes} bytes]\n`;
     return {
         output: `${head}${marker}${tail}`,
+        tail,
         truncated: true
     };
 }

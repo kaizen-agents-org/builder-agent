@@ -516,6 +516,39 @@ setTimeout(() => {
     }
   });
 
+  it("parses a trailing payload independently from unbalanced truncated head output", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write('{"message":"unfinished');
+process.stdout.write("a".repeat(300_000));
+process.stdout.write(JSON.stringify({ status: "fixed", summary: "tail payload recovered", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "structured-log-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "structured-log-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "tail payload recovered");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("classifies provider failures from output omitted by bounded capture", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 
