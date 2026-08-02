@@ -9,11 +9,13 @@
     "task": {
       "type": "string",
       "minLength": 1,
+      "pattern": "\\S",
       "description": "Implementation task or issue text."
     },
     "goal": {
       "type": "string",
       "minLength": 1,
+      "pattern": "\\S",
       "description": "Optional desired outcome or acceptance target."
     },
     "constraints": {
@@ -21,7 +23,8 @@
       "description": "Optional implementation constraints.",
       "items": {
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "pattern": "\\S"
       },
       "default": []
     },

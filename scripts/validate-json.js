@@ -25,6 +25,7 @@ validateAgainstSchema("examples/build-request.example.json", "schemas/build-requ
 validateAgainstSchema("examples/self-review.example.json", "schemas/self-review.schema.json");
 validateAgainstSchema("examples/build-result.example.json", "schemas/build-result.schema.json");
 validateAgainstSchema("examples/kaizen-loop-payload.example.json", "schemas/kaizen-loop-payload.schema.json");
+validateBuildRequestWhitespaceConstraints();
 validateDiscoveredIssueWhitespaceConstraints("schemas/build-result.schema.json");
 validateDiscoveredIssueWhitespaceConstraints("schemas/kaizen-loop-payload.schema.json");
 
@@ -43,6 +44,22 @@ function validateAgainstSchema(exampleFile, schemaFile) {
   const errors = validateValue(parsed.get(exampleFile), parsed.get(schemaFile), exampleFile);
   if (errors.length > 0) {
     throw new Error(`${exampleFile} does not match ${schemaFile}:\n${errors.join("\n")}`);
+  }
+}
+
+function validateBuildRequestWhitespaceConstraints() {
+  const schema = parsed.get("schemas/build-request.schema.json");
+  const invalidRequests = [
+    { task: " \n\t " },
+    { task: "Do work.", goal: " \n\t " },
+    { task: "Do work.", constraints: [" \n\t "] }
+  ];
+
+  for (const request of invalidRequests) {
+    const errors = validateValue(request, schema, "schemas/build-request.schema.json");
+    if (errors.length === 0) {
+      throw new Error(`schemas/build-request.schema.json accepts a whitespace-only build request string: ${JSON.stringify(request)}`);
+    }
   }
 }
 

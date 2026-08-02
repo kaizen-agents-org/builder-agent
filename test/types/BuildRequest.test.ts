@@ -29,4 +29,19 @@ describe("BuildRequest", () => {
       /unknown field/
     );
   });
+
+  it("rejects whitespace-only request strings", () => {
+    assert.throws(
+      () => normalizeBuildRequest({ task: " \n\t " }),
+      /requires a non-empty task/
+    );
+    assert.throws(
+      () => normalizeBuildRequest({ task: "Do work.", goal: " \n\t " }),
+      /goal must be a non-empty string/
+    );
+    assert.throws(
+      () => normalizeBuildRequest({ task: "Do work.", constraints: [" \n\t "] }),
+      /constraints must be an array of non-empty strings/
+    );
+  });
 });
