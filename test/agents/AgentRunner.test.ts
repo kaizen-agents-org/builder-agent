@@ -648,6 +648,39 @@ process.stderr.write(JSON.stringify({ status: "fixed", summary: "latest stderr p
     }
   });
 
+  it("resynchronizes payload parsing when the retained stderr tail starts inside a string", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stderr.write("a".repeat(150_000) + '{"message":"');
+process.stderr.write("b".repeat(200_000));
+process.stderr.write('"}' + JSON.stringify({ status: "fixed", summary: "recovered stderr tail payload", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "stderr-tail-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "stderr-tail-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "recovered stderr tail payload");
+      assert.match(result.raw, /\[builder-agent: stderr truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stderr/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("classifies provider failures from output omitted by bounded capture", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 

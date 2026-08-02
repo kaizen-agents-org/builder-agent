@@ -49,6 +49,7 @@ type CommandResult = {
   stdout: string;
   stdoutTail?: string;
   stderr: string;
+  stderrTail?: string;
   truncatedOutput: Array<"stdout" | "stderr">;
   observedFailureClass?: AgentFailureClass;
 };
@@ -254,10 +255,16 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
     const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
     const payloadSource = lastMessage ? "last-message" : "stdout";
     let parsedPayload = parseBuilderPayload(lastMessage || raw);
-    const stderrPayload = lastMessage ? undefined : parseBuilderPayload(result.stderr).payload;
-    if (!lastMessage && !stderrPayload && result.stdoutTail) {
-      const parsedTail = parseBuilderPayloadFragment(result.stdoutTail);
-      if (parsedTail.payload) parsedPayload = parsedTail;
+    if (!lastMessage) {
+      const parsedStderrTail = result.stderrTail
+        ? parseBuilderPayloadFragment(result.stderrTail)
+        : undefined;
+      if (parsedStderrTail?.payload) {
+        parsedPayload = parsedStderrTail;
+      } else if (!parseBuilderPayload(result.stderr).payload && result.stdoutTail) {
+        const parsedStdoutTail = parseBuilderPayloadFragment(result.stdoutTail);
+        if (parsedStdoutTail.payload) parsedPayload = parsedStdoutTail;
+      }
     }
     const rawWithParseError = parsedPayload.error ? `${raw}\n${parsedPayload.error.message}` : raw;
 
@@ -886,6 +893,7 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
           stdout: capturedStdout.output,
           stdoutTail: capturedStdout.truncated ? capturedStdout.tail : undefined,
           stderr: capturedStderr.output,
+          stderrTail: capturedStderr.truncated ? capturedStderr.tail : undefined,
           truncatedOutput: [
             ...(capturedStdout.truncated ? ["stdout" as const] : []),
             ...(capturedStderr.truncated ? ["stderr" as const] : [])
