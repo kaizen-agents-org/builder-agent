@@ -616,6 +616,38 @@ process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "latest t
     }
   });
 
+  it("preserves a later stderr payload when stdout has a valid retained-tail payload", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write("a".repeat(300_000) + JSON.stringify({ status: "fixed", summary: "stale stdout payload", notes: "checked" }));
+process.stderr.write(JSON.stringify({ status: "fixed", summary: "latest stderr payload", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "split-stream-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "split-stream-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "latest stderr payload");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("classifies provider failures from output omitted by bounded capture", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 
