@@ -36,6 +36,7 @@ type AgentProvider = {
 
 type AgentAttempt = AgentRunResult & {
   agent: AgentKind;
+  truncatedOutput?: Array<"stdout" | "stderr">;
 };
 
 type RenderedArg = {
@@ -46,14 +47,51 @@ type RenderedArg = {
 type CommandResult = {
   exitCode: number;
   stdout: string;
+  stdoutTail?: string;
   stderr: string;
+  stderrTail?: string;
+  truncatedOutput: Array<"stdout" | "stderr">;
+  observedFailureClass?: AgentFailureClass;
 };
+
+type BoundedOutputCapture = {
+  head: string;
+  headBytes: number;
+  headComplete: boolean;
+  tailBuffer?: Buffer;
+  tailStart: number;
+  tailBytes: number;
+  totalBytes: number;
+  classificationTail: string;
+  classificationTailFragmented: boolean;
+  observedFailureClass?: AgentFailureClass;
+};
+
+class CommandTimeoutError extends Error {
+  constructor(timeoutMs: number, readonly result: CommandResult) {
+    super(`Agent command timed out after ${timeoutMs}ms.`);
+    this.name = "CommandTimeoutError";
+  }
+}
 
 const DEFAULT_AGENT_TIMEOUT_MS = 600_000;
 const AGENT_TERMINATION_GRACE_MS = 1_000;
+const PROVIDER_OUTPUT_CAPTURE_MAX_BYTES = 256 * 1024;
 const PROVIDER_FAILURE_DETAIL_MAX_LENGTH = 240;
 const DEFAULT_FALLBACK_ON: AgentFailureClass[] = ["command_missing", "auth_failed", "rate_limited", "invalid_payload", "timeout"];
 const FAILURE_CLASSES = new Set([...DEFAULT_FALLBACK_ON, "provider_blocked"]);
+const FAILURE_CLASS_PRECEDENCE: AgentFailureClass[] = ["command_missing", "timeout", "auth_failed", "rate_limited", "provider_blocked"];
+const FAILURE_CLASS_LITERALS: Record<Exclude<AgentFailureClass, "invalid_payload">, string[]> = {
+  command_missing: ["enoent", "not found", "command not found"],
+  timeout: ["timed out", "timeout"],
+  auth_failed: ["unauthorized", "unauthenticated", "not authenticated", "api key", "login required"],
+  rate_limited: ["rate limit", "too many requests", "quota exceeded"],
+  provider_blocked: ["content policy", "provider blocked", "safety refusal", "safety policy"]
+};
+const FAILURE_CLASS_SCAN_CARRY_LENGTH = Math.max(
+  4,
+  ...Object.values(FAILURE_CLASS_LITERALS).flat().map((value) => value.length)
+);
 const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
 const HEALTH_CHECK_FIELDS = new Set(["command", "args", "timeoutMs"]);
 const CLAUDE_VERIFICATION_TOOLS = ["npm", "pnpm", "yarn"].flatMap((command) => [
@@ -201,8 +239,9 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
         return {
           agent,
           exitCode: healthResult.exitCode,
-          failureClass: classifyFailure({ exitCode: healthResult.exitCode, raw }),
+          failureClass: healthResult.observedFailureClass ?? classifyFailure({ exitCode: healthResult.exitCode, raw }),
           payloadSource: "none",
+          truncatedOutput: healthResult.truncatedOutput,
           raw,
           payload: undefined
         };
@@ -215,25 +254,46 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
     const lastMessage = provider.output === "last-message" ? await readFile(outputPath, "utf8").catch(() => "") : "";
     const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
     const payloadSource = lastMessage ? "last-message" : "stdout";
-    const parsedPayload = parseBuilderPayload(lastMessage || raw);
+    let parsedPayload = parseBuilderPayload(lastMessage || raw);
+    if (!lastMessage) {
+      const parsedStderrTail = result.stderrTail
+        ? parseBuilderPayloadFragment(result.stderrTail)
+        : undefined;
+      if (parsedStderrTail?.payload) {
+        parsedPayload = parsedStderrTail;
+      } else if (!parseBuilderPayload(result.stderr).payload && result.stdoutTail) {
+        const parsedStdoutTail = parseBuilderPayloadFragment(result.stdoutTail);
+        if (parsedStdoutTail.payload) parsedPayload = parsedStdoutTail;
+      }
+    }
     const rawWithParseError = parsedPayload.error ? `${raw}\n${parsedPayload.error.message}` : raw;
 
     return {
       agent,
       exitCode: result.exitCode,
-      failureClass: parsedPayload.payload ? undefined : classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError }),
+      failureClass: parsedPayload.payload
+        ? undefined
+        : preferFailureClass(
+          result.observedFailureClass,
+          classifyFailure({ exitCode: result.exitCode, raw: rawWithParseError })
+        ) ?? "invalid_payload",
       payloadSource: parsedPayload.payload ? payloadSource : "none",
+      truncatedOutput: result.truncatedOutput,
       raw: rawWithParseError,
       payload: parsedPayload.payload,
       discoveredIssues: parsedPayload.discoveredIssues
     };
   } catch (error) {
-    const raw = error instanceof Error ? error.message : String(error);
+    const timeoutResult = error instanceof CommandTimeoutError ? error.result : undefined;
+    const raw = timeoutResult
+      ? `${timeoutResult.stdout}${timeoutResult.stderr}\n${(error as CommandTimeoutError).message}`
+      : error instanceof Error ? error.message : String(error);
     return {
       agent,
       exitCode: 1,
-      failureClass: classifyFailure({ exitCode: 1, raw, error }),
+      failureClass: error instanceof CommandTimeoutError ? "timeout" : classifyFailure({ exitCode: 1, raw, error }),
       payloadSource: "none",
+      truncatedOutput: timeoutResult?.truncatedOutput,
       raw,
       payload: undefined
     };
@@ -614,7 +674,8 @@ function formatProviderEvidence(attempts: AgentAttempt[]): string {
   const selected = attempts.find((attempt) => attempt.payload);
   const lines = attempts.flatMap((attempt) => {
     const status = selected === attempt ? "selected" : attempt.fallbackAllowed ? "fallback" : "stopped";
-    const summary = `- ${attempt.agent ?? "unknown"}: exitCode=${attempt.exitCode}, status=${status}, failureClass=${attempt.failureClass ?? "none"}, fallbackReason=${attempt.fallbackReason ?? "none"}, payloadSource=${attempt.payloadSource ?? "none"}`;
+    const truncatedOutput = attempt.truncatedOutput?.join(",") || "none";
+    const summary = `- ${attempt.agent ?? "unknown"}: exitCode=${attempt.exitCode}, status=${status}, failureClass=${attempt.failureClass ?? "none"}, fallbackReason=${attempt.fallbackReason ?? "none"}, payloadSource=${attempt.payloadSource ?? "none"}, truncatedOutput=${truncatedOutput}`;
     const failureDetail = selected === attempt ? undefined : formatProviderFailureDetail(attempt.raw);
     return failureDetail ? [summary, `  Failure detail: ${failureDetail}`] : [summary];
   });
@@ -650,23 +711,20 @@ function formatProviderFailureDetail(raw: string): string | undefined {
 function classifyFailure({ exitCode, raw, error }: { exitCode: number, raw: string, error?: unknown }): AgentFailureClass {
   const code = error && typeof error === "object" && "code" in error ? String(error.code) : "";
   const text = `${code}\n${raw}`.toLowerCase();
+  return detectFailureClass(text) ?? "invalid_payload";
+}
 
-  if (text.includes("enoent") || text.includes("not found") || text.includes("command not found")) {
-    return "command_missing";
+function detectFailureClass(text: string, endOfStream = true): AgentFailureClass | undefined {
+  for (const failureClass of FAILURE_CLASS_PRECEDENCE) {
+    if (failureClass === "auth_failed" && (endOfStream ? /\b401\b/ : /\b401\b(?=[\s\S])/).test(text)) return failureClass;
+    if (failureClass === "rate_limited" && (endOfStream ? /\b429\b/ : /\b429\b(?=[\s\S])/).test(text)) return failureClass;
+    if (FAILURE_CLASS_LITERALS[failureClass].some((value) => text.includes(value))) return failureClass;
   }
-  if (text.includes("timed out") || text.includes("timeout")) {
-    return "timeout";
-  }
-  if (/\b401\b/.test(text) || text.includes("unauthorized") || text.includes("unauthenticated") || text.includes("not authenticated") || text.includes("api key") || text.includes("login required")) {
-    return "auth_failed";
-  }
-  if (/\b429\b/.test(text) || text.includes("rate limit") || text.includes("too many requests") || text.includes("quota exceeded")) {
-    return "rate_limited";
-  }
-  if (text.includes("content policy") || text.includes("provider blocked") || text.includes("safety refusal") || text.includes("safety policy")) {
-    return "provider_blocked";
-  }
-  return "invalid_payload";
+  return undefined;
+}
+
+function preferFailureClass(...classes: Array<AgentFailureClass | undefined>): AgentFailureClass | undefined {
+  return FAILURE_CLASS_PRECEDENCE.find((failureClass) => classes.includes(failureClass));
 }
 
 /**
@@ -697,6 +755,19 @@ function parseBuilderPayload(raw: string): {
       error: error instanceof Error ? error : new Error(String(error))
     };
   }
+}
+
+function parseBuilderPayloadFragment(raw: string): ReturnType<typeof parseBuilderPayload> {
+  const parsed = parseBuilderPayload(raw);
+  if (parsed.payload) return parsed;
+
+  for (const escaped of [false, true]) {
+    const candidate = extractLastJsonObject(raw, true, escaped);
+    const resynchronized = parseBuilderPayload(candidate);
+    if (resynchronized.payload) return resynchronized;
+  }
+
+  return parsed;
 }
 
 function collectDiscoveredIssues(attempts: AgentAttempt[]): DiscoveredIssue[] {
@@ -787,16 +858,16 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
       }
       process.once("exit", terminateOnExit);
     }
-    let stdout = "";
-    let stderr = "";
+    const stdout = createBoundedOutputCapture();
+    const stderr = createBoundedOutputCapture();
 
     child.stdout.setEncoding("utf8");
     child.stderr.setEncoding("utf8");
     child.stdout.on("data", (chunk) => {
-      stdout += chunk;
+      appendBoundedOutput(stdout, chunk);
     });
     child.stderr.on("data", (chunk) => {
-      stderr += chunk;
+      appendBoundedOutput(stderr, chunk);
     });
     child.once("exit", () => {
       if (timedOut) return;
@@ -807,21 +878,160 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
       }
     });
     child.on("error", (error) => {
+      if (timedOut) return;
       settle(() => {
-        reject(timedOut ? new Error(`Agent command timed out after ${timeoutMs}ms.`) : error);
+        reject(error);
       });
     });
     child.on("close", async (code) => {
       await exitCleanup;
       settle(() => {
+        const capturedStdout = renderBoundedOutput(stdout, "stdout");
+        const capturedStderr = renderBoundedOutput(stderr, "stderr");
+        const result: CommandResult = {
+          exitCode: code ?? 1,
+          stdout: capturedStdout.output,
+          stdoutTail: capturedStdout.truncated ? capturedStdout.tail : undefined,
+          stderr: capturedStderr.output,
+          stderrTail: capturedStderr.truncated ? capturedStderr.tail : undefined,
+          truncatedOutput: [
+            ...(capturedStdout.truncated ? ["stdout" as const] : []),
+            ...(capturedStderr.truncated ? ["stderr" as const] : [])
+          ],
+          observedFailureClass: preferFailureClass(
+            stdout.observedFailureClass,
+            detectFailureClass(finalClassificationText(stdout)),
+            stderr.observedFailureClass,
+            detectFailureClass(finalClassificationText(stderr))
+          )
+        };
         if (timedOut) {
-          reject(new Error(`Agent command timed out after ${timeoutMs}ms.`));
+          reject(new CommandTimeoutError(timeoutMs, result));
           return;
         }
-        resolve({ exitCode: code ?? 1, stdout, stderr });
+        resolve(result);
       });
     });
   });
+}
+
+function createBoundedOutputCapture(): BoundedOutputCapture {
+  return {
+    head: "",
+    headBytes: 0,
+    headComplete: false,
+    tailStart: 0,
+    tailBytes: 0,
+    totalBytes: 0,
+    classificationTail: "",
+    classificationTailFragmented: false
+  };
+}
+
+function appendBoundedOutput(capture: BoundedOutputCapture, chunk: string): void {
+  const classificationText = `${capture.classificationTail}${chunk}`.toLowerCase();
+  capture.observedFailureClass = preferFailureClass(
+    capture.observedFailureClass,
+    detectFailureClass(capture.classificationTailFragmented ? `x${classificationText}` : classificationText, false)
+  );
+  capture.classificationTailFragmented ||= classificationText.length > FAILURE_CLASS_SCAN_CARRY_LENGTH;
+  capture.classificationTail = classificationText.slice(-FAILURE_CLASS_SCAN_CARRY_LENGTH);
+  capture.totalBytes += Buffer.byteLength(chunk, "utf8");
+  const headLimit = Math.floor(PROVIDER_OUTPUT_CAPTURE_MAX_BYTES / 2);
+  const headRemainder = capture.headComplete
+    ? 0
+    : Math.max(0, headLimit - capture.headBytes);
+  const headChunk = utf8Prefix(chunk, headRemainder);
+  capture.head += headChunk;
+  capture.headBytes += Buffer.byteLength(headChunk, "utf8");
+
+  const tailChunk = chunk.slice(headChunk.length);
+  const tailLimit = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - capture.headBytes;
+  if (!tailChunk) return;
+
+  capture.headComplete = true;
+  appendTailBytes(capture, Buffer.from(tailChunk, "utf8"), tailLimit);
+}
+
+function appendTailBytes(capture: BoundedOutputCapture, chunk: Buffer, limit: number): void {
+  if (!capture.tailBuffer) capture.tailBuffer = Buffer.allocUnsafe(limit);
+
+  if (chunk.length >= limit) {
+    chunk.copy(capture.tailBuffer, 0, chunk.length - limit);
+    capture.tailStart = 0;
+    capture.tailBytes = limit;
+    return;
+  }
+
+  const overflow = Math.max(0, capture.tailBytes + chunk.length - limit);
+  capture.tailStart = (capture.tailStart + overflow) % limit;
+  capture.tailBytes -= overflow;
+
+  const writeOffset = (capture.tailStart + capture.tailBytes) % limit;
+  const firstLength = Math.min(chunk.length, limit - writeOffset);
+  chunk.copy(capture.tailBuffer, writeOffset, 0, firstLength);
+  if (firstLength < chunk.length) chunk.copy(capture.tailBuffer, 0, firstLength);
+  capture.tailBytes += chunk.length;
+}
+
+function renderTail(capture: BoundedOutputCapture): string {
+  if (!capture.tailBuffer || capture.tailBytes === 0) return "";
+
+  const ordered = Buffer.allocUnsafe(capture.tailBytes);
+  const firstLength = Math.min(capture.tailBytes, capture.tailBuffer.length - capture.tailStart);
+  capture.tailBuffer.copy(ordered, 0, capture.tailStart, capture.tailStart + firstLength);
+  if (firstLength < capture.tailBytes) {
+    capture.tailBuffer.copy(ordered, firstLength, 0, capture.tailBytes - firstLength);
+  }
+
+  let start = 0;
+  while (start < ordered.length && (ordered[start] & 0xc0) === 0x80) start += 1;
+  return ordered.subarray(start).toString("utf8");
+}
+
+function finalClassificationText(capture: BoundedOutputCapture): string {
+  return capture.classificationTailFragmented ? `x${capture.classificationTail}` : capture.classificationTail;
+}
+
+function renderBoundedOutput(
+  capture: BoundedOutputCapture,
+  stream: "stdout" | "stderr"
+): { output: string, tail: string, truncated: boolean } {
+  const capturedTail = renderTail(capture);
+  if (capture.totalBytes <= PROVIDER_OUTPUT_CAPTURE_MAX_BYTES) {
+    const output = `${capture.head}${capturedTail}`;
+    return { output, tail: output, truncated: false };
+  }
+
+  const largestMarker = `\n[builder-agent: ${stream} truncated; omitted ${capture.totalBytes} bytes]\n`;
+  const retainedBytes = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - Buffer.byteLength(largestMarker, "utf8");
+  const head = utf8Prefix(capture.head, Math.floor(retainedBytes / 2));
+  const tail = utf8Suffix(capturedTail, retainedBytes - Buffer.byteLength(head, "utf8"));
+  const omittedBytes = capture.totalBytes - Buffer.byteLength(head, "utf8") - Buffer.byteLength(tail, "utf8");
+  const marker = `\n[builder-agent: ${stream} truncated; omitted ${omittedBytes} bytes]\n`;
+  return {
+    output: `${head}${marker}${tail}`,
+    tail,
+    truncated: true
+  };
+}
+
+function utf8Prefix(value: string, maxBytes: number): string {
+  const bytes = Buffer.from(value, "utf8");
+  if (bytes.length <= maxBytes) return value;
+
+  let end = maxBytes;
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end -= 1;
+  return bytes.subarray(0, end).toString("utf8");
+}
+
+function utf8Suffix(value: string, maxBytes: number): string {
+  const bytes = Buffer.from(value, "utf8");
+  if (bytes.length <= maxBytes) return value;
+
+  let start = bytes.length - maxBytes;
+  while (start < bytes.length && (bytes[start] & 0xc0) === 0x80) start += 1;
+  return bytes.subarray(start).toString("utf8");
 }
 
 function terminateCommandTreeAndWait(
@@ -874,13 +1084,13 @@ function terminateCommandTree(child: ReturnType<typeof spawn>, signal: NodeJS.Si
 /**
  * @param {string} text
  */
-function extractLastJsonObject(text: string): string {
+function extractLastJsonObject(text: string, initialInString = false, initialEscaped = false): string {
   const stripped = text.replace(/```(?:json)?/gi, "```");
   let depth = 0;
   let start = -1;
   let last = "";
-  let inString = false;
-  let escaped = false;
+  let inString = initialInString;
+  let escaped = initialEscaped;
 
   for (let index = 0; index < stripped.length; index += 1) {
     const char = stripped[index];
@@ -902,6 +1112,10 @@ function extractLastJsonObject(text: string): string {
       if (depth === 0) start = index;
       depth += 1;
     } else if (char === "}") {
+      if (depth === 0) {
+        start = -1;
+        continue;
+      }
       depth -= 1;
       if (depth === 0 && start >= 0) {
         last = stripped.slice(start, index + 1);

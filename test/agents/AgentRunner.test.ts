@@ -402,6 +402,511 @@ console.log(JSON.stringify({
     assert.deepEqual(args, ["run", "--cwd", dir, "--model", "zai-coder", "Fix issue #1"]);
   });
 
+  it("bounds provider output while preserving head, tail, and a trailing payload", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write("stdout-head\\n" + "漢".repeat(200_000) + "\\n");
+process.stdout.write(JSON.stringify({ status: "fixed", summary: "payload survived truncation", notes: "checked" }));
+process.stderr.write("stderr-head\\n" + "🙂".repeat(150_000) + "\\nstderr-tail");
+`;
+      const result = await runImplementationAgent({
+        agent: "noisy-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "noisy-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload.status, "fixed");
+      assert.equal(result.payload.summary, "payload survived truncation");
+      assert.match(result.raw, /^stdout-head/);
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.raw, /\[builder-agent: stderr truncated; omitted \d+ bytes\]/);
+      assert.match(result.raw, /stderr-tail/);
+      assert.doesNotMatch(result.raw, /�/);
+      const providerOutput = result.raw.slice(0, result.raw.indexOf('\nAgent "'));
+      assert.ok(Buffer.byteLength(providerOutput, "utf8") <= (2 * 256 * 1024) + 1);
+      assert.match(result.payload.notes, /truncatedOutput=stdout,stderr/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("does not truncate provider output at the exact byte limit", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const payload = JSON.stringify({ status: "fixed", summary: "exact boundary", notes: "checked" });
+      const providerScript = `
+const payload = ${JSON.stringify(payload)};
+process.stdout.write("界".repeat(Math.floor((256 * 1024 - Buffer.byteLength(payload)) / 3)));
+process.stdout.write("x".repeat(256 * 1024 - Buffer.byteLength(payload) - Buffer.byteLength("界".repeat(Math.floor((256 * 1024 - Buffer.byteLength(payload)) / 3)))));
+process.stdout.write(payload);
+`;
+      const result = await runImplementationAgent({
+        agent: "boundary-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "boundary-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload.summary, "exact boundary");
+      assert.doesNotMatch(result.raw, /truncated; omitted/);
+      const providerOutput = result.raw.slice(0, result.raw.indexOf('\nAgent "'));
+      assert.equal(Buffer.byteLength(providerOutput, "utf8"), (256 * 1024) + 1);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("keeps trailing payload bytes in order after a multibyte head boundary", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write("a".repeat((128 * 1024) - 1));
+setTimeout(() => {
+  process.stdout.write("界".repeat(50_000));
+  setTimeout(() => {
+    process.stdout.write(JSON.stringify({ status: "fixed", summary: "ordered trailing payload", notes: "checked" }));
+  }, 20);
+}, 20);
+`;
+      const result = await runImplementationAgent({
+        agent: "boundary-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "boundary-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "ordered trailing payload");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+      assert.doesNotMatch(result.raw, /�/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("parses a trailing payload independently from unbalanced truncated head output", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write('{"message":"unfinished');
+process.stdout.write("a".repeat(300_000));
+process.stdout.write(JSON.stringify({ status: "fixed", summary: "tail payload recovered", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "structured-log-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "structured-log-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "tail payload recovered");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("resynchronizes trailing payload parsing when the retained tail starts inside a string", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write("a".repeat(150_000) + '{"message":"');
+process.stdout.write("b".repeat(200_000));
+process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "resynchronized tail payload", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "quoted-log-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "quoted-log-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "resynchronized tail payload");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("prefers a valid retained-tail payload over an earlier truncated-head payload", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write(JSON.stringify({ status: "fixed", summary: "stale head payload", notes: "checked" }) + "\\n");
+process.stdout.write("a".repeat(150_000));
+process.stdout.write('{"message":"' + "b".repeat(200_000));
+process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "latest tail payload", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "multi-payload-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "multi-payload-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "latest tail payload");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("preserves a later stderr payload when stdout has a valid retained-tail payload", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write("a".repeat(300_000) + JSON.stringify({ status: "fixed", summary: "stale stdout payload", notes: "checked" }));
+process.stderr.write(JSON.stringify({ status: "fixed", summary: "latest stderr payload", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "split-stream-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "split-stream-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "latest stderr payload");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("resynchronizes payload parsing when the retained stderr tail starts inside a string", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stderr.write("a".repeat(150_000) + '{"message":"');
+process.stderr.write("b".repeat(200_000));
+process.stderr.write('"}' + JSON.stringify({ status: "fixed", summary: "recovered stderr tail payload", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "stderr-tail-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "stderr-tail-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "recovered stderr tail payload");
+      assert.match(result.raw, /\[builder-agent: stderr truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stderr/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("classifies provider failures from output omitted by bounded capture", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stderr.write("head\\n" + "a".repeat(150_000));
+process.stderr.write("provider rate limit reached");
+process.stderr.write("b".repeat(150_000) + "\\ntail");
+process.exitCode = 1;
+`;
+      const result = await runImplementationAgent({
+        agent: "noisy-provider,fallback",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "noisy-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              fallbackOn: ["rate_limited"],
+              output: "stdout"
+            },
+            fallback: {
+              command: process.execPath,
+              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload.status, "fixed");
+      assert.equal(result.payload.summary, "fallback selected");
+      assert.match(result.payload.notes, /noisy-provider: exitCode=1, status=fallback, failureClass=rate_limited/);
+      assert.match(result.payload.notes, /truncatedOutput=stderr/);
+      assert.doesNotMatch(result.raw, /provider rate limit reached/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("classifies newline-terminated status codes omitted by bounded capture", async () => {
+    const cases = [
+      { status: "401", fallbackOn: "auth_failed" },
+      { status: "429", fallbackOn: "rate_limited" }
+    ] as const;
+
+    for (const failureCase of cases) {
+      const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+      try {
+        const providerScript = `
+process.stderr.write("head\\n" + "a".repeat(150_000));
+process.stderr.write(${JSON.stringify(`\n${failureCase.status}\n`)});
+process.stderr.write("b".repeat(150_000) + "\\ntail");
+process.exitCode = 1;
+`;
+        const result = await runImplementationAgent({
+          agent: "noisy-provider,fallback",
+          prompt: "Fix issue #1",
+          workspaceDir: dir,
+          env: {
+            ...process.env,
+            KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+              "noisy-provider": {
+                command: process.execPath,
+                args: ["-e", providerScript],
+                fallbackOn: [failureCase.fallbackOn],
+                output: "stdout"
+              },
+              fallback: {
+                command: process.execPath,
+                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+                output: "stdout"
+              }
+            })
+          }
+        });
+
+        assert.equal(result.payload?.summary, "fallback selected", failureCase.status);
+        assert.match(result.payload.notes, new RegExp(`failureClass=${failureCase.fallbackOn}`), failureCase.status);
+        assert.doesNotMatch(result.raw, new RegExp(`\\b${failureCase.status}\\b`), failureCase.status);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    }
+  });
+
+  it("does not classify numeric status prefixes before the next chunk confirms the boundary", async () => {
+    const cases = [
+      { prefix: "401", completed: "4012", fallbackOn: "auth_failed" },
+      { prefix: "429", completed: "4292", fallbackOn: "rate_limited" }
+    ] as const;
+
+    for (const failureCase of cases) {
+      const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+      try {
+        const providerScript = `
+process.stderr.write(${JSON.stringify(failureCase.prefix)});
+setTimeout(() => {
+  process.stderr.write("2");
+  process.exit(1);
+}, 20);
+`;
+        const result = await runImplementationAgent({
+          agent: "split-status-provider,fallback",
+          prompt: "Fix issue #1",
+          workspaceDir: dir,
+          env: {
+            ...process.env,
+            KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+              "split-status-provider": {
+                command: process.execPath,
+                args: ["-e", providerScript],
+                fallbackOn: [failureCase.fallbackOn],
+                output: "stdout"
+              },
+              fallback: {
+                command: process.execPath,
+                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback should not run',notes:'checked'}));"],
+                output: "stdout"
+              }
+            })
+          }
+        });
+
+        assert.equal(result.payload, undefined, failureCase.completed);
+        assert.match(result.raw, new RegExp(failureCase.completed), failureCase.completed);
+        assert.match(result.providerEvidence, /split-status-provider: exitCode=1, status=stopped, failureClass=invalid_payload/, failureCase.completed);
+        assert.doesNotMatch(result.raw, /fallback should not run/, failureCase.completed);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    }
+  });
+
+  it("preserves the left boundary when scanning retained numeric status suffixes", async () => {
+    const cases = [
+      { token: "9401", fallbackOn: "auth_failed" },
+      { token: "9429", fallbackOn: "rate_limited" }
+    ] as const;
+
+    for (const failureCase of cases) {
+      const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+      try {
+        const providerScript = `
+process.stderr.write("head\\n" + "a".repeat(150_000));
+process.stderr.write("b".repeat(150_000));
+process.stderr.write(${JSON.stringify(`\n${failureCase.token} ${"x".repeat(13)}`)});
+process.exitCode = 1;
+`;
+        const result = await runImplementationAgent({
+          agent: "numeric-provider,fallback",
+          prompt: "Fix issue #1",
+          workspaceDir: dir,
+          env: {
+            ...process.env,
+            KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+              "numeric-provider": {
+                command: process.execPath,
+                args: ["-e", providerScript],
+                fallbackOn: [failureCase.fallbackOn],
+                output: "stdout"
+              },
+              fallback: {
+                command: process.execPath,
+                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback should not run',notes:'checked'}));"],
+                output: "stdout"
+              }
+            })
+          }
+        });
+
+        assert.equal(result.payload, undefined, failureCase.token);
+        assert.match(result.raw, new RegExp(failureCase.token), failureCase.token);
+        assert.match(result.providerEvidence, /numeric-provider: exitCode=1, status=stopped, failureClass=invalid_payload/, failureCase.token);
+        assert.match(result.providerEvidence, /truncatedOutput=stderr/, failureCase.token);
+        assert.doesNotMatch(result.raw, /fallback should not run/, failureCase.token);
+      } finally {
+        await rm(dir, { force: true, recursive: true });
+      }
+    }
+  });
+
+  it("prefers a higher-priority last-message failure over streamed evidence", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+const { writeFileSync } = require("node:fs");
+process.stdout.write("provider rate limit reached");
+writeFileSync(process.argv[1], "Unauthorized: login required");
+process.exitCode = 1;
+`;
+      const result = await runImplementationAgent({
+        agent: "last-message-provider,fallback",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "last-message-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript, "{{outputPath}}"],
+              fallbackOn: ["auth_failed"],
+              output: "last-message"
+            },
+            fallback: {
+              command: process.execPath,
+              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'auth fallback selected',notes:'checked'}));"],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "auth fallback selected");
+      assert.match(result.payload.notes, /last-message-provider: exitCode=1, status=fallback, failureClass=auth_failed/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("does not append built-in providers to an explicit custom-only list", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
@@ -794,6 +1299,7 @@ const { spawn } = require("node:child_process");
 const { writeFileSync } = require("node:fs");
 const child = spawn(process.execPath, ["-e", ${JSON.stringify(`const { writeFileSync } = require("node:fs"); process.once("SIGTERM", () => writeFileSync(${JSON.stringify(childSignalPath)}, String(Date.now()))); writeFileSync(${JSON.stringify(childReadyPath)}, "ready"); setInterval(() => {}, 1000);`)}], { stdio: "ignore" });
 writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
+process.stdout.write("x".repeat(300_000));
 setInterval(() => {}, 1000);
 `;
       const resultPromise = runImplementationAgent({
@@ -823,6 +1329,8 @@ setInterval(() => {}, 1000);
       assert.equal(result.exitCode, 1);
       assert.equal(result.payload, undefined);
       assert.match(result.providerEvidence, /timeout-provider: exitCode=1, status=fallback, failureClass=timeout/);
+      assert.match(result.providerEvidence, /truncatedOutput=stdout/);
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
       assert.equal(await waitForProcessExit(childPid), true, `provider child ${childPid} remained alive after timeout`);
     } finally {
       if (childPid && isProcessAlive(childPid)) {
