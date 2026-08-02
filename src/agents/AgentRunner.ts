@@ -698,19 +698,23 @@ function formatProviderFailureDetail(raw: string): string | undefined {
   const finalLine = raw.split(/\r?\n/).map((line) => line.trim()).filter(Boolean).at(-1);
   if (!finalLine) return undefined;
 
-  const redacted = finalLine
-    .replace(/(\bauthorization\b\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|.+)/gi, "$1[REDACTED]")
-    .replace(/\b(Bearer)\s+\S+/gi, "$1 [REDACTED]")
-    .replace(/((?<!\w)["']?(?:[a-z0-9]+[-_])*(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)["']?(?!\w)\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+)/gi, "$1[REDACTED]")
-    .replace(/(\b(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)\b\s+(?:provided|supplied|received|used|is|was)\s*:?\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|\S+)/gi, "$1[REDACTED]")
-    .replace(/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s/]+@/gi, "$1[REDACTED]@")
-    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^:@\s/]+@/gi, "$1[REDACTED]@")
+  const redacted = redactSensitiveProviderOutput(finalLine)
     .replace(/\b(Completed scope|Incomplete scope|Verification|Residual risk)\s*:/gi, "$1=")
     .replace(/\s+/g, " ");
 
   return redacted.length > PROVIDER_FAILURE_DETAIL_MAX_LENGTH
     ? `${redacted.slice(0, PROVIDER_FAILURE_DETAIL_MAX_LENGTH - 1)}…`
     : redacted;
+}
+
+export function redactSensitiveProviderOutput(raw: string): string {
+  return raw
+    .replace(/(\bauthorization\b\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|.+)/gi, "$1[REDACTED]")
+    .replace(/\b(Bearer)\s+\S+/gi, "$1 [REDACTED]")
+    .replace(/((?<!\w)["']?(?:[a-z0-9]+[-_])*(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)["']?(?!\w)\s*[:=]\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n]*?)(?=\s+(?:(?<!\w)["']?(?:[a-z0-9]+[-_])*(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)["']?(?!\w)\s*[:=])|\r?$)/gim, "$1[REDACTED]")
+    .replace(/(\b(?:api[-_ ]?key|access[-_ ]?(?:key|token)|auth[-_ ]?token|refresh[-_ ]?token|client[-_ ]?secret|password|token|secret)\b\s+(?:provided|supplied|received|used|is|was)\s*:?\s*)(?:"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^\r\n]+)/gi, "$1[REDACTED]")
+    .replace(/([a-z][a-z0-9+.-]*:\/\/[^:\s/@]+:)[^@\s/]+@/gi, "$1[REDACTED]@")
+    .replace(/([a-z][a-z0-9+.-]*:\/\/)[^:@\s/]+@/gi, "$1[REDACTED]@");
 }
 
 /**

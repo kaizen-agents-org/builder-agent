@@ -266,6 +266,20 @@ console.log(JSON.stringify({
         failureClass: "auth_failed"
       },
       {
+        name: "unquoted credential containing whitespace",
+        output: "codex is not authenticated; password=correct horse battery",
+        expectedDetail: /Failure detail: codex is not authenticated; password=\[REDACTED\]/,
+        secrets: ["correct", "horse", "battery"],
+        failureClass: "auth_failed"
+      },
+      {
+        name: "descriptive credential containing whitespace",
+        output: "codex is not authenticated; password provided: correct horse battery",
+        expectedDetail: /Failure detail: codex is not authenticated; password provided: \[REDACTED\]/,
+        secrets: ["correct", "horse", "battery"],
+        failureClass: "auth_failed"
+      },
+      {
         name: "provider-prefixed credential fields",
         output: "codex is not authenticated; OPENAI_API_KEY=openai-secret GITHUB_TOKEN=github-secret AWS_SECRET_ACCESS_KEY=aws-secret",
         expectedDetail: /Failure detail: codex is not authenticated; OPENAI_API_KEY=\[REDACTED\] GITHUB_TOKEN=\[REDACTED\] AWS_SECRET_ACCESS_KEY=\[REDACTED\]/,
