@@ -226,8 +226,10 @@ Optional environment:
 
 Built-in providers:
 
-- `claude`: runs `claude -p <prompt> --output-format json ...` in `dontAsk` permission mode. Its shell allowlist covers `npm`, `pnpm`, and `yarn` scripts named `test`, `lint`, `check`, or `validate`; unmatched commands are denied instead of prompting during unattended runs. General-purpose `node`/`npx` execution and direct Git staging, commits, pushes, or PR operations are not allowed.
-- `codex`: runs `codex exec --json --sandbox workspace-write --config 'approval_policy="never"' ...`. The workspace sandbox remains enforced, while unattended runs never wait for an unavailable approver.
+- `claude`: pipes the prompt to `claude -p --output-format json ...` over stdin in `dontAsk` permission mode. Its shell allowlist covers `npm`, `pnpm`, and `yarn` scripts named `test`, `lint`, `check`, or `validate`; unmatched commands are denied instead of prompting during unattended runs. General-purpose `node`/`npx` execution and direct Git staging, commits, pushes, or PR operations are not allowed.
+- `codex`: pipes the prompt to `codex exec --json --sandbox workspace-write --config 'approval_policy="never"' ... -` over stdin. The workspace sandbox remains enforced, while unattended runs never wait for an unavailable approver.
+
+Built-in providers keep the implementation prompt out of process arguments. Custom provider placeholders retain their existing argument-rendering behavior, so `{{prompt}}` should only be used with provider CLIs and prompt sizes suitable for argv.
 
 If a provider exits or fails without returning a valid Builder Agent payload, Builder Agent classifies the failure before deciding whether to try the next provider. Default fallback classes are `command_missing`, `auth_failed`, `rate_limited`, `invalid_payload`, and `timeout`. `provider_blocked` stops fallback unless the provider explicitly opts in. Structured payloads are preserved even when the provider exits non-zero, so an intentional `blocked` result is not retried as an availability failure.
 
