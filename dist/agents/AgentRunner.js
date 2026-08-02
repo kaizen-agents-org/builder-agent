@@ -40,12 +40,14 @@ const AGENT_PROVIDERS = {
     codex: {
         command: "codex",
         output: "last-message",
+        promptOnStdin: true,
         fallbackOn: DEFAULT_FALLBACK_ON,
         createArgs: codexArgs
     },
     claude: {
         command: "claude",
         output: "stdout",
+        promptOnStdin: true,
         fallbackOn: DEFAULT_FALLBACK_ON,
         createArgs: claudeArgs
     }
@@ -163,7 +165,12 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
         }
         const args = provider.createArgs({ prompt, workspaceDir, model, outputPath });
         const attemptEnv = agent === "codex" ? await withCodexCodeModeHost(env, provider.command) : env;
-        const result = await runCommand(provider.command, args, { cwd: workspaceDir, env: attemptEnv, timeoutMs: provider.timeoutMs });
+        const result = await runCommand(provider.command, args, {
+            cwd: workspaceDir,
+            env: attemptEnv,
+            timeoutMs: provider.timeoutMs,
+            stdin: provider.promptOnStdin ? prompt : undefined
+        });
         const lastMessage = provider.output === "last-message" ? await readFile(outputPath, "utf8").catch(() => "") : "";
         const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
         const payloadSource = lastMessage ? "last-message" : "stdout";
@@ -326,6 +333,7 @@ function createCustomProvider(name, value) {
     return {
         command: config.command,
         output,
+        promptOnStdin: false,
         fallbackOn,
         ...(timeoutMs ? { timeoutMs } : {}),
         ...createHealthCheck(config.healthCheck, config.command, name),
@@ -412,7 +420,7 @@ function createHealthCheck(value, providerCommand, name) {
 /**
  * @param {{ prompt: string, workspaceDir: string, model?: string, outputPath: string }} input
  */
-function codexArgs({ prompt, workspaceDir, model, outputPath }) {
+function codexArgs({ workspaceDir, model, outputPath }) {
     const args = [
         "exec",
         "--json",
@@ -427,16 +435,15 @@ function codexArgs({ prompt, workspaceDir, model, outputPath }) {
     ];
     if (model)
         args.push("--model", model);
-    args.push(prompt);
+    args.push("-");
     return args;
 }
 /**
  * @param {{ prompt: string, model?: string }} input
  */
-function claudeArgs({ prompt, model }) {
+function claudeArgs({ model }) {
     const args = [
         "-p",
-        prompt,
         "--output-format",
         "json",
         "--permission-mode",
@@ -659,7 +666,7 @@ function mergeDiscoveredIssues(...issueGroups) {
 /**
  * @param {string} command
  * @param {string[]} args
- * @param {{ cwd: string, env: NodeJS.ProcessEnv, timeoutMs?: number }} options
+ * @param {{ cwd: string, env: NodeJS.ProcessEnv, timeoutMs?: number, stdin?: string }} options
  */
 function runCommand(command, args, options) {
     return new Promise((resolve, reject) => {
@@ -671,10 +678,11 @@ function runCommand(command, args, options) {
         let shutdownTimer;
         let exitCleanup;
         let pendingSettlement;
+        let stdinError;
         const child = spawn(command, args, {
             cwd: options.cwd,
             env: options.env,
-            stdio: ["ignore", "pipe", "pipe"],
+            stdio: [options.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
             detached: useProcessGroup
         });
         const signalHandlers = new Map();
@@ -734,6 +742,12 @@ function runCommand(command, args, options) {
         }
         const stdout = createBoundedOutputCapture();
         const stderr = createBoundedOutputCapture();
+        if (child.stdin) {
+            child.stdin.on("error", (error) => {
+                stdinError = error;
+            });
+            child.stdin.end(options.stdin);
+        }
         child.stdout.setEncoding("utf8");
         child.stderr.setEncoding("utf8");
         child.stdout.on("data", (chunk) => {
@@ -778,6 +792,10 @@ function runCommand(command, args, options) {
                 };
                 if (timedOut) {
                     reject(new CommandTimeoutError(timeoutMs, result));
+                    return;
+                }
+                if (stdinError) {
+                    reject(stdinError);
                     return;
                 }
                 resolve(result);
