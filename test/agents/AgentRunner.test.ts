@@ -478,6 +478,44 @@ process.stdout.write(payload);
     }
   });
 
+  it("keeps trailing payload bytes in order after a multibyte head boundary", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write("a".repeat((128 * 1024) - 1));
+setTimeout(() => {
+  process.stdout.write("界".repeat(50_000));
+  setTimeout(() => {
+    process.stdout.write(JSON.stringify({ status: "fixed", summary: "ordered trailing payload", notes: "checked" }));
+  }, 20);
+}, 20);
+`;
+      const result = await runImplementationAgent({
+        agent: "boundary-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "boundary-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "ordered trailing payload");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+      assert.doesNotMatch(result.raw, /�/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("classifies provider failures from output omitted by bounded capture", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 

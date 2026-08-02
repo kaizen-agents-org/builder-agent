@@ -761,6 +761,7 @@ function runCommand(command, args, options) {
 function createBoundedOutputCapture() {
     return {
         head: "",
+        headComplete: false,
         tail: "",
         tailBytes: 0,
         totalBytes: 0,
@@ -775,13 +776,16 @@ function appendBoundedOutput(capture, chunk) {
     capture.classificationTail = classificationText.slice(-FAILURE_CLASS_SCAN_CARRY_LENGTH);
     capture.totalBytes += Buffer.byteLength(chunk, "utf8");
     const headLimit = Math.floor(PROVIDER_OUTPUT_CAPTURE_MAX_BYTES / 2);
-    const headRemainder = Math.max(0, headLimit - Buffer.byteLength(capture.head, "utf8"));
+    const headRemainder = capture.headComplete
+        ? 0
+        : Math.max(0, headLimit - Buffer.byteLength(capture.head, "utf8"));
     const headChunk = utf8Prefix(chunk, headRemainder);
     capture.head += headChunk;
     const tailChunk = chunk.slice(headChunk.length);
     const tailLimit = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - Buffer.byteLength(capture.head, "utf8");
     if (!tailChunk)
         return;
+    capture.headComplete = true;
     capture.tail += tailChunk;
     capture.tailBytes += Buffer.byteLength(tailChunk, "utf8");
     if (capture.tailBytes > tailLimit) {
