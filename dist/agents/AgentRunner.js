@@ -779,6 +779,7 @@ function runCommand(command, args, options) {
 function createBoundedOutputCapture() {
     return {
         head: "",
+        headBytes: 0,
         headComplete: false,
         tailStart: 0,
         tailBytes: 0,
@@ -796,11 +797,12 @@ function appendBoundedOutput(capture, chunk) {
     const headLimit = Math.floor(PROVIDER_OUTPUT_CAPTURE_MAX_BYTES / 2);
     const headRemainder = capture.headComplete
         ? 0
-        : Math.max(0, headLimit - Buffer.byteLength(capture.head, "utf8"));
+        : Math.max(0, headLimit - capture.headBytes);
     const headChunk = utf8Prefix(chunk, headRemainder);
     capture.head += headChunk;
+    capture.headBytes += Buffer.byteLength(headChunk, "utf8");
     const tailChunk = chunk.slice(headChunk.length);
-    const tailLimit = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - Buffer.byteLength(capture.head, "utf8");
+    const tailLimit = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - capture.headBytes;
     if (!tailChunk)
         return;
     capture.headComplete = true;
