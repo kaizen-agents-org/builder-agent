@@ -627,7 +627,9 @@ setTimeout(() => {
 
       try {
         const providerScript = `
-process.stderr.write(${JSON.stringify(`${failureCase.token} ${"x".repeat(12)}`)});
+process.stderr.write("head\\n" + "a".repeat(150_000));
+process.stderr.write("b".repeat(150_000));
+process.stderr.write(${JSON.stringify(`\n${failureCase.token} ${"x".repeat(13)}`)});
 process.exitCode = 1;
 `;
         const result = await runImplementationAgent({
@@ -655,6 +657,7 @@ process.exitCode = 1;
         assert.equal(result.payload, undefined, failureCase.token);
         assert.match(result.raw, new RegExp(failureCase.token), failureCase.token);
         assert.match(result.providerEvidence, /numeric-provider: exitCode=1, status=stopped, failureClass=invalid_payload/, failureCase.token);
+        assert.match(result.providerEvidence, /truncatedOutput=stderr/, failureCase.token);
         assert.doesNotMatch(result.raw, /fallback should not run/, failureCase.token);
       } finally {
         await rm(dir, { force: true, recursive: true });

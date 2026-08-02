@@ -55,8 +55,10 @@ type CommandResult = {
 type BoundedOutputCapture = {
   head: string;
   tail: string;
+  tailBytes: number;
   totalBytes: number;
   classificationTail: string;
+  classificationTailFragmented: boolean;
   observedFailureClass?: AgentFailureClass;
 };
 
@@ -867,9 +869,9 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
           ],
           observedFailureClass: preferFailureClass(
             stdout.observedFailureClass,
-            detectFailureClass(stdout.classificationTail),
+            detectFailureClass(finalClassificationText(stdout)),
             stderr.observedFailureClass,
-            detectFailureClass(stderr.classificationTail)
+            detectFailureClass(finalClassificationText(stderr))
           )
         };
         if (timedOut) {
@@ -883,15 +885,23 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
 }
 
 function createBoundedOutputCapture(): BoundedOutputCapture {
-  return { head: "", tail: "", totalBytes: 0, classificationTail: "" };
+  return {
+    head: "",
+    tail: "",
+    tailBytes: 0,
+    totalBytes: 0,
+    classificationTail: "",
+    classificationTailFragmented: false
+  };
 }
 
 function appendBoundedOutput(capture: BoundedOutputCapture, chunk: string): void {
   const classificationText = `${capture.classificationTail}${chunk}`.toLowerCase();
   capture.observedFailureClass = preferFailureClass(
     capture.observedFailureClass,
-    detectFailureClass(classificationText, false)
+    detectFailureClass(capture.classificationTailFragmented ? `x${classificationText}` : classificationText, false)
   );
+  capture.classificationTailFragmented ||= classificationText.length > FAILURE_CLASS_SCAN_CARRY_LENGTH;
   capture.classificationTail = classificationText.slice(-FAILURE_CLASS_SCAN_CARRY_LENGTH);
   capture.totalBytes += Buffer.byteLength(chunk, "utf8");
   const headLimit = Math.floor(PROVIDER_OUTPUT_CAPTURE_MAX_BYTES / 2);
@@ -901,7 +911,18 @@ function appendBoundedOutput(capture: BoundedOutputCapture, chunk: string): void
 
   const tailChunk = chunk.slice(headChunk.length);
   const tailLimit = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - Buffer.byteLength(capture.head, "utf8");
-  if (tailChunk) capture.tail = utf8Suffix(`${capture.tail}${tailChunk}`, tailLimit);
+  if (!tailChunk) return;
+
+  capture.tail += tailChunk;
+  capture.tailBytes += Buffer.byteLength(tailChunk, "utf8");
+  if (capture.tailBytes > tailLimit) {
+    capture.tail = utf8Suffix(capture.tail, tailLimit);
+    capture.tailBytes = Buffer.byteLength(capture.tail, "utf8");
+  }
+}
+
+function finalClassificationText(capture: BoundedOutputCapture): string {
+  return capture.classificationTailFragmented ? `x${capture.classificationTail}` : capture.classificationTail;
 }
 
 function renderBoundedOutput(capture: BoundedOutputCapture, stream: "stdout" | "stderr"): { output: string, truncated: boolean } {
