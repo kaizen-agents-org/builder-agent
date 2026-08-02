@@ -6,6 +6,7 @@ import { pathToFileURL } from "node:url";
 import { runBuild } from "./builder/BuilderAgent.js";
 import { writeBuildArtifacts } from "./artifacts.js";
 import { runKaizenLoopBuilder } from "./kaizen-loop.js";
+import { readCliBuildInfo } from "./build-info.js";
 import { normalizeBuildRequest } from "./types/BuildRequest.js";
 const DEFAULT_OUT_DIR = ".kaizen/builder";
 const packageMetadata = createRequire(import.meta.url)("../package.json");
@@ -16,6 +17,10 @@ main(process.argv.slice(2)).catch((error) => {
 async function main(args) {
     const command = args[0];
     if (command === "--version" || command === "-v") {
+        if (args[1] === "--json") {
+            console.log(JSON.stringify(await readCliBuildInfo(), null, 2));
+            return;
+        }
         console.log(`builder-agent ${packageMetadata.version}`);
         return;
     }

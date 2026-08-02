@@ -9,7 +9,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "scripts": {
-    "build": "tsc -p tsconfig.json && node -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
+    "build": "tsc -p tsconfig.json && node scripts/generate-build-info.js && node -e \"require('node:fs').chmodSync('dist/cli.js', 0o755)\"",
     "check:dist": "node scripts/check-dist.js",
     "test": "npm run build && node scripts/run-tests.js",
     "validate:json": "npm run build && node scripts/validate-json.js"
@@ -24,7 +24,8 @@
     "test",
     "docs",
     "SKILL.md",
-    "README.md"
+    "README.md",
+    "tsconfig.json"
   ],
   "engines": {
     "node": ">=20"

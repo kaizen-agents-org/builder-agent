@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFile } from "node:child_process";
-import { chmod, link, mkdir, mkdtemp, readFile, symlink, unlink, writeFile } from "node:fs/promises";
+import { appendFile, chmod, cp, link, mkdir, mkdtemp, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -17,6 +17,52 @@ describe("CLI", () => {
       const { stdout } = await execFileAsync(process.execPath, ["dist/cli.js", flag]);
       assert.equal(stdout.trim(), `builder-agent ${packageMetadata.version}`);
     }
+  });
+
+  it("reports machine-readable build provenance", async () => {
+    const packageMetadata = JSON.parse(await readFile("package.json", "utf8")) as { version: string };
+    const { stdout } = await execFileAsync(process.execPath, ["dist/cli.js", "--version", "--json"]);
+    const buildInfo = JSON.parse(stdout);
+
+    assert.equal(buildInfo.name, "builder-agent");
+    assert.equal(buildInfo.version, packageMetadata.version);
+    assert.match(buildInfo.sourceCommit, /^(?:unknown|[0-9a-f]{40}|[0-9a-f]{64})$/i);
+    assert.match(buildInfo.sourceHash, /^sha256:[0-9a-f]{64}$/);
+    assert.equal(buildInfo.status, "current");
+  });
+
+  it("packages every input needed to verify build provenance", async () => {
+    const { stdout } = await execFileAsync("npm", ["pack", "--dry-run", "--json", "--ignore-scripts"]);
+    const packResult = JSON.parse(stdout) as Array<{ files: Array<{ path: string }> }>;
+    const packagedFiles = packResult[0]?.files.map(({ path }) => path);
+
+    assert.ok(packagedFiles?.includes("tsconfig.json"));
+  });
+
+  it("reports stale or unknown when built source cannot be verified", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-provenance-"));
+    await Promise.all([
+      cp("dist", join(dir, "dist"), { recursive: true }),
+      cp("src", join(dir, "src"), { recursive: true }),
+      cp("scripts", join(dir, "scripts"), { recursive: true }),
+      cp("package.json", join(dir, "package.json")),
+      cp("tsconfig.json", join(dir, "tsconfig.json"))
+    ]);
+    await appendFile(join(dir, "src", "cli.ts"), "\n// changed after build\n", "utf8");
+
+    const { stdout } = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
+    assert.equal(JSON.parse(stdout).status, "stale");
+
+    const buildInfoPath = join(dir, "dist", "build-info.json");
+    const generatedBuildInfo = await readFile(buildInfoPath, "utf8");
+    await writeFile(buildInfoPath, generatedBuildInfo.replace('"sourceCommit": "unknown"', `"sourceCommit": "${"a".repeat(41)}"`));
+    const invalid = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
+    assert.equal(JSON.parse(invalid.stdout).status, "unknown");
+    await writeFile(buildInfoPath, generatedBuildInfo);
+
+    await rm(join(dir, "src"), { recursive: true });
+    const unknown = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
+    assert.equal(JSON.parse(unknown.stdout).status, "unknown");
   });
 
   it("runs the build command and writes structured artifacts", async () => {
