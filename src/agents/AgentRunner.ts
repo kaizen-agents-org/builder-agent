@@ -253,7 +253,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
     const payloadSource = lastMessage ? "last-message" : "stdout";
     let parsedPayload = parseBuilderPayload(lastMessage || raw);
     if (!lastMessage && !parsedPayload.payload && result.stdoutTail) {
-      const parsedTail = parseBuilderPayload(result.stdoutTail);
+      const parsedTail = parseBuilderPayloadFragment(result.stdoutTail);
       if (parsedTail.payload) parsedPayload = parsedTail;
     }
     const rawWithParseError = parsedPayload.error ? `${raw}\n${parsedPayload.error.message}` : raw;
@@ -747,6 +747,19 @@ function parseBuilderPayload(raw: string): {
   }
 }
 
+function parseBuilderPayloadFragment(raw: string): ReturnType<typeof parseBuilderPayload> {
+  const parsed = parseBuilderPayload(raw);
+  if (parsed.payload) return parsed;
+
+  for (const escaped of [false, true]) {
+    const candidate = extractLastJsonObject(raw, true, escaped);
+    const resynchronized = parseBuilderPayload(candidate);
+    if (resynchronized.payload) return resynchronized;
+  }
+
+  return parsed;
+}
+
 function collectDiscoveredIssues(attempts: AgentAttempt[]): DiscoveredIssue[] {
   return mergeDiscoveredIssues(...attempts.map((attempt) => attempt.discoveredIssues ?? []));
 }
@@ -1026,13 +1039,13 @@ function terminateCommandTree(child: ReturnType<typeof spawn>, signal: NodeJS.Si
 /**
  * @param {string} text
  */
-function extractLastJsonObject(text: string): string {
+function extractLastJsonObject(text: string, initialInString = false, initialEscaped = false): string {
   const stripped = text.replace(/```(?:json)?/gi, "```");
   let depth = 0;
   let start = -1;
   let last = "";
-  let inString = false;
-  let escaped = false;
+  let inString = initialInString;
+  let escaped = initialEscaped;
 
   for (let index = 0; index < stripped.length; index += 1) {
     const char = stripped[index];

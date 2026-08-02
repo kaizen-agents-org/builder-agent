@@ -549,6 +549,39 @@ process.stdout.write(JSON.stringify({ status: "fixed", summary: "tail payload re
     }
   });
 
+  it("resynchronizes trailing payload parsing when the retained tail starts inside a string", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write("a".repeat(150_000) + '"');
+process.stdout.write("b".repeat(200_000));
+process.stdout.write('"' + JSON.stringify({ status: "fixed", summary: "resynchronized tail payload", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "quoted-log-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "quoted-log-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "resynchronized tail payload");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("classifies provider failures from output omitted by bounded capture", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 

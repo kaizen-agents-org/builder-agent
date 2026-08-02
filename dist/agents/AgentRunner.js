@@ -169,7 +169,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
         const payloadSource = lastMessage ? "last-message" : "stdout";
         let parsedPayload = parseBuilderPayload(lastMessage || raw);
         if (!lastMessage && !parsedPayload.payload && result.stdoutTail) {
-            const parsedTail = parseBuilderPayload(result.stdoutTail);
+            const parsedTail = parseBuilderPayloadFragment(result.stdoutTail);
             if (parsedTail.payload)
                 parsedPayload = parsedTail;
         }
@@ -623,6 +623,18 @@ function parseBuilderPayload(raw) {
         };
     }
 }
+function parseBuilderPayloadFragment(raw) {
+    const parsed = parseBuilderPayload(raw);
+    if (parsed.payload)
+        return parsed;
+    for (const escaped of [false, true]) {
+        const candidate = extractLastJsonObject(raw, true, escaped);
+        const resynchronized = parseBuilderPayload(candidate);
+        if (resynchronized.payload)
+            return resynchronized;
+    }
+    return parsed;
+}
 function collectDiscoveredIssues(attempts) {
     return mergeDiscoveredIssues(...attempts.map((attempt) => attempt.discoveredIssues ?? []));
 }
@@ -883,13 +895,13 @@ function terminateCommandTree(child, signal, useProcessGroup) {
 /**
  * @param {string} text
  */
-function extractLastJsonObject(text) {
+function extractLastJsonObject(text, initialInString = false, initialEscaped = false) {
     const stripped = text.replace(/```(?:json)?/gi, "```");
     let depth = 0;
     let start = -1;
     let last = "";
-    let inString = false;
-    let escaped = false;
+    let inString = initialInString;
+    let escaped = initialEscaped;
     for (let index = 0; index < stripped.length; index += 1) {
         const char = stripped[index];
         if (inString) {
