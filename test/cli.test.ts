@@ -568,6 +568,7 @@ process.exit(1);
         }
       }),
       (error) => {
+        assert.doesNotMatch(error.message, new RegExp(secret));
         const payloadStart = error.message.lastIndexOf('{\n  "status"');
         const output = JSON.parse(error.message.slice(payloadStart));
         assert.equal(output.status, "blocked");

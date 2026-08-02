@@ -37,7 +37,7 @@ export async function runKaizenLoopBuilder({ stdin, stdout, stderr, env }: Kaize
     stdout.write(`${JSON.stringify(payload, null, 2)}\n`);
 
     if (!result.payload && result.raw.trim()) {
-      stderr.write(tail(result.raw, 4000));
+      stderr.write(tail(redactSensitiveProviderOutput(result.raw), 4000));
     }
 
     return payload;
