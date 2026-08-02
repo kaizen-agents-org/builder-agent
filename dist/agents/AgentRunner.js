@@ -168,7 +168,7 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
         const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
         const payloadSource = lastMessage ? "last-message" : "stdout";
         let parsedPayload = parseBuilderPayload(lastMessage || raw);
-        if (!lastMessage && !parsedPayload.payload && result.stdoutTail) {
+        if (!lastMessage && result.stdoutTail) {
             const parsedTail = parseBuilderPayloadFragment(result.stdoutTail);
             if (parsedTail.payload)
                 parsedPayload = parsedTail;

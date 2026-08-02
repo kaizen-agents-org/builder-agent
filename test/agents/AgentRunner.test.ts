@@ -582,6 +582,40 @@ process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "resynchr
     }
   });
 
+  it("prefers a valid retained-tail payload over an earlier truncated-head payload", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const providerScript = `
+process.stdout.write(JSON.stringify({ status: "fixed", summary: "stale head payload", notes: "checked" }) + "\\n");
+process.stdout.write("a".repeat(150_000));
+process.stdout.write('{"message":"' + "b".repeat(200_000));
+process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "latest tail payload", notes: "checked" }));
+`;
+      const result = await runImplementationAgent({
+        agent: "multi-payload-provider",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "multi-payload-provider": {
+              command: process.execPath,
+              args: ["-e", providerScript],
+              output: "stdout"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.payload?.summary, "latest tail payload");
+      assert.match(result.raw, /\[builder-agent: stdout truncated; omitted \d+ bytes\]/);
+      assert.match(result.payload?.notes, /truncatedOutput=stdout/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("classifies provider failures from output omitted by bounded capture", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 
