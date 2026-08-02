@@ -24,6 +24,7 @@ type AgentCommandInput = {
 type AgentProvider = {
   command: string;
   output: "stdout" | "last-message";
+  promptOnStdin: boolean;
   fallbackOn: AgentFailureClass[];
   timeoutMs?: number;
   healthCheck?: {
@@ -106,12 +107,14 @@ const AGENT_PROVIDERS: Record<string, AgentProvider> = {
   codex: {
     command: "codex",
     output: "last-message",
+    promptOnStdin: true,
     fallbackOn: DEFAULT_FALLBACK_ON,
     createArgs: codexArgs
   },
   claude: {
     command: "claude",
     output: "stdout",
+    promptOnStdin: true,
     fallbackOn: DEFAULT_FALLBACK_ON,
     createArgs: claudeArgs
   }
@@ -250,7 +253,12 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
 
     const args = provider.createArgs({ prompt, workspaceDir, model, outputPath });
     const attemptEnv = agent === "codex" ? await withCodexCodeModeHost(env, provider.command) : env;
-    const result = await runCommand(provider.command, args, { cwd: workspaceDir, env: attemptEnv, timeoutMs: provider.timeoutMs });
+    const result = await runCommand(provider.command, args, {
+      cwd: workspaceDir,
+      env: attemptEnv,
+      timeoutMs: provider.timeoutMs,
+      stdin: provider.promptOnStdin ? prompt : undefined
+    });
     const lastMessage = provider.output === "last-message" ? await readFile(outputPath, "utf8").catch(() => "") : "";
     const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
     const payloadSource = lastMessage ? "last-message" : "stdout";
@@ -425,6 +433,7 @@ function createCustomProvider(name: string, value: unknown): AgentProvider {
   return {
     command: config.command,
     output,
+    promptOnStdin: false,
     fallbackOn,
     ...(timeoutMs ? { timeoutMs } : {}),
     ...createHealthCheck(config.healthCheck, config.command, name),
@@ -515,7 +524,7 @@ function createHealthCheck(value: unknown, providerCommand: string, name: string
 /**
  * @param {{ prompt: string, workspaceDir: string, model?: string, outputPath: string }} input
  */
-function codexArgs({ prompt, workspaceDir, model, outputPath }: AgentCommandInput): string[] {
+function codexArgs({ workspaceDir, model, outputPath }: AgentCommandInput): string[] {
   const args = [
     "exec",
     "--json",
@@ -529,17 +538,16 @@ function codexArgs({ prompt, workspaceDir, model, outputPath }: AgentCommandInpu
     outputPath
   ];
   if (model) args.push("--model", model);
-  args.push(prompt);
+  args.push("-");
   return args;
 }
 
 /**
  * @param {{ prompt: string, model?: string }} input
  */
-function claudeArgs({ prompt, model }: AgentCommandInput): string[] {
+function claudeArgs({ model }: AgentCommandInput): string[] {
   const args = [
     "-p",
-    prompt,
     "--output-format",
     "json",
     "--permission-mode",
@@ -788,9 +796,9 @@ function mergeDiscoveredIssues(...issueGroups: DiscoveredIssue[][]): DiscoveredI
 /**
  * @param {string} command
  * @param {string[]} args
- * @param {{ cwd: string, env: NodeJS.ProcessEnv, timeoutMs?: number }} options
+ * @param {{ cwd: string, env: NodeJS.ProcessEnv, timeoutMs?: number, stdin?: string }} options
  */
-function runCommand(command: string, args: string[], options: { cwd: string, env: NodeJS.ProcessEnv, timeoutMs?: number }): Promise<CommandResult> {
+function runCommand(command: string, args: string[], options: { cwd: string, env: NodeJS.ProcessEnv, timeoutMs?: number, stdin?: string }): Promise<CommandResult> {
   return new Promise((resolve, reject) => {
     const timeoutMs = options.timeoutMs ?? DEFAULT_AGENT_TIMEOUT_MS;
     const useProcessGroup = process.platform !== "win32";
@@ -803,7 +811,7 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
     const child = spawn(command, args, {
       cwd: options.cwd,
       env: options.env,
-      stdio: ["ignore", "pipe", "pipe"],
+      stdio: [options.stdin === undefined ? "ignore" : "pipe", "pipe", "pipe"],
       detached: useProcessGroup
     });
     const signalHandlers = new Map<NodeJS.Signals, () => void>();
@@ -861,12 +869,17 @@ function runCommand(command: string, args: string[], options: { cwd: string, env
     const stdout = createBoundedOutputCapture();
     const stderr = createBoundedOutputCapture();
 
-    child.stdout.setEncoding("utf8");
-    child.stderr.setEncoding("utf8");
-    child.stdout.on("data", (chunk) => {
+    if (child.stdin) {
+      child.stdin.on("error", () => {});
+      child.stdin.end(options.stdin);
+    }
+
+    child.stdout!.setEncoding("utf8");
+    child.stderr!.setEncoding("utf8");
+    child.stdout!.on("data", (chunk) => {
       appendBoundedOutput(stdout, chunk);
     });
-    child.stderr.on("data", (chunk) => {
+    child.stderr!.on("data", (chunk) => {
       appendBoundedOutput(stderr, chunk);
     });
     child.once("exit", () => {

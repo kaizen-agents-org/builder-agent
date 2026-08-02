@@ -15,6 +15,8 @@ describe("AgentRunner provider selection", () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
     const binDir = join(dir, "bin");
     const argsPath = join(dir, "codex-args.json");
+    const stdinPath = join(dir, "codex-stdin.txt");
+    const prompt = `Fix issue #1\n${"large prompt context\n".repeat(20_000)}`;
     await mkdir(binDir);
     await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
     const fakeCodexPath = join(binDir, "codex");
@@ -26,6 +28,9 @@ describe("AgentRunner provider selection", () => {
 const { writeFileSync } = await import("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+let prompt = "";
+for await (const chunk of process.stdin) prompt += chunk;
+writeFileSync(${JSON.stringify(stdinPath)}, prompt);
 const outputIndex = args.indexOf("--output-last-message");
 writeFileSync(args[outputIndex + 1], JSON.stringify({
   status: "fixed",
@@ -46,7 +51,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
 
     const result = await runImplementationAgent({
       agent: "codex",
-      prompt: "Fix issue #1",
+      prompt,
       workspaceDir: dir,
       env: {
         ...process.env,
@@ -54,6 +59,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
       }
     });
     const args = JSON.parse(await readFile(argsPath, "utf8"));
+    const stdin = await readFile(stdinPath, "utf8");
 
     assert.equal(result.exitCode, 0);
     assert.equal(result.payload.status, "fixed");
@@ -77,6 +83,55 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
       'approval_policy="never"',
       "-C"
     ]);
+    assert.equal(args.at(-1), "-");
+    assert.ok(args.every((arg) => arg !== prompt));
+    assert.equal(stdin, prompt);
+  });
+
+  it("keeps long prompts out of argv for the claude backend", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    const binDir = join(dir, "bin");
+    const argsPath = join(dir, "claude-args.json");
+    const stdinPath = join(dir, "claude-stdin.txt");
+    const prompt = `Fix issue #1\n${"large prompt context\n".repeat(20_000)}`;
+    await mkdir(binDir);
+    await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
+    const fakeClaudePath = join(binDir, "claude");
+
+    await writeFile(
+      fakeClaudePath,
+      `#!/usr/bin/env node
+const { writeFileSync } = await import("node:fs");
+const args = process.argv.slice(2);
+writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+let prompt = "";
+for await (const chunk of process.stdin) prompt += chunk;
+writeFileSync(${JSON.stringify(stdinPath)}, prompt);
+console.log(JSON.stringify({
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented with claude\",\"notes\":\"checked\"}\n```")}
+}));
+`,
+      "utf8"
+    );
+    await chmod(fakeClaudePath, 0o755);
+
+    const result = await runImplementationAgent({
+      agent: "claude",
+      prompt,
+      workspaceDir: dir,
+      env: {
+        ...process.env,
+        PATH: `${binDir}:${process.env.PATH}`
+      }
+    });
+    const args = JSON.parse(await readFile(argsPath, "utf8"));
+    const stdin = await readFile(stdinPath, "utf8");
+
+    assert.equal(result.exitCode, 0);
+    assert.equal(result.payload.summary, "implemented with claude");
+    assert.ok(args.includes("-p"));
+    assert.ok(args.every((arg) => arg !== prompt));
+    assert.equal(stdin, prompt);
   });
 
   it("discovers the Desktop code-mode host without overriding an explicit host", async () => {
