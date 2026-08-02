@@ -780,7 +780,7 @@ function createBoundedOutputCapture() {
     return {
         head: "",
         headComplete: false,
-        tail: "",
+        tailStart: 0,
         tailBytes: 0,
         totalBytes: 0,
         classificationTail: "",
@@ -804,25 +804,54 @@ function appendBoundedOutput(capture, chunk) {
     if (!tailChunk)
         return;
     capture.headComplete = true;
-    capture.tail += tailChunk;
-    capture.tailBytes += Buffer.byteLength(tailChunk, "utf8");
-    if (capture.tailBytes > tailLimit) {
-        capture.tail = utf8Suffix(capture.tail, tailLimit);
-        capture.tailBytes = Buffer.byteLength(capture.tail, "utf8");
+    appendTailBytes(capture, Buffer.from(tailChunk, "utf8"), tailLimit);
+}
+function appendTailBytes(capture, chunk, limit) {
+    if (!capture.tailBuffer)
+        capture.tailBuffer = Buffer.allocUnsafe(limit);
+    if (chunk.length >= limit) {
+        chunk.copy(capture.tailBuffer, 0, chunk.length - limit);
+        capture.tailStart = 0;
+        capture.tailBytes = limit;
+        return;
     }
+    const overflow = Math.max(0, capture.tailBytes + chunk.length - limit);
+    capture.tailStart = (capture.tailStart + overflow) % limit;
+    capture.tailBytes -= overflow;
+    const writeOffset = (capture.tailStart + capture.tailBytes) % limit;
+    const firstLength = Math.min(chunk.length, limit - writeOffset);
+    chunk.copy(capture.tailBuffer, writeOffset, 0, firstLength);
+    if (firstLength < chunk.length)
+        chunk.copy(capture.tailBuffer, 0, firstLength);
+    capture.tailBytes += chunk.length;
+}
+function renderTail(capture) {
+    if (!capture.tailBuffer || capture.tailBytes === 0)
+        return "";
+    const ordered = Buffer.allocUnsafe(capture.tailBytes);
+    const firstLength = Math.min(capture.tailBytes, capture.tailBuffer.length - capture.tailStart);
+    capture.tailBuffer.copy(ordered, 0, capture.tailStart, capture.tailStart + firstLength);
+    if (firstLength < capture.tailBytes) {
+        capture.tailBuffer.copy(ordered, firstLength, 0, capture.tailBytes - firstLength);
+    }
+    let start = 0;
+    while (start < ordered.length && (ordered[start] & 0xc0) === 0x80)
+        start += 1;
+    return ordered.subarray(start).toString("utf8");
 }
 function finalClassificationText(capture) {
     return capture.classificationTailFragmented ? `x${capture.classificationTail}` : capture.classificationTail;
 }
 function renderBoundedOutput(capture, stream) {
+    const capturedTail = renderTail(capture);
     if (capture.totalBytes <= PROVIDER_OUTPUT_CAPTURE_MAX_BYTES) {
-        const output = `${capture.head}${capture.tail}`;
+        const output = `${capture.head}${capturedTail}`;
         return { output, tail: output, truncated: false };
     }
     const largestMarker = `\n[builder-agent: ${stream} truncated; omitted ${capture.totalBytes} bytes]\n`;
     const retainedBytes = PROVIDER_OUTPUT_CAPTURE_MAX_BYTES - Buffer.byteLength(largestMarker, "utf8");
     const head = utf8Prefix(capture.head, Math.floor(retainedBytes / 2));
-    const tail = utf8Suffix(capture.tail, retainedBytes - Buffer.byteLength(head, "utf8"));
+    const tail = utf8Suffix(capturedTail, retainedBytes - Buffer.byteLength(head, "utf8"));
     const omittedBytes = capture.totalBytes - Buffer.byteLength(head, "utf8") - Buffer.byteLength(tail, "utf8");
     const marker = `\n[builder-agent: ${stream} truncated; omitted ${omittedBytes} bytes]\n`;
     return {
@@ -925,6 +954,10 @@ function extractLastJsonObject(text, initialInString = false, initialEscaped = f
             depth += 1;
         }
         else if (char === "}") {
+            if (depth === 0) {
+                start = -1;
+                continue;
+            }
             depth -= 1;
             if (depth === 0 && start >= 0) {
                 last = stripped.slice(start, index + 1);

@@ -554,9 +554,9 @@ process.stdout.write(JSON.stringify({ status: "fixed", summary: "tail payload re
 
     try {
       const providerScript = `
-process.stdout.write("a".repeat(150_000) + '"');
+process.stdout.write("a".repeat(150_000) + '{"message":"');
 process.stdout.write("b".repeat(200_000));
-process.stdout.write('"' + JSON.stringify({ status: "fixed", summary: "resynchronized tail payload", notes: "checked" }));
+process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "resynchronized tail payload", notes: "checked" }));
 `;
       const result = await runImplementationAgent({
         agent: "quoted-log-provider",
