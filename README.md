@@ -145,7 +145,10 @@ Check installation:
 ```sh
 npm run build
 node dist/cli.js --version
+node dist/cli.js --version --json
 ```
+
+The JSON form reports `version`, `sourceCommit`, `sourceHash`, and a `status` of `current`, `stale`, or `unknown`. Local builds use `"unknown"` for `sourceCommit` unless a full commit hash is supplied with `BUILDER_AGENT_SOURCE_COMMIT`; the source hash still detects when a linked CLI's generated `dist/` no longer matches its package source.
 
 Build typed output:
 
