@@ -48,7 +48,7 @@ describe("TypeScript build boundaries", () => {
 });
 
 describe("builder handoff contract", () => {
-  it("keeps generated dist freshness in CI without duplicating it in pre-PR verification", async () => {
+  it("keeps generated dist freshness in CI and pre-PR verification", async () => {
     const [agents, kaizenConfig, ci] = await Promise.all([
       readFile("AGENTS.md", "utf8"),
       readFile(".kaizen/config.yml", "utf8"),
@@ -56,7 +56,7 @@ describe("builder handoff contract", () => {
     ]);
 
     assert.doesNotMatch(agents, /npm run check:dist/);
-    assert.doesNotMatch(kaizenConfig, /  verify:\n(?:    - .+\n)*    - "npm run check:dist"/);
+    assert.match(kaizenConfig, /  verify:\n    - "npm run check:dist"\n    - "npm test"/);
     assert.match(ci, /      - run: npm run check:dist\n      - run: npm test/);
   });
 
