@@ -183,15 +183,16 @@ The command writes:
 
 - `.kaizen/builder/self-review.json`
 - `.kaizen/builder/build-result.json`
+- `.kaizen/builder/discovered-issues.json` (cumulative discovered-issue handoff across all iterations)
 - `.kaizen/builder/iterations/<n>/implementation-summary.json`
 - `.kaizen/builder/iterations/<n>/changed-files.json` (files newly added to the cumulative changed-file set by that iteration)
-- `.kaizen/builder/iterations/<n>/discovered-issues.json`
+- `.kaizen/builder/iterations/<n>/discovered-issues.json` (discovered-issue evidence for that iteration)
 - `.kaizen/builder/iterations/<n>/self-review.json`
 - `.kaizen/builder/iterations/<n>/improvement-instructions.json`
 - `.kaizen/builder/iterations/<n>/verification.json`
 - `.kaizen/builder/iterations/<n>/residual-notes.json`
 
-The top-level files always contain the latest/final handoff for compatibility, including the cumulative `build-result.json.changedFiles` list. Each completed implementation/self-review iteration is also retained under `iterations/<n>/` so reviewers can inspect how the loop changed, converged, or became blocked; its `changed-files.json` contains only the files newly added to that cumulative set by the iteration.
+The top-level files always contain the latest/final handoff for compatibility, including the cumulative `build-result.json.changedFiles` list and cumulative `discovered-issues.json`. Each completed implementation/self-review iteration is also retained under `iterations/<n>/` so reviewers can inspect how the loop changed, converged, or became blocked; its `changed-files.json` contains only the files newly added to that cumulative set by the iteration, while its `discovered-issues.json` preserves that iteration's evidence.
 
 Adapter `implement()` and `improve()` results may report `verification` entries with the command, a `passed`, `failed`, or `skipped` status, and a concise outcome or skip reason. Builder Agent normalizes and accumulates those entries in the final build result while retaining each iteration's evidence in its own `verification.json`. Use `residualNotes` for non-verification caveats, assumptions, risks, and reviewer notes.
 
