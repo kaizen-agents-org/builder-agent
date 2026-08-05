@@ -76,7 +76,8 @@ try {
       if (compareCommittedOutput) {
         process.stderr.write(result.stdout);
       }
-      console.error("Run `npm run build` and keep the regenerated dist/ files.");
+      console.error("Run `npm run build` to regenerate the dist/ files.");
+      restoreOriginalDist();
       process.exitCode = 1;
     } else {
       process.stderr.write(result.stderr);
