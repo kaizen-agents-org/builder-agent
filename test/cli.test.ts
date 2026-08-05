@@ -191,10 +191,16 @@ console.log(JSON.stringify({
     assert.doesNotMatch(allowedTools, /Bash\((?:node|npx):\*\)/);
     assert.match(allowedTools, /Bash\(npm test:\*\)/);
     assert.match(allowedTools, /Bash\(npm run validate:\*\)/);
+    assert.match(allowedTools, /Bash\(npm run typecheck:\*\)/);
+    assert.match(allowedTools, /Bash\(npm run build:\*\)/);
     assert.match(allowedTools, /Bash\(pnpm test:\*\)/);
     assert.match(allowedTools, /Bash\(pnpm run lint:\*\)/);
+    assert.match(allowedTools, /Bash\(pnpm run typecheck:\*\)/);
+    assert.match(allowedTools, /Bash\(pnpm run build:\*\)/);
     assert.match(allowedTools, /Bash\(yarn test:\*\)/);
     assert.match(allowedTools, /Bash\(yarn run check:\*\)/);
+    assert.match(allowedTools, /Bash\(yarn run typecheck:\*\)/);
+    assert.match(allowedTools, /Bash\(yarn run build:\*\)/);
     assert.match(allowedTools, /\bRead\b/);
     assert.match(allowedTools, /\bWrite\b/);
     assert.match(allowedTools, /\bEdit\b/);

@@ -34,7 +34,9 @@ const CLAUDE_VERIFICATION_TOOLS = ["npm", "pnpm", "yarn"].flatMap((command) => [
     `Bash(${command} run test:*)`,
     `Bash(${command} run lint:*)`,
     `Bash(${command} run check:*)`,
-    `Bash(${command} run validate:*)`
+    `Bash(${command} run validate:*)`,
+    `Bash(${command} run typecheck:*)`,
+    `Bash(${command} run build:*)`
 ]);
 const AGENT_PROVIDERS = {
     codex: {

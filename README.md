@@ -227,7 +227,7 @@ Optional environment:
 
 Built-in providers:
 
-- `claude`: pipes the prompt to `claude -p --output-format json ...` over stdin in `dontAsk` permission mode. Its shell allowlist covers `npm`, `pnpm`, and `yarn` scripts named `test`, `lint`, `check`, or `validate`; unmatched commands are denied instead of prompting during unattended runs. General-purpose `node`/`npx` execution and direct Git staging, commits, pushes, or PR operations are not allowed.
+- `claude`: pipes the prompt to `claude -p --output-format json ...` over stdin in `dontAsk` permission mode. Its shell allowlist covers `npm`, `pnpm`, and `yarn` scripts named `test`, `lint`, `check`, `validate`, `typecheck`, or `build`; unmatched commands are denied instead of prompting during unattended runs. General-purpose `node`/`npx` execution and direct Git staging, commits, pushes, or PR operations are not allowed.
 - `codex`: pipes the prompt to `codex exec --json --sandbox workspace-write --config 'approval_policy="never"' ... -` over stdin. The workspace sandbox remains enforced, while unattended runs never wait for an unavailable approver.
 
 Built-in providers keep the implementation prompt out of process arguments. Custom providers retain their existing argument-rendering behavior by default, so `{{prompt}}` should only be used in `args` with provider CLIs and prompt sizes suitable for argv. Set `promptOnStdin` to `true` to pipe the prompt to a custom provider instead; omit `{{prompt}}` from `args` to keep it out of process arguments.
