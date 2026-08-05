@@ -25,6 +25,7 @@ type AgentProvider = {
   command: string;
   output: "stdout" | "last-message";
   promptOnStdin: boolean;
+  renderPrompt?(input: AgentCommandInput): string;
   fallbackOn: AgentFailureClass[];
   timeoutMs?: number;
   healthCheck?: {
@@ -93,7 +94,7 @@ const FAILURE_CLASS_SCAN_CARRY_LENGTH = Math.max(
   4,
   ...Object.values(FAILURE_CLASS_LITERALS).flat().map((value) => value.length)
 );
-const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
+const CUSTOM_PROVIDER_FIELDS = new Set(["command", "args", "promptTemplate", "promptOnStdin", "output", "timeoutMs", "fallbackOn", "healthCheck"]);
 const HEALTH_CHECK_FIELDS = new Set(["command", "args", "timeoutMs"]);
 const CLAUDE_VERIFICATION_TOOLS = ["npm", "pnpm", "yarn"].flatMap((command) => [
   `Bash(${command} test:*)`,
@@ -252,12 +253,15 @@ async function runAgentAttempt({ agent, provider, prompt, workspaceDir, model, e
     }
 
     const args = provider.createArgs({ prompt, workspaceDir, model, outputPath });
+    const stdinPrompt = provider.promptOnStdin
+      ? provider.renderPrompt?.({ prompt, workspaceDir, model, outputPath }) ?? prompt
+      : undefined;
     const attemptEnv = agent === "codex" ? await withCodexCodeModeHost(env, provider.command) : env;
     const result = await runCommand(provider.command, args, {
       cwd: workspaceDir,
       env: attemptEnv,
       timeoutMs: provider.timeoutMs,
-      stdin: provider.promptOnStdin ? prompt : undefined
+      stdin: stdinPrompt
     });
     const lastMessage = provider.output === "last-message" ? await readFile(outputPath, "utf8").catch(() => "") : "";
     const raw = `${result.stdout}${result.stderr}\n${lastMessage}`;
@@ -428,12 +432,14 @@ function createCustomProvider(name: string, value: unknown): AgentProvider {
     ? config.promptTemplate
     : "{{prompt}}";
   const output = normalizeProviderOutput(config.output, name);
+  const promptOnStdin = normalizePromptOnStdin(config.promptOnStdin, name);
   const fallbackOn = normalizeFallbackOn(config.fallbackOn, name);
   const timeoutMs = normalizeTimeoutMs(config.timeoutMs, `Provider "${name}" timeoutMs`);
   return {
     command: config.command,
     output,
-    promptOnStdin: false,
+    promptOnStdin,
+    renderPrompt: (input) => renderTemplate(promptTemplate, input),
     fallbackOn,
     ...(timeoutMs ? { timeoutMs } : {}),
     ...createHealthCheck(config.healthCheck, config.command, name),
@@ -442,6 +448,12 @@ function createCustomProvider(name: string, value: unknown): AgentProvider {
       return renderArgs(args, { ...input, prompt: renderedPrompt });
     }
   };
+}
+
+function normalizePromptOnStdin(value: unknown, name: string): boolean {
+  if (value === undefined) return false;
+  if (typeof value === "boolean") return value;
+  throw new Error(`Provider "${name}" promptOnStdin must be a boolean.`);
 }
 
 function assertKnownFields(value: Record<string, unknown>, allowedFields: Set<string>, label: string): void {

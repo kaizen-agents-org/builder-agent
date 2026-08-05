@@ -522,6 +522,75 @@ console.log(JSON.stringify({
     assert.deepEqual(args, ["run", "--cwd", dir, "--model", "zai-coder", "Fix issue #1"]);
   });
 
+  it("pipes a rendered prompt to custom provider stdin without adding it to argv", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+
+    try {
+      const binDir = join(dir, "bin");
+      const argsPath = join(dir, "stdin-provider-args.json");
+      const stdinPath = join(dir, "stdin-provider-prompt.txt");
+      const promptMarker = "custom-stdin-prompt-marker-83bc";
+      const prompt = `Fix issue #200\n${promptMarker}\n${"large custom provider context\n".repeat(20_000)}`;
+      await mkdir(binDir);
+      await writeFile(join(binDir, "package.json"), '{"type":"module"}', "utf8");
+      const fakeProviderPath = join(binDir, "stdin-provider");
+
+      await writeFile(
+        fakeProviderPath,
+        `#!/usr/bin/env node
+(async () => {
+const { writeFileSync } = await import("node:fs");
+const args = process.argv.slice(2);
+writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
+let prompt = "";
+for await (const chunk of process.stdin) prompt += chunk;
+writeFileSync(${JSON.stringify(stdinPath)}, prompt);
+const outputIndex = args.indexOf("--output");
+writeFileSync(args[outputIndex + 1], JSON.stringify({
+  status: "fixed",
+  summary: "implemented by stdin provider",
+  notes: "checked"
+}));
+})();
+`,
+        "utf8"
+      );
+      await chmod(fakeProviderPath, 0o755);
+
+      const result = await runImplementationAgent({
+        agent: "stdin-provider",
+        prompt,
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          PATH: `${binDir}:${process.env.PATH}`,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "stdin-provider": {
+              command: "stdin-provider",
+              args: ["run", "--workspace", "{{workspaceDir}}", "--output", "{{outputPath}}"],
+              promptTemplate: "Return only Builder Agent JSON.\n\n{{prompt}}",
+              promptOnStdin: true,
+              output: "last-message"
+            }
+          })
+        }
+      });
+      const args = JSON.parse(await readFile(argsPath, "utf8"));
+      const stdin = await readFile(stdinPath, "utf8");
+
+      assert.equal(result.payload?.status, "fixed");
+      assert.equal(result.payload?.summary, "implemented by stdin provider");
+      assert.deepEqual(args.slice(0, 3), ["run", "--workspace", dir]);
+      assert.equal(args[3], "--output");
+      assert.doesNotMatch(JSON.stringify(args), new RegExp(promptMarker));
+      assert.equal(stdin, `Return only Builder Agent JSON.\n\n${prompt}`);
+      assert.match(result.payload?.notes ?? "", /stdin-provider: exitCode=0, status=selected/);
+      assert.match(result.payload?.notes ?? "", /Final payload source: last-message/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("bounds provider output while preserving head, tail, and a trailing payload", async () => {
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 
@@ -1207,7 +1276,33 @@ console.log(JSON.stringify({
       assert.equal(result.exitCode, 1);
       assert.equal(result.payload, undefined);
       assert.match(result.raw, /Provider "hermes-agent" has unsupported field: extraSetting/);
-      assert.match(result.raw, /Supported fields: command, args, promptTemplate, output, timeoutMs, fallbackOn, healthCheck/);
+      assert.match(result.raw, /Supported fields: command, args, promptTemplate, promptOnStdin, output, timeoutMs, fallbackOn, healthCheck/);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects non-boolean custom provider promptOnStdin values", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
+    try {
+      const result = await runImplementationAgent({
+        agent: "hermes-agent",
+        prompt: "Fix issue #1",
+        workspaceDir: dir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS: JSON.stringify({
+            "hermes-agent": {
+              command: process.execPath,
+              promptOnStdin: "true"
+            }
+          })
+        }
+      });
+
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.payload, undefined);
+      assert.match(result.raw, /Provider "hermes-agent" promptOnStdin must be a boolean/);
     } finally {
       await rm(dir, { force: true, recursive: true });
     }

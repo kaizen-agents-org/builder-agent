@@ -183,6 +183,7 @@ export interface AgentProviderConfig {
     command: string;
     args?: string[];
     promptTemplate?: string;
+    promptOnStdin?: boolean;
     output?: "stdout" | "last-message";
     timeoutMs?: number;
     fallbackOn?: AgentFailureClass[];
