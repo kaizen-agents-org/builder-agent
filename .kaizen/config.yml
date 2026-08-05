@@ -50,6 +50,7 @@ scheduler:
 commands:
   setup: "npm install"
   verify:
+    - "npm run check:dist"
     - "npm test"
     - "npm run validate:json"
     - "test -f skills/gh-link-issue-pr/SKILL.md && test -f skills/kaizen-bug-router/SKILL.md && test -f skills/pr-guardian/SKILL.md"
