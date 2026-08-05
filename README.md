@@ -230,7 +230,7 @@ Built-in providers:
 - `claude`: pipes the prompt to `claude -p --output-format json ...` over stdin in `dontAsk` permission mode. Its shell allowlist covers `npm`, `pnpm`, and `yarn` scripts named `test`, `lint`, `check`, `validate`, `typecheck`, or `build`; unmatched commands are denied instead of prompting during unattended runs. General-purpose `node`/`npx` execution and direct Git staging, commits, pushes, or PR operations are not allowed.
 - `codex`: pipes the prompt to `codex exec --json --sandbox workspace-write --config 'approval_policy="never"' ... -` over stdin. The workspace sandbox remains enforced, while unattended runs never wait for an unavailable approver.
 
-Built-in providers keep the implementation prompt out of process arguments. Custom provider placeholders retain their existing argument-rendering behavior, so `{{prompt}}` should only be used with provider CLIs and prompt sizes suitable for argv.
+Built-in providers keep the implementation prompt out of process arguments. Custom providers retain their existing argument-rendering behavior by default, so `{{prompt}}` should only be used in `args` with provider CLIs and prompt sizes suitable for argv. Set `promptOnStdin` to `true` to pipe the prompt to a custom provider instead; omit `{{prompt}}` from `args` to keep it out of process arguments.
 
 If a provider exits or fails without returning a valid Builder Agent payload, Builder Agent classifies the failure before deciding whether to try the next provider. Default fallback classes are `command_missing`, `auth_failed`, `rate_limited`, `invalid_payload`, and `timeout`. `provider_blocked` stops fallback unless the provider explicitly opts in. Structured payloads are preserved even when the provider exits non-zero, so an intentional `blocked` result is not retried as an availability failure.
 
@@ -241,7 +241,8 @@ KAIZEN_PREFERRED_AGENT=opencode-go,codex,claude \
 KAIZEN_AGENT_PROVIDERS='{
   "opencode-go": {
     "command": "opencode-go",
-    "args": ["run", "--cwd", "{{workspaceDir}}", "--model", "{{model}}", "{{prompt}}"],
+    "args": ["run", "--cwd", "{{workspaceDir}}", "--model", "{{model}}"],
+    "promptOnStdin": true,
     "output": "stdout"
   },
   "zai": {
@@ -253,7 +254,7 @@ KAIZEN_AGENT_PROVIDERS='{
 builder-agent < prompt.txt
 ```
 
-Provider `args` support `{{prompt}}`, `{{workspaceDir}}`, `{{model}}`, and `{{outputPath}}` placeholders. `{{model}}` renders as an empty value when `KAIZEN_AGENT_MODEL` is unset. `output` is `stdout` by default; use `last-message` for CLIs that write the final response to the `{{outputPath}}` file. Empty placeholder values are omitted; if the omitted value follows a flag-like argument such as `--model`, the flag is omitted too.
+Provider `args` support `{{prompt}}`, `{{workspaceDir}}`, `{{model}}`, and `{{outputPath}}` placeholders. `{{model}}` renders as an empty value when `KAIZEN_AGENT_MODEL` is unset. `promptOnStdin` defaults to `false` for compatibility; when `true`, Builder Agent writes the `promptTemplate` result to stdin. An explicit `{{prompt}}` in `args` is still rendered as well, so omit that placeholder when the prompt must only use stdin. `output` is `stdout` by default; use `last-message` for CLIs that write the final response to the `{{outputPath}}` file. Empty placeholder values are omitted; if the omitted value follows a flag-like argument such as `--model`, the flag is omitted too.
 
 Captured stdout and stderr are each limited to 256 KiB, split between head and tail context so trailing payloads and diagnostics remain available. Truncated streams include an omission marker in raw output and are listed in provider evidence as `truncatedOutput`.
 
@@ -270,6 +271,7 @@ The file may be either the provider object itself or `{ "providers": { ... } }`.
 - `command`: executable name or path.
 - `args`: command arguments with `{{prompt}}`, `{{workspaceDir}}`, `{{model}}`, and `{{outputPath}}` placeholders.
 - `promptTemplate`: provider-specific prompt wrapper. Defaults to `{{prompt}}`.
+- `promptOnStdin`: when `true`, pipe the rendered `promptTemplate` to provider stdin. Defaults to `false`.
 - `output`: `stdout` or `last-message`.
 - `timeoutMs`: execution timeout.
 - `healthCheck`: optional `{ "command", "args", "timeoutMs" }` check run before execution. Omitted `command` uses the provider command.
