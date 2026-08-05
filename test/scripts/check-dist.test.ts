@@ -64,7 +64,7 @@ describe("check-dist CLI", () => {
     await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
   });
 
-  it("rejects stale output and leaves the rebuilt files for review", async () => {
+  it("rejects stale output and restores the original files", async () => {
     const fixture = await createFixture(
       'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "fresh\\n");'
     );
@@ -79,7 +79,7 @@ describe("check-dist CLI", () => {
       (error: { code?: number; stderr?: string }) =>
         error.code === 1 && Boolean(error.stderr?.includes("Generated dist files are stale"))
     );
-    assert.equal(await readFile(join(fixture.root, "dist/output.js"), "utf8"), "fresh\n");
+    assert.equal(await readFile(join(fixture.root, "dist/output.js"), "utf8"), "stale\n");
     await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
   });
 
@@ -88,7 +88,7 @@ describe("check-dist CLI", () => {
       'import { mkdirSync, writeFileSync } from "node:fs"; mkdirSync("dist", { recursive: true }); writeFileSync("dist/output.js", "fresh\\n");'
     );
     await mkdir(join(fixture.root, "dist"));
-    await writeFile(join(fixture.root, "dist/output.js"), "fresh\n");
+    await writeFile(join(fixture.root, "dist/output.js"), "original\n");
     const stubGit = await writeGitSpawnStub(fixture.root, {
       status: 0,
       stdout: " M dist/output.js\n"
@@ -102,6 +102,7 @@ describe("check-dist CLI", () => {
       (error: { code?: number; stderr?: string }) =>
         error.code === 1 && Boolean(error.stderr?.includes(" M dist/output.js"))
     );
+    assert.equal(await readFile(join(fixture.root, "dist/output.js"), "utf8"), "original\n");
     await assertTemporarySnapshotRemoved(fixture.fixtureTmp);
   });
 
