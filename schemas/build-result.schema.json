@@ -34,11 +34,13 @@
         "summary": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Adapter analysis summary, or a deterministic task-based fallback."
         },
         "goal": {
           "type": "string",
           "minLength": 1,
+          "pattern": "\\S",
           "description": "Optional normalized goal from the build request."
         },
         "constraints": {
@@ -46,7 +48,8 @@
           "description": "Normalized request constraints known before implementation.",
           "items": {
             "type": "string",
-            "minLength": 1
+            "minLength": 1,
+            "pattern": "\\S"
           }
         }
       }
@@ -54,6 +57,7 @@
     "planSummary": {
       "type": "string",
       "minLength": 1,
+      "pattern": "\\S",
       "description": "Short summary of the implementation plan that was followed."
     },
     "changedFiles": {
@@ -61,7 +65,8 @@
       "description": "Files reported by the builder adapter and reconciled with workspace changes when git metadata is available.",
       "items": {
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "pattern": "\\S"
       }
     },
     "review": {
@@ -99,7 +104,8 @@
       "description": "Remaining non-verification caveats, assumptions, risks, or reviewer notes.",
       "items": {
         "type": "string",
-        "minLength": 1
+        "minLength": 1,
+        "pattern": "\\S"
       }
     },
     "discoveredIssues": {
