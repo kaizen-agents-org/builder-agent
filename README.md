@@ -223,7 +223,7 @@ Optional environment:
 - `KAIZEN_PREFERRED_AGENT`: preferred backend or comma-separated fallback order, for example `codex,claude`. Defaults to `codex,claude`. When set, the listed providers are tried exactly in that order; built-in providers are not appended implicitly.
 - `KAIZEN_AGENT_MODEL`: model name passed through to the selected backend.
 - `KAIZEN_AGENT_PROVIDERS`: JSON object for custom backend providers.
-- `KAIZEN_AGENT_PROVIDERS_FILE`: path to a JSON provider registry. Relative paths are resolved from `KAIZEN_WORKSPACE_DIR`.
+- `KAIZEN_AGENT_PROVIDERS_FILE`: path to a JSON provider registry. Relative paths are resolved from `KAIZEN_WORKSPACE_DIR`, and the resolved file must remain inside that workspace, including after symlink resolution.
 
 Built-in providers:
 

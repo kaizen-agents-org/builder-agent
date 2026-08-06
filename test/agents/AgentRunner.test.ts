@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { execFileSync, spawn } from "node:child_process";
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, it } from "node:test";
@@ -1243,7 +1243,7 @@ console.log(JSON.stringify({
       env: {
         ...process.env,
         PATH: `${binDir}:${process.env.PATH}`,
-        KAIZEN_AGENT_PROVIDERS_FILE: providerConfigPath
+        KAIZEN_AGENT_PROVIDERS_FILE: "providers.json"
       }
     });
     const args = JSON.parse(await readFile(argsPath, "utf8"));
@@ -1251,6 +1251,59 @@ console.log(JSON.stringify({
     assert.equal(result.payload.status, "fixed");
     assert.equal(result.payload.summary, "implemented by hermes-style provider");
     assert.deepEqual(args, ["run", "--input", "Hermes task:\nFix issue #1"]);
+  });
+
+  it("rejects an absolute KAIZEN_AGENT_PROVIDERS_FILE path outside the workspace", async () => {
+    const workspaceDir = await mkdtemp(join(tmpdir(), "builder-agent-workspace-"));
+    const outsideDir = await mkdtemp(join(tmpdir(), "builder-agent-providers-"));
+    const providerConfigPath = join(outsideDir, "providers.json");
+    try {
+      await writeFile(providerConfigPath, "{}", "utf8");
+
+      const result = await runImplementationAgent({
+        agent: "codex",
+        prompt: "Fix issue #1",
+        workspaceDir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS_FILE: providerConfigPath
+        }
+      });
+
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.payload, undefined);
+      assert.match(result.raw, /KAIZEN_AGENT_PROVIDERS_FILE must resolve to a file inside KAIZEN_WORKSPACE_DIR/);
+    } finally {
+      await rm(workspaceDir, { force: true, recursive: true });
+      await rm(outsideDir, { force: true, recursive: true });
+    }
+  });
+
+  it("rejects a relative KAIZEN_AGENT_PROVIDERS_FILE path that escapes through a symlink", async () => {
+    const workspaceDir = await mkdtemp(join(tmpdir(), "builder-agent-workspace-"));
+    const outsideDir = await mkdtemp(join(tmpdir(), "builder-agent-providers-"));
+    const providerConfigPath = join(outsideDir, "providers.json");
+    try {
+      await writeFile(providerConfigPath, "{}", "utf8");
+      await symlink(providerConfigPath, join(workspaceDir, "providers.json"));
+
+      const result = await runImplementationAgent({
+        agent: "codex",
+        prompt: "Fix issue #1",
+        workspaceDir,
+        env: {
+          ...process.env,
+          KAIZEN_AGENT_PROVIDERS_FILE: "providers.json"
+        }
+      });
+
+      assert.equal(result.exitCode, 1);
+      assert.equal(result.payload, undefined);
+      assert.match(result.raw, /KAIZEN_AGENT_PROVIDERS_FILE must resolve to a file inside KAIZEN_WORKSPACE_DIR/);
+    } finally {
+      await rm(workspaceDir, { force: true, recursive: true });
+      await rm(outsideDir, { force: true, recursive: true });
+    }
   });
 
   it("rejects unsupported custom provider fields from KAIZEN_AGENT_PROVIDERS", async () => {
