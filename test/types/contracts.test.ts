@@ -55,7 +55,7 @@ describe("builder handoff contract", () => {
       readFile(".github/workflows/ci.yml", "utf8")
     ]);
 
-    assert.doesNotMatch(agents, /npm run check:dist/);
+    assert.match(agents, /npm run check:dist\nnpm test\nnpm run validate:json/);
     assert.match(kaizenConfig, /  verify:\n    - "npm run check:dist"\n    - "npm test"/);
     assert.match(ci, /      - run: npm run check:dist\n      - run: npm test/);
   });
