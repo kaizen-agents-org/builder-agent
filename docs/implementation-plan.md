@@ -142,13 +142,15 @@ The improve prompt should turn review findings into concrete implementation work
 
 Status: implemented for the MVP command-adapter flow.
 
-Current integration contract:
+Current Kaizen Loop command-adapter contract:
 
-- `kaizen-loop` provides a normalized build request.
+- `kaizen-loop` passes the implementation prompt to `builder-agent` on stdin and sets `KAIZEN_BUILD_RESULT_PATH`.
 - Builder Agent edits the isolated workspace.
-- Builder Agent returns `build-result.json` and `self-review.json`.
+- Builder Agent writes one normalized `KaizenLoopPayload` to `KAIZEN_BUILD_RESULT_PATH` and prints the same payload to stdout.
 - `kaizen-loop` runs mechanical verification.
 - `kaizen-loop` sends the result to the independent verifier.
+
+This differs from the standalone adapter CLI described in Phase 5: `builder-agent build` reads a normalized build request and writes the detailed `build-result.json`, `self-review.json`, and per-iteration artifacts.
 
 Builder Agent should not create branches, commits, pull requests, or issue comments.
 
