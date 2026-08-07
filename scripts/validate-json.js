@@ -26,6 +26,7 @@ validateAgainstSchema("examples/self-review.example.json", "schemas/self-review.
 validateAgainstSchema("examples/build-result.example.json", "schemas/build-result.schema.json");
 validateAgainstSchema("examples/kaizen-loop-payload.example.json", "schemas/kaizen-loop-payload.schema.json");
 validateBuildRequestWhitespaceConstraints();
+validateBuildResultWhitespaceConstraints();
 validateDiscoveredIssueWhitespaceConstraints("schemas/build-result.schema.json");
 validateDiscoveredIssueWhitespaceConstraints("schemas/kaizen-loop-payload.schema.json");
 
@@ -59,6 +60,26 @@ function validateBuildRequestWhitespaceConstraints() {
     const errors = validateValue(request, schema, "schemas/build-request.schema.json");
     if (errors.length === 0) {
       throw new Error(`schemas/build-request.schema.json accepts a whitespace-only build request string: ${JSON.stringify(request)}`);
+    }
+  }
+}
+
+function validateBuildResultWhitespaceConstraints() {
+  const schema = parsed.get("schemas/build-result.schema.json");
+  const validResult = parsed.get("examples/build-result.example.json");
+  const invalidResults = [
+    { ...validResult, planSummary: " \n\t " },
+    { ...validResult, taskUnderstanding: { ...validResult.taskUnderstanding, summary: " \n\t " } },
+    { ...validResult, taskUnderstanding: { ...validResult.taskUnderstanding, goal: " \n\t " } },
+    { ...validResult, taskUnderstanding: { ...validResult.taskUnderstanding, constraints: [" \n\t "] } },
+    { ...validResult, changedFiles: [" \n\t "] },
+    { ...validResult, residualNotes: [" \n\t "] }
+  ];
+
+  for (const result of invalidResults) {
+    const errors = validateValue(result, schema, "schemas/build-result.schema.json");
+    if (errors.length === 0) {
+      throw new Error(`schemas/build-result.schema.json accepts a whitespace-only build result string: ${JSON.stringify(result)}`);
     }
   }
 }

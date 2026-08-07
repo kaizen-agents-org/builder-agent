@@ -10,25 +10,30 @@ describe("BuildResult", () => {
       status: "ready",
       iterations: 1,
       taskUnderstanding: {
-        summary: "Understand the requested behavior before implementation.",
-        constraints: ["Keep the change focused."]
+        summary: "  Understand the requested behavior before implementation.  ",
+        goal: "  Keep runtime and schema validation aligned.  ",
+        constraints: ["  Keep the change focused.  "]
       },
-      planSummary: "Implement the requested change.",
-      changedFiles: ["src/feature.js"],
+      planSummary: "  Implement the requested change.  ",
+      changedFiles: ["  src/feature.js  "],
       review: passingReview,
       verification: [{
         command: "  npm test  ",
         status: "passed",
         summary: "  All tests passed.  "
       }],
-      residualNotes: []
+      residualNotes: ["  No remaining caveats.  "]
     });
 
     assert.equal(result.review.passed, true);
     assert.deepEqual(result.taskUnderstanding, {
       summary: "Understand the requested behavior before implementation.",
+      goal: "Keep runtime and schema validation aligned.",
       constraints: ["Keep the change focused."]
     });
+    assert.equal(result.planSummary, "Implement the requested change.");
+    assert.deepEqual(result.changedFiles, ["src/feature.js"]);
+    assert.deepEqual(result.residualNotes, ["No remaining caveats."]);
     assert.deepEqual(result.discoveredIssues, []);
     assert.deepEqual(result.verification, [{
       command: "npm test",
@@ -165,11 +170,42 @@ describe("BuildResult", () => {
     );
   });
 
-  it("keeps discovered issues optional in the published build result schema", async () => {
+  it("rejects whitespace-only handoff strings at runtime", () => {
+    const base = normalizeBuildResult({
+      status: "ready",
+      iterations: 1,
+      taskUnderstanding: { summary: "Implement the request.", constraints: ["Keep it focused."] },
+      planSummary: "Implement the request.",
+      changedFiles: ["src/feature.js"],
+      review: passingReview,
+      verification: [],
+      residualNotes: ["No remaining caveats."]
+    });
+    const invalidResults = [
+      { input: { ...base, planSummary: " \n\t " }, error: /planSummary must be a non-empty string/ },
+      { input: { ...base, taskUnderstanding: { ...base.taskUnderstanding, summary: " \n\t " } }, error: /taskUnderstanding\.summary must be a non-empty string/ },
+      { input: { ...base, taskUnderstanding: { ...base.taskUnderstanding, goal: " \n\t " } }, error: /taskUnderstanding\.goal must be a non-empty string/ },
+      { input: { ...base, taskUnderstanding: { ...base.taskUnderstanding, constraints: [" \n\t "] } }, error: /taskUnderstanding\.constraints must be an array of non-empty strings/ },
+      { input: { ...base, changedFiles: [" \n\t "] }, error: /changedFiles must be an array of non-empty strings/ },
+      { input: { ...base, residualNotes: [" \n\t "] }, error: /residualNotes must be an array of non-empty strings/ }
+    ];
+
+    for (const { input, error } of invalidResults) {
+      assert.throws(() => normalizeBuildResult(input), error);
+    }
+  });
+
+  it("publishes runtime-aligned non-whitespace constraints in the build result schema", async () => {
     const schema = JSON.parse(await readFile("schemas/build-result.schema.json", "utf8"));
 
     assert.equal(schema.properties.taskUnderstanding.type, "object");
     assert.equal(schema.required.includes("taskUnderstanding"), true);
+    assert.equal(schema.properties.taskUnderstanding.properties.summary.pattern, "\\S");
+    assert.equal(schema.properties.taskUnderstanding.properties.goal.pattern, "\\S");
+    assert.equal(schema.properties.taskUnderstanding.properties.constraints.items.pattern, "\\S");
+    assert.equal(schema.properties.planSummary.pattern, "\\S");
+    assert.equal(schema.properties.changedFiles.items.pattern, "\\S");
+    assert.equal(schema.properties.residualNotes.items.pattern, "\\S");
     assert.equal(schema.required.includes("verification"), true);
     assert.deepEqual(schema.properties.verification.items.required, ["command", "status", "summary"]);
     assert.deepEqual(schema.properties.verification.items.properties.status.enum, ["passed", "failed", "skipped"]);
