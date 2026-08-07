@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { access, mkdtemp, readFile, realpath, rm, stat } from "node:fs/promises";
 import { constants } from "node:fs";
 import { tmpdir } from "node:os";
-import { delimiter, dirname, isAbsolute, join, resolve } from "node:path";
+import { delimiter, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { extractValidDiscoveredIssues, normalizeKaizenLoopPayload } from "../types/KaizenLoopPayload.js";
 import type {
   AgentFailureClass,
@@ -370,8 +370,21 @@ async function loadAgentProviders(env: NodeJS.ProcessEnv, workspaceDir: string):
  */
 async function readProviderFile(path: string | undefined, workspaceDir: string): Promise<string | undefined> {
   if (!path) return undefined;
-  const resolved = isAbsolute(path) ? path : resolve(workspaceDir, path);
-  return readFile(resolved, "utf8");
+  const configuredPath = isAbsolute(path) ? path : resolve(workspaceDir, path);
+  const [resolvedWorkspaceDir, resolvedProviderPath] = await Promise.all([
+    realpath(workspaceDir),
+    realpath(configuredPath)
+  ]);
+  const workspaceRelativePath = relative(resolvedWorkspaceDir, resolvedProviderPath);
+  if (
+    !workspaceRelativePath ||
+    workspaceRelativePath === ".." ||
+    workspaceRelativePath.startsWith(`..${sep}`) ||
+    isAbsolute(workspaceRelativePath)
+  ) {
+    throw new Error("KAIZEN_AGENT_PROVIDERS_FILE must resolve to a file inside KAIZEN_WORKSPACE_DIR.");
+  }
+  return readFile(resolvedProviderPath, "utf8");
 }
 
 /**
