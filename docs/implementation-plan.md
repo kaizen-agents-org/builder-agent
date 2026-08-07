@@ -1,6 +1,6 @@
 # Builder Agent Implementation Plan
 
-This plan starts with a skill-first MVP. The CLI should come later, after the prompt loop, review schema, and improvement behavior have been tested on real tasks.
+Builder Agent now ships a Codex-compatible skill, structured artifact contracts, an adapter-based CLI, reusable TypeScript boundaries, and a Kaizen Loop command adapter. This plan records that implementation history and focuses current work on hardening the evidence passed between Builder Agent, mechanical verification, Kaizen Loop, and the independent verifier.
 
 ## Goals
 
@@ -122,6 +122,8 @@ Settled MVP defaults:
 
 ## Phase 3: Prompt Hardening
 
+Status: implemented as the initial self-review and improvement loop; ongoing hardening should be driven by evidence from real implementation tasks.
+
 Refine the prompts against real implementation tasks.
 
 The self-review prompt should bias toward finding problems. Builder Agent should not pass itself simply because the code compiles or because it has made progress.
@@ -138,9 +140,9 @@ The improve prompt should turn review findings into concrete implementation work
 
 ## Phase 4: Integration With Kaizen Loop
 
-After the skill is useful in manual runs, connect it to `kaizen-loop` as the build phase.
+Status: implemented for the MVP command-adapter flow.
 
-Expected integration contract:
+Current integration contract:
 
 - `kaizen-loop` provides a normalized build request.
 - Builder Agent edits the isolated workspace.
@@ -153,8 +155,6 @@ Builder Agent should not create branches, commits, pull requests, or issue comme
 ## Phase 5: CLI Prototype
 
 Status: implemented as the MVP loop controller and adapter-based CLI.
-
-Only after the skill loop stabilizes, introduce a CLI wrapper.
 
 The CLI does not change the responsibility model. It provides:
 
@@ -190,7 +190,7 @@ Boundary targets:
 - Builder service: orchestrate analyze, implement, self-review, and improve iterations without GitHub, issue selection, worktree, PR, mergeability, or repo policy knowledge.
 - Artifact writer: persist final and per-iteration artifacts only.
 
-Current migration step:
+Implemented migration:
 
 - Converted `src` modules to TypeScript and disabled `allowJs`.
 - Kept `.js` specifiers in TypeScript imports for NodeNext runtime output.
@@ -200,9 +200,10 @@ Current migration step:
 
 ## Open Questions
 
-- How much test execution should the builder perform before handing off to mechanical verification?
-- What adapter should `kaizen-loop` use for Codex execution in the first integration?
+- Which verification commands should each provider be allowed to run, and how should skipped or failed checks be represented for downstream review?
+- What additional artifact detail is needed for `kaizen-loop` and the independent verifier to distinguish a complete handoff from one that needs more implementation work?
+- Which adapter and provider failure cases need more regression coverage to keep fallback behavior and structured results reliable?
 
-## Initial Recommendation
+## Current Recommendation
 
-Start with the skill and schemas. Run it manually on a few small repositories before implementing the CLI. If the self-review and improve prompts produce useful changes, then formalize the loop controller.
+Treat the shipped skill, schemas, CLI, TypeScript package boundaries, and Kaizen Loop adapter as the baseline. Use real runs to improve adapter behavior, verification evidence, and final handoff artifacts while preserving the responsibility boundary: Builder Agent implements and reports evidence, and external verification remains independent.
