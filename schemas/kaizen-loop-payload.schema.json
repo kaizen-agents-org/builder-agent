@@ -34,6 +34,35 @@
         "required": ["status"],
         "properties": {
           "status": {
+            "const": "fixed"
+          }
+        }
+      },
+      "then": {
+        "properties": {
+          "notes": {
+            "minLength": 1,
+            "pattern": "\\S",
+            "not": {
+              "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?(Verification|Residual risk)\\s*:(?:\\*\\*)?[\\s\\S]*(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?\\1\\s*:(?:\\*\\*)?"
+            },
+            "allOf": [
+              {
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Verification\\s*:|\\*\\*Verification\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Verification|Residual risk)\\s*:|\\*\\*(?:Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+              },
+              {
+                "pattern": "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:Residual risk\\s*:|\\*\\*Residual risk\\s*:\\*\\*)(?=(?:(?!(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:(?:Verification|Residual risk)\\s*:|\\*\\*(?:Verification|Residual risk)\\s*:\\*\\*))[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "if": {
+        "required": ["status"],
+        "properties": {
+          "status": {
             "enum": ["fixed", "partial"]
           }
         }
