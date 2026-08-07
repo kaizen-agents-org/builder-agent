@@ -369,4 +369,4 @@ builder-agent/
    └─ implementation-plan.md
 ```
 
-See [Implementation Plan](docs/implementation-plan.md) for the proposed build order.
+See [Implementation Plan](docs/implementation-plan.md) for the shipped phase history and current hardening priorities.
