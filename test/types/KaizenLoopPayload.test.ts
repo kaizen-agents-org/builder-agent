@@ -4,6 +4,21 @@ import { describe, it } from "node:test";
 import { normalizeKaizenLoopPayload } from "../../dist/index.js";
 
 describe("KaizenLoopPayload", () => {
+  it("requires fixed payload notes to carry verification and residual-risk evidence", () => {
+    for (const notes of ["", "checked", "Verification: npm test passed.", "Residual risk: none."]) {
+      assert.throws(
+        () => normalizeKaizenLoopPayload({ status: "fixed", summary: "Implemented.", notes }),
+        /notes must describe verification status and residual risk when status is fixed/
+      );
+    }
+
+    assert.doesNotThrow(() => normalizeKaizenLoopPayload({
+      status: "fixed",
+      summary: "Implemented.",
+      notes: "Verification: npm test passed. Residual risk: none known."
+    }));
+  });
+
   it("normalizes kaizen-loop payloads with the published schema shape", () => {
     const payload = normalizeKaizenLoopPayload({
       status: "partial",
@@ -201,7 +216,7 @@ describe("KaizenLoopPayload", () => {
       () => normalizeKaizenLoopPayload({
         status: "fixed",
         summary: "Implemented.",
-        notes: "",
+        notes: "Verification: npm test passed. Residual risk: none known.",
         discoveredIssues: [{ repo: "verifier" }]
       }),
       /discoveredIssues\[0\]\.title/
@@ -210,7 +225,7 @@ describe("KaizenLoopPayload", () => {
       () => normalizeKaizenLoopPayload({
         status: "fixed",
         summary: "Implemented.",
-        notes: "",
+        notes: "Verification: npm test passed. Residual risk: none known.",
         discoveredIssues: [{ title: "Bad routing", expected: "Route to verifier.", evidence: "payload.json", repo: 123 }]
       }),
       /discoveredIssues\[0\]\.repo must be a string/
@@ -219,7 +234,7 @@ describe("KaizenLoopPayload", () => {
       () => normalizeKaizenLoopPayload({
         status: "fixed",
         summary: "Implemented.",
-        notes: "",
+        notes: "Verification: npm test passed. Residual risk: none known.",
         discoveredIssues: [{ title: "Title-only follow-up" }]
       }),
       /discoveredIssues\[0\]\.expected must be a non-empty string/
@@ -267,7 +282,7 @@ describe("KaizenLoopPayload", () => {
       () => normalizeKaizenLoopPayload({
         status: "fixed",
         summary: "Fixed.",
-        notes: "",
+        notes: "Verification: npm test passed. Residual risk: none known.",
         blockedReason: "No longer blocked."
       }),
       /blockedReason is only valid when status is blocked/
@@ -307,7 +322,7 @@ describe("KaizenLoopPayload", () => {
       () => normalizeKaizenLoopPayload({
         status: "fixed",
         summary: "Fixed.",
-        notes: "",
+        notes: "Verification: npm test passed. Residual risk: none known.",
         humanRequest: {
           reasonCode: "production_change",
           requestKey: "production-deployment",
@@ -374,14 +389,14 @@ describe("KaizenLoopPayload", () => {
       normalizeKaizenLoopPayload({
         status: "fixed",
         summary: "Implemented and verified.",
-        notes: "Tests passed.",
+        notes: "Verification: tests passed. Residual risk: none known.",
         blockedReason: "  \n\t  ",
         discoveredIssues
       }),
       {
         status: "fixed",
         summary: "Implemented and verified.",
-        notes: "Tests passed.",
+        notes: "Verification: tests passed. Residual risk: none known.",
         discoveredIssues
       }
     );
@@ -395,17 +410,25 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.properties.summary.pattern, "\\S");
     assert.equal(schema.allOf[0].then.properties.blockedReason.minLength, 1);
     assert.equal(schema.allOf[0].then.properties.blockedReason.pattern, "\\S");
-    assert.equal(schema.allOf[1].then.properties.blockedReason.not.pattern, "\\S");
-    assert.equal(schema.allOf.length, 4);
-    assert.equal(schema.allOf[2].if.properties.status.const, "partial");
-    assert.equal(schema.allOf[2].then.properties.notes.minLength, 1);
-    assert.equal(schema.allOf[2].then.properties.notes.pattern, "\\S");
-    const duplicatePartialNotePattern = schema.allOf[2].then.properties.notes.not.pattern;
+    const fixedRule = schema.allOf.find((rule: any) => rule.if?.properties?.status?.const === "fixed");
+    const completedBlockedReasonRule = schema.allOf.find((rule: any) => rule.if?.properties?.status?.enum?.includes("fixed"));
+    const partialRule = schema.allOf.find((rule: any) => rule.if?.properties?.status?.const === "partial");
+    assert.equal(completedBlockedReasonRule.then.properties.blockedReason.not.pattern, "\\S");
+    assert.equal(schema.allOf.length, 5);
+    assert.equal(fixedRule.then.properties.notes.minLength, 1);
+    assert.equal(fixedRule.then.properties.notes.pattern, "\\S");
+    assert.equal(fixedRule.then.properties.notes.allOf.length, 3);
+    const fixedSkippedVerificationRule = fixedRule.then.properties.notes.allOf[2];
+    assert.match(fixedSkippedVerificationRule.if.pattern, /Verification/);
+    assert.match(fixedSkippedVerificationRule.then.pattern, /Residual risk/);
+    assert.equal(partialRule.then.properties.notes.minLength, 1);
+    assert.equal(partialRule.then.properties.notes.pattern, "\\S");
+    const duplicatePartialNotePattern = partialRule.then.properties.notes.not.pattern;
     assert.equal(
       duplicatePartialNotePattern,
       "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?(Completed scope|Incomplete scope|Verification|Residual risk)\\s*:(?:\\*\\*)?[\\s\\S]*(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?(?:\\*\\*)?\\1\\s*:(?:\\*\\*)?"
     );
-    const partialNoteRules = schema.allOf[2].then.properties.notes.allOf;
+    const partialNoteRules = partialRule.then.properties.notes.allOf;
     const partialNotePatterns = partialNoteRules.slice(0, 4)
       .map(({ pattern }: { pattern: string }) => pattern);
     assert.deepEqual(partialNotePatterns, [
