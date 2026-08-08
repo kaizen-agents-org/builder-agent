@@ -417,7 +417,10 @@ describe("KaizenLoopPayload", () => {
     assert.equal(schema.allOf.length, 5);
     assert.equal(fixedRule.then.properties.notes.minLength, 1);
     assert.equal(fixedRule.then.properties.notes.pattern, "\\S");
-    assert.equal(fixedRule.then.properties.notes.allOf.length, 2);
+    assert.equal(fixedRule.then.properties.notes.allOf.length, 3);
+    const fixedSkippedVerificationRule = fixedRule.then.properties.notes.allOf[2];
+    assert.match(fixedSkippedVerificationRule.if.pattern, /Verification/);
+    assert.match(fixedSkippedVerificationRule.then.pattern, /Residual risk/);
     assert.equal(partialRule.then.properties.notes.minLength, 1);
     assert.equal(partialRule.then.properties.notes.pattern, "\\S");
     const duplicatePartialNotePattern = partialRule.then.properties.notes.not.pattern;

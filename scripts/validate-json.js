@@ -29,6 +29,7 @@ validateBuildRequestWhitespaceConstraints();
 validateBuildResultWhitespaceConstraints();
 validateDiscoveredIssueWhitespaceConstraints("schemas/build-result.schema.json");
 validateDiscoveredIssueWhitespaceConstraints("schemas/kaizen-loop-payload.schema.json");
+validateKaizenLoopPayloadContract();
 
 normalizeBuildRequest(parsed.get("examples/build-request.example.json"));
 normalizeSelfReview(parsed.get("examples/self-review.example.json"), 85);
@@ -106,6 +107,30 @@ function validateDiscoveredIssueWhitespaceConstraints(schemaFile) {
   );
   if (labelErrors.length === 0) {
     throw new Error(`${schemaFile} accepts a whitespace-only discoveredIssues.labels item`);
+  }
+}
+
+function validateKaizenLoopPayloadContract() {
+  const schema = parsed.get("schemas/kaizen-loop-payload.schema.json");
+  const base = {
+    status: "fixed",
+    summary: "Implemented the requested change.",
+    notes: "Verification: npm test passed. Residual risk: none known.",
+    discoveredIssues: []
+  };
+  const cases = [
+    { payload: base, valid: true, label: "structured fixed notes" },
+    { payload: { ...base, notes: "Residual risk: none known." }, valid: false, label: "missing verification" },
+    { payload: { ...base, notes: "Verification: tests passed. Verification: lint passed. Residual risk: none known." }, valid: false, label: "duplicate verification" },
+    { payload: { ...base, notes: "Verification: skipped. Residual risk: none known." }, valid: false, label: "skipped verification without reason" },
+    { payload: { ...base, notes: "Verification: skipped — test service unavailable. Residual risk: tests were not run." }, valid: true, label: "skipped verification with reason" }
+  ];
+
+  for (const { payload, valid, label } of cases) {
+    const errors = validateValue(payload, schema, label);
+    if ((errors.length === 0) !== valid) {
+      throw new Error(`kaizen-loop payload schema incorrectly handled ${label}: ${errors.join("; ")}`);
+    }
   }
 }
 

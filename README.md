@@ -289,7 +289,7 @@ The integration payload is intentionally smaller than the standalone build artif
 {
   "status": "fixed",
   "summary": "Short implementation summary.",
-  "notes": "",
+  "notes": "Verification: npm test passed. Residual risk: none known.",
   "discoveredIssues": [
     {
       "title": "Verifier treats the word rejected in summaries as a hard failure",
