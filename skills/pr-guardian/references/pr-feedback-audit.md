@@ -39,6 +39,7 @@ query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
           comments(first:100) {
             pageInfo { hasNextPage endCursor }
             nodes {
+              id
               fullDatabaseId
               url
               author { login }
@@ -76,7 +77,8 @@ query($owner:String!, $name:String!, $number:Int!, $cursor:String) {
         and (.comments | type == "object")
         and (.comments.nodes | type == "array")
         and all(.comments.nodes[];
-          ((.fullDatabaseId | type) == "string" or (.fullDatabaseId | type) == "number")
+          (.id | type == "string")
+          and ((.fullDatabaseId == null) or (.fullDatabaseId | type) == "string" or (.fullDatabaseId | type) == "number")
           and (.url | type == "string")
           and ((.author == null) or ((.author | type == "object") and (.author.login | type == "string")))
           and (.body | type == "string")
@@ -116,7 +118,7 @@ query($threadId:ID!, $cursor:String) {
     ... on PullRequestReviewThread {
       comments(first:100, after:$cursor) {
         pageInfo { hasNextPage endCursor }
-        nodes { fullDatabaseId url author { login } body createdAt outdated }
+        nodes { id fullDatabaseId url author { login } body createdAt outdated }
       }
     }
   }
@@ -135,7 +137,8 @@ query($threadId:ID!, $cursor:String) {
     | ($comments | type == "object")
       and ($comments.nodes | type == "array")
       and all($comments.nodes[];
-        ((.fullDatabaseId | type) == "string" or (.fullDatabaseId | type) == "number")
+        (.id | type == "string")
+        and ((.fullDatabaseId == null) or (.fullDatabaseId | type) == "string" or (.fullDatabaseId | type) == "number")
         and (.url | type == "string")
         and ((.author == null) or ((.author | type == "object") and (.author.login | type == "string")))
         and (.body | type == "string")
