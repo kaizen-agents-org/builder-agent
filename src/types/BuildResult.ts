@@ -25,7 +25,7 @@ export function createBuildResult(input: BuildResultInput): BuildResult {
     planSummary,
     changedFiles,
     review,
-    verification = [],
+    verification,
     residualNotes,
     discoveredIssues,
     threshold
@@ -61,6 +61,9 @@ export function normalizeBuildResult(input: unknown, threshold = DEFAULT_THRESHO
     throw new Error("Build result must be an object.");
   }
   assertAllowedKeys(input, BUILD_RESULT_KEYS, "Build result");
+  if (!Object.hasOwn(input, "verification")) {
+    throw new Error("Build result verification is required.");
+  }
 
   return createBuildResult({ ...(input as BuildResultInput), threshold });
 }

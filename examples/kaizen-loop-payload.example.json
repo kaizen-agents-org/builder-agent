@@ -1,7 +1,7 @@
 {
   "status": "fixed",
   "summary": "Implemented the scoped issue and updated verification.",
-  "notes": "Ran npm test and npm run validate:json.",
+  "notes": "Verification: npm test and npm run validate:json passed. Residual risk: none known.",
   "discoveredIssues": [
     {
       "title": "Verifier treats status words in summaries as hard failures",

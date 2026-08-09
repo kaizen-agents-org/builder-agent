@@ -1,11 +1,9 @@
 const STATUS_VALUES = new Set(["fixed", "partial", "blocked"]);
 const PAYLOAD_KEYS = new Set(["status", "summary", "notes", "blockedReason", "humanRequest", "discoveredIssues"]);
 const PARTIAL_NOTE_LABELS = ["Completed scope", "Incomplete scope", "Verification", "Residual risk"];
-const PARTIAL_NOTE_LABEL_PATTERN = PARTIAL_NOTE_LABELS.join("|");
+const FIXED_NOTE_LABELS = ["Verification", "Residual risk"];
 const PARTIAL_NOTE_PREFIX_PATTERN = "(?:^|[\\s.;])(?:(?:[-*+]|\\d+[.)])\\s+)?";
 const partialNoteSectionPattern = (labelPattern) => `(?:${labelPattern}\\s*:|\\*\\*${labelPattern}\\s*:\\*\\*)`;
-const PARTIAL_NOTE_SECTION_PATTERN = partialNoteSectionPattern(`(?:${PARTIAL_NOTE_LABEL_PATTERN})`);
-const PARTIAL_NOTE_CONTENT_PATTERN = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}${PARTIAL_NOTE_SECTION_PATTERN})[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])`;
 const MEANINGFUL_NOTE_CONTENT = /[^\s.;,:—–\-_*+|#>]/;
 const SKIPPED_VERIFICATION = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)(?=$|[\s.;,:—–-])/i;
 const SKIPPED_VERIFICATION_WITH_REASON = /^(?:skipped|\*\*skipped\*\*|__skipped__|\*skipped\*|_skipped_|`skipped`)[ \t]*[—–-][ \t]*([\s\S]*)$/i;
@@ -42,6 +40,9 @@ export function normalizeKaizenLoopPayload(input) {
     if (payload.status === "partial" && !hasStructuredPartialNotes(payload.notes)) {
         throw new Error("Kaizen Loop payload notes must describe completed scope, incomplete scope, verification status, and residual risk when status is partial.");
     }
+    if (payload.status === "fixed" && !hasStructuredNotes(payload.notes, FIXED_NOTE_LABELS)) {
+        throw new Error("Kaizen Loop payload notes must describe verification status and residual risk when status is fixed.");
+    }
     if (payload.blockedReason !== undefined && typeof payload.blockedReason !== "string") {
         throw new Error("Kaizen Loop payload blockedReason must be a string.");
     }
@@ -68,11 +69,16 @@ export function normalizeKaizenLoopPayload(input) {
     };
 }
 function hasStructuredPartialNotes(notes) {
-    if (!PARTIAL_NOTE_LABELS.every((label) => (notes.match(new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern(label)}`, "g"))?.length === 1 &&
-        new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern(label)}${PARTIAL_NOTE_CONTENT_PATTERN}`).test(notes)))) {
+    return hasStructuredNotes(notes, PARTIAL_NOTE_LABELS);
+}
+function hasStructuredNotes(notes, labels) {
+    const sectionPattern = partialNoteSectionPattern(`(?:${labels.join("|")})`);
+    const contentPattern = `(?=(?:(?!${PARTIAL_NOTE_PREFIX_PATTERN}${sectionPattern})[\\s\\S])*?[^\\s.;,:—–\\-_*+|#>])`;
+    if (!labels.every((label) => (notes.match(new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern(label)}`, "g"))?.length === 1 &&
+        new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern(label)}${contentPattern}`).test(notes)))) {
         return false;
     }
-    const verification = new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern("Verification")}\\s*([\\s\\S]*?)(?=${PARTIAL_NOTE_PREFIX_PATTERN}${PARTIAL_NOTE_SECTION_PATTERN}|$)`).exec(notes)?.[1].trim();
+    const verification = new RegExp(`${PARTIAL_NOTE_PREFIX_PATTERN}${partialNoteSectionPattern("Verification")}\\s*([\\s\\S]*?)(?=${PARTIAL_NOTE_PREFIX_PATTERN}${sectionPattern}|$)`).exec(notes)?.[1].trim();
     if (!verification || !SKIPPED_VERIFICATION.test(verification)) {
         return true;
     }

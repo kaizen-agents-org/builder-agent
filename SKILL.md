@@ -124,7 +124,7 @@ For Kaizen Loop handoff, this is valid for a completed task:
 {
   "status": "fixed",
   "summary": "Implemented and verified the requested change.",
-  "notes": "Tests passed.",
+  "notes": "Verification: npm test passed. Residual risk: none known.",
   "discoveredIssues": []
 }
 ```
