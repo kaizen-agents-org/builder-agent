@@ -78,6 +78,7 @@ describe("builder handoff contract", () => {
     assert.match(handoffGuidance, /residual risk/i);
     assert.match(handoffGuidance, /reviewer notes/i);
     assert.match(handoffGuidance, /not approval/i);
+    assert.match(implementPrompt, /Verification: skipped — <reason>/);
   });
 
   it("keeps discovered issues in a schema-valid Kaizen Loop handoff", async () => {

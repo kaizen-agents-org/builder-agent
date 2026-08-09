@@ -36,7 +36,7 @@ const outputIndex = args.indexOf("--output-last-message");
 writeFileSync(args[outputIndex + 1], JSON.stringify({
   status: "fixed",
   summary: "implemented with codex",
-  notes: "checked",
+  notes: "Verification: npm test passed. Residual risk: none known.",
   blockedReason: "",
   discoveredIssues: [{
     title: "Follow-up issue",
@@ -71,7 +71,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
       expected: "Keep the issue in the handoff.",
       evidence: "codex output"
     }]);
-    assert.match(result.payload.notes, /checked/);
+    assert.match(result.payload.notes, /Verification: npm test passed/);
     assert.match(result.payload.notes, /codex: exitCode=0, status=selected, failureClass=none, fallbackReason=none, payloadSource=last-message/);
     assert.match(result.payload.notes, /Selected backend: codex/);
     assert.match(result.payload.notes, /Final payload source: last-message/);
@@ -110,7 +110,7 @@ let prompt = "";
 for await (const chunk of process.stdin) prompt += chunk;
 writeFileSync(${JSON.stringify(stdinPath)}, prompt);
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented with claude\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented with claude\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"
@@ -155,7 +155,7 @@ const { writeFileSync } = require("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(envPath)}, process.env.CODEX_CODE_MODE_HOST_PATH || "");
 const outputIndex = args.indexOf("--output-last-message");
-writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: "ok", notes: "" }));
+writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: "ok", notes: "Verification: npm test passed. Residual risk: none known." }));
 `, "utf8");
     await chmod(join(binDir, "codex"), 0o755);
 
@@ -194,7 +194,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: 
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented by fallback\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented by fallback\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"
@@ -349,7 +349,7 @@ process.exit(1);
 const { closeSync, writeFileSync } = require("node:fs");
 const args = process.argv.slice(2);
 const outputIndex = args.indexOf("--output-last-message");
-writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: "unread prompt", notes: "" }));
+writeFileSync(args[outputIndex + 1], JSON.stringify({ status: "fixed", summary: "unread prompt", notes: "Verification: npm test passed. Residual risk: none known." }));
 closeSync(0);
 setTimeout(() => process.exit(0), 100);
 `,
@@ -361,7 +361,7 @@ setTimeout(() => process.exit(0), 100);
 (async () => {
 for await (const chunk of process.stdin) void chunk;
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"fallback consumed prompt\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"fallback consumed prompt\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 })();
 `,
@@ -490,7 +490,7 @@ writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
   status: "fixed",
   summary: "implemented by custom provider",
-  notes: "checked"
+  notes: "Verification: npm test passed. Residual risk: none known."
 }));
 })();
 `,
@@ -549,7 +549,7 @@ const outputIndex = args.indexOf("--output");
 writeFileSync(args[outputIndex + 1], JSON.stringify({
   status: "fixed",
   summary: "implemented by stdin provider",
-  notes: "checked"
+  notes: "Verification: npm test passed. Residual risk: none known."
 }));
 })();
 `,
@@ -597,7 +597,7 @@ writeFileSync(args[outputIndex + 1], JSON.stringify({
     try {
       const providerScript = `
 process.stdout.write("stdout-head\\n" + "漢".repeat(200_000) + "\\n");
-process.stdout.write(JSON.stringify({ status: "fixed", summary: "payload survived truncation", notes: "checked" }));
+process.stdout.write(JSON.stringify({ status: "fixed", summary: "payload survived truncation", notes: "Verification: npm test passed. Residual risk: none known." }));
 process.stderr.write("stderr-head\\n" + "🙂".repeat(150_000) + "\\nstderr-tail");
 `;
       const result = await runImplementationAgent({
@@ -635,7 +635,7 @@ process.stderr.write("stderr-head\\n" + "🙂".repeat(150_000) + "\\nstderr-tail
     const dir = await mkdtemp(join(tmpdir(), "builder-agent-"));
 
     try {
-      const payload = JSON.stringify({ status: "fixed", summary: "exact boundary", notes: "checked" });
+      const payload = JSON.stringify({ status: "fixed", summary: "exact boundary", notes: "Verification: npm test passed. Residual risk: none known." });
       const providerScript = `
 const payload = ${JSON.stringify(payload)};
 process.stdout.write("界".repeat(Math.floor((256 * 1024 - Buffer.byteLength(payload)) / 3)));
@@ -676,7 +676,7 @@ process.stdout.write("a".repeat((128 * 1024) - 1));
 setTimeout(() => {
   process.stdout.write("界".repeat(50_000));
   setTimeout(() => {
-    process.stdout.write(JSON.stringify({ status: "fixed", summary: "ordered trailing payload", notes: "checked" }));
+    process.stdout.write(JSON.stringify({ status: "fixed", summary: "ordered trailing payload", notes: "Verification: npm test passed. Residual risk: none known." }));
   }, 20);
 }, 20);
 `;
@@ -712,7 +712,7 @@ setTimeout(() => {
       const providerScript = `
 process.stdout.write('{"message":"unfinished');
 process.stdout.write("a".repeat(300_000));
-process.stdout.write(JSON.stringify({ status: "fixed", summary: "tail payload recovered", notes: "checked" }));
+process.stdout.write(JSON.stringify({ status: "fixed", summary: "tail payload recovered", notes: "Verification: npm test passed. Residual risk: none known." }));
 `;
       const result = await runImplementationAgent({
         agent: "structured-log-provider",
@@ -745,7 +745,7 @@ process.stdout.write(JSON.stringify({ status: "fixed", summary: "tail payload re
       const providerScript = `
 process.stdout.write("a".repeat(150_000) + '{"message":"');
 process.stdout.write("b".repeat(200_000));
-process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "resynchronized tail payload", notes: "checked" }));
+process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "resynchronized tail payload", notes: "Verification: npm test passed. Residual risk: none known." }));
 `;
       const result = await runImplementationAgent({
         agent: "quoted-log-provider",
@@ -776,10 +776,10 @@ process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "resynchr
 
     try {
       const providerScript = `
-process.stdout.write(JSON.stringify({ status: "fixed", summary: "stale head payload", notes: "checked" }) + "\\n");
+process.stdout.write(JSON.stringify({ status: "fixed", summary: "stale head payload", notes: "Verification: npm test passed. Residual risk: none known." }) + "\\n");
 process.stdout.write("a".repeat(150_000));
 process.stdout.write('{"message":"' + "b".repeat(200_000));
-process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "latest tail payload", notes: "checked" }));
+process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "latest tail payload", notes: "Verification: npm test passed. Residual risk: none known." }));
 `;
       const result = await runImplementationAgent({
         agent: "multi-payload-provider",
@@ -810,8 +810,8 @@ process.stdout.write('"}' + JSON.stringify({ status: "fixed", summary: "latest t
 
     try {
       const providerScript = `
-process.stdout.write("a".repeat(300_000) + JSON.stringify({ status: "fixed", summary: "stale stdout payload", notes: "checked" }));
-process.stderr.write(JSON.stringify({ status: "fixed", summary: "latest stderr payload", notes: "checked" }));
+process.stdout.write("a".repeat(300_000) + JSON.stringify({ status: "fixed", summary: "stale stdout payload", notes: "Verification: npm test passed. Residual risk: none known." }));
+process.stderr.write(JSON.stringify({ status: "fixed", summary: "latest stderr payload", notes: "Verification: npm test passed. Residual risk: none known." }));
 `;
       const result = await runImplementationAgent({
         agent: "split-stream-provider",
@@ -844,7 +844,7 @@ process.stderr.write(JSON.stringify({ status: "fixed", summary: "latest stderr p
       const providerScript = `
 process.stderr.write("a".repeat(150_000) + '{"message":"');
 process.stderr.write("b".repeat(200_000));
-process.stderr.write('"}' + JSON.stringify({ status: "fixed", summary: "recovered stderr tail payload", notes: "checked" }));
+process.stderr.write('"}' + JSON.stringify({ status: "fixed", summary: "recovered stderr tail payload", notes: "Verification: npm test passed. Residual risk: none known." }));
 `;
       const result = await runImplementationAgent({
         agent: "stderr-tail-provider",
@@ -895,7 +895,7 @@ process.exitCode = 1;
             },
             fallback: {
               command: process.execPath,
-              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'Verification: npm test passed. Residual risk: none known.'}));"],
               output: "stdout"
             }
           })
@@ -943,7 +943,7 @@ process.exitCode = 1;
               },
               fallback: {
                 command: process.execPath,
-                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'Verification: npm test passed. Residual risk: none known.'}));"],
                 output: "stdout"
               }
             })
@@ -991,7 +991,7 @@ setTimeout(() => {
               },
               fallback: {
                 command: process.execPath,
-                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback should not run',notes:'checked'}));"],
+                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback should not run',notes:'Verification: npm test passed. Residual risk: none known.'}));"],
                 output: "stdout"
               }
             })
@@ -1039,7 +1039,7 @@ process.exitCode = 1;
               },
               fallback: {
                 command: process.execPath,
-                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback should not run',notes:'checked'}));"],
+                args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback should not run',notes:'Verification: npm test passed. Residual risk: none known.'}));"],
                 output: "stdout"
               }
             })
@@ -1082,7 +1082,7 @@ process.exitCode = 1;
             },
             fallback: {
               command: process.execPath,
-              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'auth fallback selected',notes:'checked'}));"],
+              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'auth fallback selected',notes:'Verification: npm test passed. Residual risk: none known.'}));"],
               output: "stdout"
             }
           })
@@ -1166,7 +1166,7 @@ writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
   status: "fixed",
   summary: "implemented without model",
-  notes: "checked"
+  notes: "Verification: npm test passed. Residual risk: none known."
 }));
 })();
 `,
@@ -1214,7 +1214,7 @@ writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
   status: "fixed",
   summary: "implemented by hermes-style provider",
-  notes: "checked"
+  notes: "Verification: npm test passed. Residual risk: none known."
 }));
 })();
 `,
@@ -1448,7 +1448,7 @@ if (process.argv[2] === "health") {
 console.log(JSON.stringify({
   status: "fixed",
   summary: "primary should not run",
-  notes: "checked"
+  notes: "Verification: npm test passed. Residual risk: none known."
 }));
 `,
       "utf8"
@@ -1457,7 +1457,7 @@ console.log(JSON.stringify({
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after health-check fallback\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after health-check fallback\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"
@@ -1515,7 +1515,7 @@ console.log(JSON.stringify({
             },
             fallback: {
               command: process.execPath,
-              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'checked'}));"],
+              args: ["-e", "console.log(JSON.stringify({status:'fixed',summary:'fallback selected',notes:'Verification: npm test passed. Residual risk: none known.'}));"],
               output: "stdout"
             }
           })
@@ -1734,7 +1734,7 @@ const { writeFileSync } = require("node:fs");
 const child = spawn(process.execPath, ["-e", "process.on('SIGTERM', () => {}); setInterval(() => {}, 1000);"], { stdio: "ignore" });
 child.unref();
 writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
-console.log(JSON.stringify({status:"fixed",summary:"implemented",notes:"checked"}));
+console.log(JSON.stringify({status:"fixed",summary:"implemented",notes:"Verification: npm test passed. Residual risk: none known."}));
 `;
       const result = await runImplementationAgent({
         agent: "provider",
@@ -1776,7 +1776,7 @@ const { writeFileSync } = require("node:fs");
 const child = spawn(process.execPath, ["-e", "setInterval(() => {}, 1000);"], { stdio: ["ignore", "inherit", "inherit"] });
 child.unref();
 writeFileSync(${JSON.stringify(childPidPath)}, String(child.pid));
-console.log(JSON.stringify({status:"fixed",summary:"implemented",notes:"checked"}));
+console.log(JSON.stringify({status:"fixed",summary:"implemented",notes:"Verification: npm test passed. Residual risk: none known."}));
 `;
       const result = await runImplementationAgent({
         agent: "provider",
@@ -1854,7 +1854,7 @@ process.exit(1);
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"should not fallback\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"should not fallback\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"
@@ -1897,7 +1897,7 @@ process.exit(1);
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"fallback after project safety check\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"fallback after project safety check\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"
@@ -1940,7 +1940,7 @@ process.exit(1);
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after provider-blocked fallback\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after provider-blocked fallback\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"
@@ -2111,7 +2111,7 @@ process.exit(1);
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after classified fallback\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented after classified fallback\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"

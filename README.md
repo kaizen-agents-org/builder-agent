@@ -289,7 +289,7 @@ The integration payload is intentionally smaller than the standalone build artif
 {
   "status": "fixed",
   "summary": "Short implementation summary.",
-  "notes": "",
+  "notes": "Verification: npm test passed. Residual risk: none known.",
   "discoveredIssues": [
     {
       "title": "Verifier treats the word rejected in summaries as a hard failure",
@@ -319,7 +319,7 @@ Verification: npm test passed.
 Residual risk: Older providers may need prompt updates.
 ```
 
-The `summary` should state what changed and why; Builder Agent trims surrounding whitespace and rejects empty summaries. The `notes` field should capture verification run or skipped, residual risk, and reviewer notes when relevant. `discoveredIssues` is optional and defaults to an empty array. The published contract is [kaizen-loop-payload.schema.json](schemas/kaizen-loop-payload.schema.json), and Builder Agent validates provider payloads with the same runtime normalizer before writing `KAIZEN_BUILD_RESULT_PATH`. `builder-agent` does not create pull requests, push branches, or file GitHub issues; those remain `kaizen-loop` responsibility.
+The `summary` should state what changed and why; Builder Agent trims surrounding whitespace and rejects empty summaries. The `notes` field records verification run or skipped and the residual risk for the reviewer. For `fixed`, it must include labeled `Verification:` and `Residual risk:` sections. For `partial`, it must additionally include `Completed scope:` and `Incomplete scope:`. A skipped verification must name the reason. `discoveredIssues` is optional and defaults to an empty array. The published contract is [kaizen-loop-payload.schema.json](schemas/kaizen-loop-payload.schema.json), and Builder Agent validates provider payloads with the same runtime normalizer before writing `KAIZEN_BUILD_RESULT_PATH`. `builder-agent` does not create pull requests, push branches, or file GitHub issues; those remain `kaizen-loop` responsibility.
 
 ## Adapter Contract
 

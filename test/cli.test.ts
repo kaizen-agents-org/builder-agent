@@ -150,7 +150,7 @@ const { writeFileSync } = await import("node:fs");
 const args = process.argv.slice(2);
 writeFileSync(${JSON.stringify(argsPath)}, JSON.stringify(args));
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"expected\":\"Verifier should pass valid runs.\",\"evidence\":\"log excerpt\"}]}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\",\"discoveredIssues\":[{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"expected\":\"Verifier should pass valid runs.\",\"evidence\":\"log excerpt\"}]}\n```")}
 }));
 })();
 `,
@@ -268,7 +268,7 @@ symlinkSync(
   ${JSON.stringify(resultPathKind === "parent" ? "dir" : "file")}
 );
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
         "utf8"
@@ -308,7 +308,7 @@ console.log(JSON.stringify({
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"
@@ -340,7 +340,7 @@ console.log(JSON.stringify({
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"
@@ -372,7 +372,7 @@ console.log(JSON.stringify({
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"
@@ -602,7 +602,7 @@ process.exit(1);
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\",\"discoveredIssues\":[{\"repo\":\"verifier\"},{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"expected\":\"Verifier should pass valid runs.\",\"evidence\":\"verifier.log\"}]}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\",\"discoveredIssues\":[{\"repo\":\"verifier\"},{\"title\":\"Verifier false positive\",\"repo\":\"verifier\",\"expected\":\"Verifier should pass valid runs.\",\"evidence\":\"verifier.log\"}]}\n```")}
 }));
 `,
       "utf8"
@@ -644,7 +644,7 @@ console.log(JSON.stringify({
       fakeClaudePath,
       `#!/usr/bin/env node
 console.log(JSON.stringify({
-  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"checked\"}\n```")}
+  result: ${JSON.stringify("```json\n{\"status\":\"fixed\",\"summary\":\"implemented\",\"notes\":\"Verification: npm test passed. Residual risk: none known.\"}\n```")}
 }));
 `,
       "utf8"

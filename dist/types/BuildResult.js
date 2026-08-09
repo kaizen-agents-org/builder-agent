@@ -15,7 +15,7 @@ const BUILD_RESULT_KEYS = new Set([
     "discoveredIssues"
 ]);
 export function createBuildResult(input) {
-    const { status, iterations, taskUnderstanding, planSummary, changedFiles, review, verification = [], residualNotes, discoveredIssues, threshold } = input;
+    const { status, iterations, taskUnderstanding, planSummary, changedFiles, review, verification, residualNotes, discoveredIssues, threshold } = input;
     if (!STATUS_VALUES.has(status)) {
         throw new Error(`Invalid build result status: ${status}`);
     }
@@ -42,6 +42,9 @@ export function normalizeBuildResult(input, threshold = DEFAULT_THRESHOLD) {
         throw new Error("Build result must be an object.");
     }
     assertAllowedKeys(input, BUILD_RESULT_KEYS, "Build result");
+    if (!Object.hasOwn(input, "verification")) {
+        throw new Error("Build result verification is required.");
+    }
     return createBuildResult({ ...input, threshold });
 }
 export function createFailedBuildResult(message) {
