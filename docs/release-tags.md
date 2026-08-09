@@ -25,10 +25,14 @@ After the organization installer links the pinned set, verify both the command
 and its global package link:
 
 ```sh
+set -eu
 builder-agent --version --json
 builder_agent_link="$(npm prefix -g)/lib/node_modules/@kaizen-agents/builder-agent"
+builder_agent_checkout="${KAIZEN_HOME:-$HOME/.kaizen}/toolchain/builder-agent"
+test -d "$builder_agent_link"
+test -d "$builder_agent_checkout"
 test "$(cd "$builder_agent_link" && pwd -P)" = \
-  "$(cd "${KAIZEN_HOME:-$HOME/.kaizen}/toolchain/builder-agent" && pwd -P)"
+  "$(cd "$builder_agent_checkout" && pwd -P)"
 ```
 
 After publishing the tag, update the organization manifest and validate the
