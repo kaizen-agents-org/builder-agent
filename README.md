@@ -366,7 +366,10 @@ builder-agent/
 ├─ test/
 │  └─ builder-agent.test.js
 └─ docs/
-   └─ implementation-plan.md
+   ├─ implementation-plan.md
+   └─ release-tags.md
 ```
 
 See [Implementation Plan](docs/implementation-plan.md) for the shipped phase history and current hardening priorities.
+Maintainers preparing a component tag should also follow the
+[release tag checklist](docs/release-tags.md).
