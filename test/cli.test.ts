@@ -45,6 +45,8 @@ describe("CLI", () => {
       cp("dist", join(dir, "dist"), { recursive: true }),
       cp("src", join(dir, "src"), { recursive: true }),
       cp("scripts", join(dir, "scripts"), { recursive: true }),
+      cp("prompts", join(dir, "prompts"), { recursive: true }),
+      cp("schemas", join(dir, "schemas"), { recursive: true }),
       cp("package.json", join(dir, "package.json")),
       cp("tsconfig.json", join(dir, "tsconfig.json"))
     ]);
@@ -63,6 +65,25 @@ describe("CLI", () => {
     await rm(join(dir, "src"), { recursive: true });
     const unknown = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
     assert.equal(JSON.parse(unknown.stdout).status, "unknown");
+  });
+
+  it("reports stale when a packaged prompt or schema changes", async () => {
+    for (const changedFile of ["prompts/analyze.md", "schemas/build-request.schema.json"]) {
+      const dir = await mkdtemp(join(tmpdir(), "builder-agent-provenance-"));
+      await Promise.all([
+        cp("dist", join(dir, "dist"), { recursive: true }),
+        cp("src", join(dir, "src"), { recursive: true }),
+        cp("scripts", join(dir, "scripts"), { recursive: true }),
+        cp("prompts", join(dir, "prompts"), { recursive: true }),
+        cp("schemas", join(dir, "schemas"), { recursive: true }),
+        cp("package.json", join(dir, "package.json")),
+        cp("tsconfig.json", join(dir, "tsconfig.json"))
+      ]);
+      await appendFile(join(dir, changedFile), "\n// changed after build\n", "utf8");
+
+      const { stdout } = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
+      assert.equal(JSON.parse(stdout).status, "stale", changedFile);
+    }
   });
 
   it("runs the build command and writes structured artifacts", async () => {

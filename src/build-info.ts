@@ -4,7 +4,14 @@ import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const sourceInputs = ["package.json", "tsconfig.json", "src", "scripts/generate-build-info.js"];
+const sourceInputs = [
+  "package.json",
+  "tsconfig.json",
+  "src",
+  "scripts/generate-build-info.js",
+  "prompts",
+  "schemas"
+];
 
 export type BuildStatus = "current" | "stale" | "unknown";
 

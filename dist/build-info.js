@@ -3,7 +3,14 @@ import { readdir, readFile, stat } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 const packageRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const sourceInputs = ["package.json", "tsconfig.json", "src", "scripts/generate-build-info.js"];
+const sourceInputs = [
+    "package.json",
+    "tsconfig.json",
+    "src",
+    "scripts/generate-build-info.js",
+    "prompts",
+    "schemas"
+];
 export async function createBuildInfo(root = packageRoot) {
     const packageMetadata = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
     const sourceCommit = process.env.BUILDER_AGENT_SOURCE_COMMIT?.trim() || "unknown";
