@@ -37,6 +37,8 @@ describe("CLI", () => {
     const packagedFiles = packResult[0]?.files.map(({ path }) => path);
 
     assert.ok(packagedFiles?.includes("tsconfig.json"));
+    assert.ok(packagedFiles?.includes("prompts/analyze.md"));
+    assert.ok(packagedFiles?.includes("schemas/build-request.schema.json"));
   });
 
   it("reports stale or unknown when built source cannot be verified", async () => {
