@@ -16,6 +16,9 @@ npm run validate:json
 node dist/cli.js --version --json
 ```
 
+The reported `sourceHash` covers the TypeScript build inputs plus the shipped
+provider prompts in `prompts/` and orchestration contracts in `schemas/`.
+
 The onboarding installer clones the pinned tag, installs development
 dependencies, runs `npm run build`, and links that checkout. A release must not
 depend on uncommitted generated output or an older globally linked
