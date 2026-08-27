@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
+import { createBuildInfo } from "../src/build-info.ts";
 import { failingReview, passingReview, spawnWithInput } from "./helpers.ts";
 
 const execFileAsync = promisify(execFile);
@@ -81,8 +82,11 @@ describe("CLI", () => {
         cp("package.json", join(dir, "package.json")),
         cp("tsconfig.json", join(dir, "tsconfig.json"))
       ]);
+      const beforeChange = await createBuildInfo(dir);
       await appendFile(join(dir, changedFile), "\n// changed after build\n", "utf8");
+      const afterChange = await createBuildInfo(dir);
 
+      assert.notEqual(afterChange.sourceHash, beforeChange.sourceHash, changedFile);
       const { stdout } = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
       assert.equal(JSON.parse(stdout).status, "stale", changedFile);
     }
