@@ -71,7 +71,12 @@ describe("CLI", () => {
   });
 
   it("reports stale when a packaged prompt or schema changes", async () => {
-    for (const changedFile of ["prompts/analyze.md", "schemas/build-request.schema.json"]) {
+    const contractChanges = [
+      { path: "prompts/analyze.md", content: "\n<!-- changed after build -->\n" },
+      { path: "schemas/build-request.schema.json", content: "\n" }
+    ];
+
+    for (const { path: changedFile, content } of contractChanges) {
       const dir = await mkdtemp(join(tmpdir(), "builder-agent-provenance-"));
       await Promise.all([
         cp("dist", join(dir, "dist"), { recursive: true }),
@@ -83,7 +88,7 @@ describe("CLI", () => {
         cp("tsconfig.json", join(dir, "tsconfig.json"))
       ]);
       const beforeChange = await createBuildInfo(dir);
-      await appendFile(join(dir, changedFile), "\n// changed after build\n", "utf8");
+      await appendFile(join(dir, changedFile), content, "utf8");
       const afterChange = await createBuildInfo(dir);
 
       assert.notEqual(afterChange.sourceHash, beforeChange.sourceHash, changedFile);
