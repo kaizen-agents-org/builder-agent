@@ -5,7 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
-import { createBuildInfo } from "../src/build-info.ts";
+import { createBuildInfo } from "../dist/build-info.js";
 import { failingReview, passingReview, spawnWithInput } from "./helpers.ts";
 
 const execFileAsync = promisify(execFile);
