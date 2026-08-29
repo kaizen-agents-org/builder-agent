@@ -5,6 +5,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { describe, it } from "node:test";
+import { createBuildInfo } from "../dist/build-info.js";
 import { failingReview, passingReview, spawnWithInput } from "./helpers.ts";
 
 const execFileAsync = promisify(execFile);
@@ -37,6 +38,8 @@ describe("CLI", () => {
     const packagedFiles = packResult[0]?.files.map(({ path }) => path);
 
     assert.ok(packagedFiles?.includes("tsconfig.json"));
+    assert.ok(packagedFiles?.includes("prompts/analyze.md"));
+    assert.ok(packagedFiles?.includes("schemas/build-request.schema.json"));
   });
 
   it("reports stale or unknown when built source cannot be verified", async () => {
@@ -45,6 +48,8 @@ describe("CLI", () => {
       cp("dist", join(dir, "dist"), { recursive: true }),
       cp("src", join(dir, "src"), { recursive: true }),
       cp("scripts", join(dir, "scripts"), { recursive: true }),
+      cp("prompts", join(dir, "prompts"), { recursive: true }),
+      cp("schemas", join(dir, "schemas"), { recursive: true }),
       cp("package.json", join(dir, "package.json")),
       cp("tsconfig.json", join(dir, "tsconfig.json"))
     ]);
@@ -63,6 +68,33 @@ describe("CLI", () => {
     await rm(join(dir, "src"), { recursive: true });
     const unknown = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
     assert.equal(JSON.parse(unknown.stdout).status, "unknown");
+  });
+
+  it("reports stale when a packaged prompt or schema changes", async () => {
+    const contractChanges = [
+      { path: "prompts/analyze.md", content: "\n<!-- changed after build -->\n" },
+      { path: "schemas/build-request.schema.json", content: "\n" }
+    ];
+
+    for (const { path: changedFile, content } of contractChanges) {
+      const dir = await mkdtemp(join(tmpdir(), "builder-agent-provenance-"));
+      await Promise.all([
+        cp("dist", join(dir, "dist"), { recursive: true }),
+        cp("src", join(dir, "src"), { recursive: true }),
+        cp("scripts", join(dir, "scripts"), { recursive: true }),
+        cp("prompts", join(dir, "prompts"), { recursive: true }),
+        cp("schemas", join(dir, "schemas"), { recursive: true }),
+        cp("package.json", join(dir, "package.json")),
+        cp("tsconfig.json", join(dir, "tsconfig.json"))
+      ]);
+      const beforeChange = await createBuildInfo(dir);
+      await appendFile(join(dir, changedFile), content, "utf8");
+      const afterChange = await createBuildInfo(dir);
+
+      assert.notEqual(afterChange.sourceHash, beforeChange.sourceHash, changedFile);
+      const { stdout } = await execFileAsync(process.execPath, [join(dir, "dist", "cli.js"), "--version", "--json"]);
+      assert.equal(JSON.parse(stdout).status, "stale", changedFile);
+    }
   });
 
   it("runs the build command and writes structured artifacts", async () => {

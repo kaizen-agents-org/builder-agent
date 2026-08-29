@@ -148,7 +148,7 @@ node dist/cli.js --version
 node dist/cli.js --version --json
 ```
 
-The JSON form reports `version`, `sourceCommit`, `sourceHash`, and a `status` of `current`, `stale`, or `unknown`. Local builds use `"unknown"` for `sourceCommit` unless a full commit hash is supplied with `BUILDER_AGENT_SOURCE_COMMIT`; the source hash still detects when a linked CLI's generated `dist/` no longer matches its package source.
+The JSON form reports `version`, `sourceCommit`, `sourceHash`, and a `status` of `current`, `stale`, or `unknown`. Local builds use `"unknown"` for `sourceCommit` unless a full commit hash is supplied with `BUILDER_AGENT_SOURCE_COMMIT`; the source hash still detects when a linked CLI's generated `dist/` no longer matches its package source, including the provider-facing files in `prompts/` and the orchestration contracts in `schemas/`.
 
 Build typed output:
 
